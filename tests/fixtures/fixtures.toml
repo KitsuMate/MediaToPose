@@ -50,7 +50,7 @@ purpose = "Canonical recorded output for deterministic PR retarget tests"
 media_type = "application/json"
 source_fixture = "mediapipe_ref_pose_realistic"
 schema_version = 1
-sha256 = "97415db894da3605d313baf5e8e549b9e3bb337a728f5550589b709ac51f8b32"
+sha256 = "eff3356d52e8a5fe77cd5bb0157184facb746ce2f968f8a10c2f410ffd6d0520"
 
 [[fixture]]
 id = "sam_ref_pose_stylized_output"
@@ -60,4 +60,4 @@ purpose = "Canonical recorded VITH output for deterministic PR retarget tests"
 media_type = "application/json"
 source_fixture = "sam_ref_pose_stylized"
 schema_version = 1
-sha256 = "e5c08fcfd99d8d0fad3fc78158f88c76374ee3ed798ca3b93eaa998fc8c66e66"
+sha256 = "de01aa707fd0bd3c4cc5f5f5f4ec2378e88759d8554daa33d2ec432c197471fb"

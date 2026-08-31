@@ -113,10 +113,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+  blender_publish_gate:
+    name: Check Blender Extensions publishing opt-in
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: github_release
+    runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check publishing variable and token
+        id: check
+        env:
+          BLENDER_EXTENSIONS_TOKEN: ${{ secrets.BLENDER_EXTENSIONS_TOKEN }}
+          PUBLISH_EXTENSION: ${{ vars.PUBLISH_EXTENSION }}
+        run: |
+          if [[ "${PUBLISH_EXTENSION,,}" == "true" \
+            && -n "${BLENDER_EXTENSIONS_TOKEN:-}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Blender Extensions publishing is disabled."
+          fi
+
   blender_extensions:
     name: Publish Blender Extensions version set
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, github_release]
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.blender_publish_gate.outputs.enabled == 'true'
+    needs: [build, github_release, blender_publish_gate]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment:

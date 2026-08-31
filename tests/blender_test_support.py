@@ -75,7 +75,10 @@ def verify_fixture(fixture_id: str) -> Path:
     manifest = fixture_manifest()
     entry = next(item for item in manifest["fixture"] if item["id"] == fixture_id)
     path = FIXTURES / entry["path"]
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    payload = path.read_bytes()
+    if entry.get("media_type") in {"application/json", "text/plain"}:
+        payload = payload.replace(b"\r\n", b"\n")
+    digest = hashlib.sha256(payload).hexdigest()
     if digest != entry["sha256"]:
         raise AssertionError(f"Fixture {fixture_id} hash mismatch: {digest}")
     return path
