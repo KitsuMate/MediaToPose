@@ -1,9 +1,3 @@
-<p align="center">
-  <img src="docs/media/icon.png" alt="Media to Pose icon" width="96">
-</p>
-
-# Media to Pose
-
 ![Media to Pose: image to detected skeleton to posed character](docs/media/banner.png)
 
 Media to Pose is a Blender 5.2 extension that creates a pose or animation
