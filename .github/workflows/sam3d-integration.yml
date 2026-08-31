@@ -1,0 +1,79 @@
+name: SAM 3D ONNX protected integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-sam3d-vith-linux-webgpu:
+    environment: sam3d-integration
+    runs-on: [self-hosted, linux, x64, sam3d-gpu]
+    timeout-minutes: 60
+    env:
+      BLENDER_PATH: ${{ vars.SAM3D_BLENDER_BIN }}
+      SAM_USER_SCRIPTS: ${{ vars.SAM3D_BLENDER_USER_SCRIPTS }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: python -m pip install packaging==25.0
+      - name: Read manifest version
+        shell: bash
+        run: |
+          python -c "import tomllib; print('MTP_VERSION=' + tomllib.load(open('blender_manifest.toml', 'rb'))['version'])" >> "$GITHUB_ENV"
+
+      - name: Verify protected runner configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLENDER_PATH"
+          test -x "$BLENDER_PATH"
+          test -n "$SAM_USER_SCRIPTS"
+          active="$SAM_USER_SCRIPTS/media_to_pose/backends/sam3d/active"
+          test -d "$active"
+          test ! -d "$active/site-packages"
+          test ! -d "$active/source"
+          python - "$active/manifest.json" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          manifest_path = pathlib.Path(sys.argv[1])
+          manifest = json.loads(manifest_path.read_text(encoding="utf8"))
+          assert manifest["backend_kind"] == "onnxruntime"
+          assert manifest["actual_ep"] == "WebGpuExecutionProvider"
+          assert manifest["accelerator_nodes_verified"] is True
+          assert manifest["bundle_revision"]
+          assert manifest["model_revision"]
+          bundle = pathlib.Path(manifest["model_directory"]) / manifest["bundle_manifest"]
+          assert bundle.is_file(), bundle
+          PY
+
+      - name: Build and validate Linux archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          "$BLENDER_PATH" --background --factory-startup \
+            --command extension validate .
+          "$BLENDER_PATH" --background --factory-startup \
+            --command extension build --source-dir . \
+            --output-dir dist --split-platforms --verbose
+          python ci/validate_distributions.py \
+            --dist dist --platform linux_x64
+
+      - name: Run real ViT-H inference, WebGPU profile, and VRoid quality gates
+        shell: bash
+        run: |
+          python ci/run_provider_integration.py \
+            --blender "$BLENDER_PATH" \
+            --archive "dist/media_to_pose-${MTP_VERSION}-linux_x64.zip" \
+            --provider sam3d \
+            --sam-user-scripts "$SAM_USER_SCRIPTS" \
+            --sam-device GPU \
+            --timeout-seconds 3000

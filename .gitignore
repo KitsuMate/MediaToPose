@@ -1,0 +1,14 @@
+# Python-generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# All local runtimes, scratch data, temporary tools, notes, and model work.
+/.workspace/
+
+# The only release-output directory. Release archives are rebuilt artifacts.
+/dist/
+*.zip

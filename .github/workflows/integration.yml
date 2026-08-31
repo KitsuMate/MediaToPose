@@ -1,0 +1,61 @@
+name: MediaPipe integration
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * 1"
+
+concurrency:
+  group: mediapipe-integration
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  real-mediapipe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/blenderkit/headless-blender:blender-5.2-stable@sha256:7f492db813ae294cedce29fe078fd819290480549cc71de8c5e518fcb21f98fd
+    defaults:
+      run:
+        shell: bash
+    env:
+      BLENDER_BIN: /home/headless/blender/blender
+    steps:
+      - name: Install Git LFS in Blender container
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends git-lfs
+
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Build Linux release archive
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          "$BLENDER_BIN" --background --factory-startup \
+            --command extension validate .
+          "$BLENDER_BIN" --background --factory-startup \
+            --command extension build --source-dir . \
+            --output-dir dist --split-platforms
+          archive=$(find dist -maxdepth 1 -type f \
+            -name 'media_to_pose-*-linux_x64.zip' -print -quit)
+          test -n "$archive"
+          echo "MTP_LINUX_ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Validate Linux archive
+        env:
+          PYTHONPATH: ${{ github.workspace }}/wheels/packaging-26.2-py3-none-any.whl
+        run: python3 ci/validate_distributions.py --dist dist --platform linux_x64
+
+      - name: Run real MediaPipe inference and VRoid retarget
+        run: |
+          python3 ci/run_provider_integration.py \
+            --blender "$BLENDER_BIN" \
+            --archive "$MTP_LINUX_ARCHIVE" \
+            --provider mediapipe \
+            --timeout-seconds 600

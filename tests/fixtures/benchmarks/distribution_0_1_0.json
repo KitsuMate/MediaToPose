@@ -1,0 +1,8 @@
+{
+  "version": "0.1.0",
+  "archives": {
+    "windows_x64": {"bytes": 137535113},
+    "linux_x64": {"bytes": 170460483},
+    "macos_arm64": {"bytes": 142029193}
+  }
+}

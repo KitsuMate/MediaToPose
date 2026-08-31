@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install ruff==0.12.12
+      - run: python -m ruff check .
+      - run: python -m ruff format --check .
+
+  blender:
+    name: Blender 5.2 installed-package tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/blenderkit/headless-blender:blender-5.2-stable@sha256:7f492db813ae294cedce29fe078fd819290480549cc71de8c5e518fcb21f98fd
+    defaults:
+      run:
+        shell: bash
+    env:
+      BLENDER_BIN: /home/headless/blender/blender
+      BLENDER_USER_CONFIG: ${{ github.workspace }}/.workspace/ci-profile/config
+      BLENDER_USER_SCRIPTS: ${{ github.workspace }}/.workspace/ci-profile/scripts
+      BLENDER_USER_DATAFILES: ${{ github.workspace }}/.workspace/ci-profile/datafiles
+      BLENDER_USER_EXTENSIONS: ${{ github.workspace }}/.workspace/ci-profile/extensions
+      BLENDER_USER_CACHE: ${{ github.workspace }}/.workspace/ci-profile/cache
+    steps:
+      - name: Install Git LFS in Blender container
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends git-lfs
+
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Prepare isolated Blender profile
+        run: |
+          set -euo pipefail
+          mkdir -p \
+            "$BLENDER_USER_CONFIG" \
+            "$BLENDER_USER_SCRIPTS" \
+            "$BLENDER_USER_DATAFILES" \
+            "$BLENDER_USER_EXTENSIONS/blender_org" \
+            "$BLENDER_USER_CACHE" \
+            dist
+          "$BLENDER_BIN" --version
+
+      - name: Validate and build release archives
+        run: |
+          set -euo pipefail
+          "$BLENDER_BIN" --background --factory-startup \
+            --command extension validate .
+          "$BLENDER_BIN" --background --factory-startup \
+            --command extension build --source-dir . \
+            --output-dir dist --split-platforms
+          archive=$(find dist -maxdepth 1 -type f \
+            -name 'media_to_pose-*-linux_x64.zip' -print -quit)
+          test -n "$archive"
+          echo "MTP_LINUX_ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Install Linux archive and activate bundled wheels
+        run: |
+          "$BLENDER_BIN" --background \
+            --command extension install-file \
+            -r user_default -e "$MTP_LINUX_ARCHIVE"
+
+      - name: Run Blender tests once
+        env:
+          MTP_TEST_INSTALLED_EXTENSION: "1"
+        run: |
+          "$BLENDER_BIN" --background --factory-startup \
+            --python-exit-code 1 --python tests/run_blender_tests.py
+
+      - name: Validate all release archives
+        env:
+          PYTHONPATH: ${{ github.workspace }}/wheels/packaging-26.2-py3-none-any.whl
+        run: python3 ci/validate_distributions.py --dist dist

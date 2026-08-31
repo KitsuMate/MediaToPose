@@ -1,0 +1,24 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+extend-exclude = [
+  ".workspace",
+  "dist",
+  "tests/fixtures",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "SIM", "PERF", "N"]
+ignore = [
+  # Blender's RNA registration convention intentionally uses these names.
+  "N801",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["N802", "N806"]
+"**/__init__.py" = ["N999"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

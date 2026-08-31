@@ -1,0 +1,171 @@
+name: Release to GitHub and Blender Extensions
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, validate, and smoke release set
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/blenderkit/headless-blender:blender-5.2-stable@sha256:7f492db813ae294cedce29fe078fd819290480549cc71de8c5e518fcb21f98fd
+    defaults:
+      run:
+        shell: bash
+    env:
+      BLENDER_BIN: /home/headless/blender/blender
+    steps:
+      - name: Install Git LFS in Blender container
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends git-lfs
+
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Build all platform archives once
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          "$BLENDER_BIN" --background --factory-startup \
+            --command extension validate .
+          "$BLENDER_BIN" --background --factory-startup \
+            --command extension build --source-dir . \
+            --output-dir dist --split-platforms
+          archive=$(find dist -maxdepth 1 -type f \
+            -name 'media_to_pose-*-linux_x64.zip' -print -quit)
+          test -n "$archive"
+          echo "MTP_LINUX_ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Validate dependency closure and size budgets
+        env:
+          PYTHONPATH: ${{ github.workspace }}/wheels/packaging-26.2-py3-none-any.whl
+        run: python3 ci/validate_distributions.py --dist dist
+
+      - name: Smoke Linux install lifecycle and CPU fallback
+        run: |
+          python3 ci/run_release_smoke.py \
+            --blender "$BLENDER_BIN" \
+            --archive "$MTP_LINUX_ARCHIVE"
+
+      - name: Create checksums
+        run: |
+          cd dist
+          LC_ALL=C sha256sum ./*.zip > SHA256SUMS
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: media-to-pose-release-set
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+
+  github_release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          lfs: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v7
+        with:
+          name: media-to-pose-release-set
+          path: dist
+      - name: Require tag to match manifest version
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("blender_manifest.toml", "rb"))["version"])')
+          test "$GITHUB_REF_NAME" = "v$version"
+      - name: Publish GitHub release
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/*.zip dist/SHA256SUMS \
+              docs/media/banner.png docs/media/icon.png docs/media/preview.mp4 \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/*.zip dist/SHA256SUMS \
+              docs/media/banner.png docs/media/icon.png docs/media/preview.mp4 \
+              --generate-notes \
+              --verify-tag
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  blender_extensions:
+    name: Publish Blender Extensions version set
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, github_release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: blender-extensions
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v7
+        with:
+          name: media-to-pose-release-set
+          path: dist
+      - name: Prepare Blender Extensions release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_url=$(gh release view "$GITHUB_REF_NAME" --json url --jq .url)
+          release_body=$(gh release view "$GITHUB_REF_NAME" --json body --jq .body)
+          {
+            printf 'GitHub release: %s\n\n' "$release_url"
+            printf '%s\n' "$release_body"
+          } > release-notes.md
+      - name: Upload all platform archives to Blender Extensions
+        env:
+          BLENDER_EXTENSIONS_TOKEN: ${{ secrets.BLENDER_EXTENSIONS_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${BLENDER_EXTENSIONS_TOKEN:-}" || {
+            printf '%s\n' 'Missing repository secret: BLENDER_EXTENSIONS_TOKEN' >&2
+            exit 1
+          }
+          extension_id=$(python -c 'import tomllib; print(tomllib.load(open("blender_manifest.toml", "rb"))["id"])')
+          mapfile -t archives < <(
+            find dist -maxdepth 1 -type f \
+              -name "${extension_id}-*.zip" -print | LC_ALL=C sort
+          )
+          test "${#archives[@]}" -eq 3
+          for archive in "${archives[@]}"; do
+            printf 'Uploading %s\n' "$archive"
+            curl --fail-with-body --show-error --silent --location \
+              --connect-timeout 30 --max-time 1800 \
+              --request POST \
+              "https://extensions.blender.org/api/v1/extensions/${extension_id}/versions/upload/" \
+              --header "Authorization: bearer ${BLENDER_EXTENSIONS_TOKEN}" \
+              --form "version_file=@${archive}" \
+              --form "release_notes=<release-notes.md"
+            printf '\n'
+          done

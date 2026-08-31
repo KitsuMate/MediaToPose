@@ -1,0 +1,63 @@
+schema_version = 1
+
+[license]
+summary = "Redistribution granted for the Media to Pose test fixture bundle."
+attribution = "@Gartix"
+attribution_url = "https://x.com/Gartsx_"
+
+[[fixture]]
+id = "sam_ref_pose_stylized"
+path = "media/sam/ref_pose_stylized.jpg"
+provider = "SAM3D_BODY"
+purpose = "Single-image SAM VITH inference and VRoid retarget regression"
+media_type = "image/jpeg"
+width = 3000
+height = 4000
+sha256 = "c434fe0c5a02f7259f9fb4b418b4e5db1b2eab685d98e7bf51c5456c5fe70237"
+expected_body_landmarks_min = 27
+expected_hands = ["LEFT", "RIGHT"]
+
+[[fixture]]
+id = "mediapipe_ref_pose_realistic"
+path = "media/mediapipe/ref_pose_realistic.png"
+provider = "MEDIAPIPE"
+purpose = "Single-image MediaPipe inference and VRoid retarget regression"
+media_type = "image/png"
+width = 896
+height = 1200
+sha256 = "8d224658cbb8429893a23624c83c1c37a18d5c4bc7badd2c3a9571a59d46bf2a"
+expected_body_landmarks = 33
+expected_hands = ["LEFT", "RIGHT"]
+expected_face_landmarks = 0
+
+[[fixture]]
+id = "vroid_test_rig"
+path = "rigs/vroid_test.blend"
+purpose = "VRoid mapping, retarget, post-process, and performance regression"
+media_type = "application/x-blender"
+blender_version = "5.2.0"
+sha256 = "135c7acf785e977192ce6951b1f3c36f91c117fbba69ebb0fe575d0723f9d10a"
+armature_object = "Armature"
+bone_count = 145
+mapped_finger_controls = 30
+reference_action = "T-Pose"
+
+[[fixture]]
+id = "mediapipe_ref_pose_realistic_output"
+path = "expected/mediapipe_ref_pose_realistic.json"
+provider = "MEDIAPIPE"
+purpose = "Canonical recorded output for deterministic PR retarget tests"
+media_type = "application/json"
+source_fixture = "mediapipe_ref_pose_realistic"
+schema_version = 1
+sha256 = "97415db894da3605d313baf5e8e549b9e3bb337a728f5550589b709ac51f8b32"
+
+[[fixture]]
+id = "sam_ref_pose_stylized_output"
+path = "expected/sam_ref_pose_stylized.json"
+provider = "SAM3D_BODY"
+purpose = "Canonical recorded VITH output for deterministic PR retarget tests"
+media_type = "application/json"
+source_fixture = "sam_ref_pose_stylized"
+schema_version = 1
+sha256 = "e5c08fcfd99d8d0fad3fc78158f88c76374ee3ed798ca3b93eaa998fc8c66e66"

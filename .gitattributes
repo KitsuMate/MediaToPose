@@ -1,0 +1,6 @@
+/wheels/*.whl filter=lfs diff=lfs merge=lfs -text
+/assets/models/*.task filter=lfs diff=lfs merge=lfs -text
+/assets/branding/*.png filter=lfs diff=lfs merge=lfs -text
+/docs/media/*.png filter=lfs diff=lfs merge=lfs -text
+/docs/media/*.mp4 filter=lfs diff=lfs merge=lfs -text
+/tests/fixtures/**/*.blend filter=lfs diff=lfs merge=lfs -text
