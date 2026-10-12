@@ -54,61 +54,30 @@ PLATFORMS = {
         "os_name": "posix",
     },
 }
-ROOT_FILES = {
-    "__init__.py",
-    "addon_lifecycle.py",
-    "animation_cleanup.py",
-    "anycalib_backend.py",
-    "anycalib_ort_runtime.py",
-    "blender_manifest.toml",
-    "cache_preview.py",
-    "camera_calibration.py",
-    "camera_calibration_pipeline.py",
-    "camera_motion_correction.py",
-    "capture_state.py",
-    "constants.py",
-    "geometry.py",
-    "dependency_bootstrap.py",
-    "detection_cache.py",
-    "grounded_cleanup.py",
-    "LICENSE",
-    "mapping.py",
-    "media_io.py",
-    "model_lifecycle.py",
-    "models.py",
-    "motion_filter.py",
-    "operation.py",
-    "operators_capture.py",
-    "operators_mapping.py",
-    "pose_translation_solver.py",
-    "post_processing.py",
-    "properties.py",
-    "README.md",
-    "registration.py",
-    "retarget.py",
-    "rig_planning.py",
-    "rohm_backend.py",
-    "rohm_correction.py",
-    "rohm_ort_runtime.py",
-    "sam3d_backend.py",
-    "sam3d_mhr_runtime.py",
-    "sam3d_ort_runtime.py",
-    "sam3d_state.py",
-    "sam3d_vith_runtime.py",
-    "target_pose.py",
-    "THIRD_PARTY_NOTICES.md",
-    "ui.py",
-}
-NESTED_FILES = {
-    "providers/__init__.py",
-    "providers/base.py",
-    "providers/mediapipe_provider.py",
-    "providers/sam3d_body_provider.py",
+RELEASE_DOCUMENTS = {"LICENSE", "README.md", "THIRD_PARTY_NOTICES.md"}
+BUNDLED_MODELS = {
     "assets/models/README.md",
     "assets/models/face_landmarker.task",
     "assets/models/hand_landmarker.task",
     "assets/models/pose_landmarker_full.task",
 }
+
+
+def expected_source_members() -> set[str]:
+    """Every file under media_to_pose/ that a build must ship (wheels aside)."""
+    members = set()
+    for path in SOURCE.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(SOURCE).as_posix()
+        if relative.startswith("wheels/") or "__pycache__" in relative:
+            continue
+        if relative.endswith((".pyc", ".pyo", ".zip")):
+            continue
+        members.add(relative)
+    return members
+
+
 BLENDER_PROVIDED_REQUIREMENTS = {"numpy"}
 INTENTIONALLY_PRUNED_REQUIREMENTS = {
     # MediaPipe declares its audio capture stack unconditionally. Vision To
@@ -263,13 +232,15 @@ def _validate_member_sizes(infos: list[zipfile.ZipInfo]) -> tuple[list[dict], in
 
 
 def _validate_allowlist(names: set[str]) -> None:
+    expected = expected_source_members()
     for name in names:
-        if name in ROOT_FILES or name in NESTED_FILES:
+        if name in expected:
             continue
         if name.startswith("wheels/") and name.endswith(".whl"):
             continue
-        raise AssertionError(f"release member is not allowlisted: {name}")
-    missing = (ROOT_FILES | NESTED_FILES) - names
+        raise AssertionError(f"release member has no source file: {name}")
+    required = expected | RELEASE_DOCUMENTS | BUNDLED_MODELS
+    missing = required - names
     if missing:
         raise AssertionError(f"release is missing required members: {sorted(missing)}")
 
