@@ -13,6 +13,7 @@ from pathlib import Path
 import bpy
 import bpy.utils.previews
 
+from .blender import context as blender_context
 from .constants import HAND_LANDMARK_NAMES
 from .core.cache import store as cache_store
 from .core.log import get_logger
@@ -381,8 +382,7 @@ def _begin_refresh():
         "_media_to_pose_cache_preview_begin_timer",
         None,
     )
-    scene = getattr(bpy.context, "scene", None)
-    settings = getattr(scene, "mtp_settings", None) if scene else None
+    settings = blender_context.active_settings()
     if not settings:
         _PREVIEW_LOADING = False
         return
@@ -429,8 +429,7 @@ def _poll_results():
             return 0.05
         _POLL_REGISTERED = False
         return None
-    scene = getattr(bpy.context, "scene", None)
-    settings = getattr(scene, "mtp_settings", None) if scene else None
+    settings = blender_context.active_settings()
     if settings is None:
         _POLL_REGISTERED = False
         _PREVIEW_LOADING = False
@@ -474,10 +473,7 @@ def _poll_results():
         "IMAGE",
         force_reload=True,
     )
-    for window in bpy.context.window_manager.windows:
-        for area in window.screen.areas:
-            if area.type == "VIEW_3D":
-                area.tag_redraw()
+    blender_context.redraw_view3d()
     return None
 
 

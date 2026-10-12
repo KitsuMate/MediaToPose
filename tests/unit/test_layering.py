@@ -13,7 +13,8 @@ resolved to a package-relative module name and checked against these rules:
   has a pure-Python fallback (``core.geometry`` uses ``mathutils`` when
   Blender provides it).
 - ``bpy`` and ``mathutils`` are used only where the layer allows them.
-- Only ``blender/operators/`` and ``api/`` read ``bpy.context``.
+- Only ``blender/operators/``, ``api/`` and ``blender/context.py`` (for
+  timers and handlers, which get no context argument) read ``bpy.context``.
 
 ``ALLOWLIST`` records known violations. Entries must be removed as the code
 moves into the target layout; stale entries fail the test so the list only
@@ -85,10 +86,7 @@ LEGACY_LAYERS: dict[str, str] = {
 }
 
 # (module, rule, detail) tuples for known violations.
-ALLOWLIST: set[tuple[str, str, str]] = {
-    ("cache_preview", "reads-bpy-context", "bpy.context"),
-    ("ui", "reads-bpy-context", "bpy.context"),
-}
+ALLOWLIST: set[tuple[str, str, str]] = set()
 
 
 def _package_files() -> dict[str, Path]:
@@ -225,7 +223,9 @@ def collect_violations() -> set[tuple[str, str, str]]:
             ):
                 violations.add((module, "core-third-party", name))
         if visitor.reads_context and not (
-            module.startswith(("blender.operators", "api")) or layer == "root"
+            module.startswith(("blender.operators", "api"))
+            or module == "blender.context"
+            or layer == "root"
         ):
             violations.add((module, "reads-bpy-context", "bpy.context"))
     return violations

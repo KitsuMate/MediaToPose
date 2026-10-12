@@ -244,11 +244,11 @@ class MTP_UL_mappings(UIList):
         if item.manual_lock:
             row.label(text="", icon="LOCKED")
 
-    def filter_items(self, _context, data, property_name):
+    def filter_items(self, context, data, property_name):
         items = getattr(data, property_name)
         flags = []
         section = data.subtab
-        settings = getattr(bpy.context.scene, "mtp_settings", None)
+        settings = getattr(context.scene, "mtp_settings", None)
         selected_output = settings.face_output if settings else "ARKIT"
         effective_section = (
             "SHAPES"
