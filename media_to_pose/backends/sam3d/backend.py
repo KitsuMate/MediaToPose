@@ -479,7 +479,7 @@ def provider_options_from_settings(settings) -> dict:
 def runtime_diagnostics(variant: str, device: str) -> dict:
     """Return stable requested/actual runtime facts for UI and bug reports."""
     try:
-        from ...providers.sam3d_body_provider import runtime_diagnostics as loaded_state
+        from ...providers.sam3d.state import runtime_diagnostics as loaded_state
 
         loaded = loaded_state()
     except (ImportError, AttributeError, RuntimeError):
@@ -1060,7 +1060,7 @@ def dismiss_install_result() -> bool:
 
 def is_model_loaded() -> bool:
     try:
-        from ...providers.sam3d_body_provider import model_loaded
+        from ...providers.sam3d.state import model_loaded
 
         return model_loaded()
     except (ImportError, AttributeError, RuntimeError):
@@ -1074,7 +1074,7 @@ def _load(
     resolved_runtime_paths: Mapping[str, str],
 ) -> str:
     job.update(0.05, "Opening ONNX Runtime graph bundle", "Model Load")
-    from ...providers.sam3d_body_provider import load_model_cache
+    from ...providers.sam3d.state import load_model_cache
 
     job.update(0.20, "Creating the requested execution-provider session", "Model Load")
     try:
@@ -1122,7 +1122,7 @@ def start_load(
 
 
 def unload_model() -> None:
-    from ...providers.sam3d_body_provider import unload_model_cache
+    from ...providers.sam3d.state import unload_model_cache
 
     unload_model_cache()
 

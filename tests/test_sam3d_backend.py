@@ -393,7 +393,10 @@ class SamBackendContractTests(unittest.TestCase):
 
     def test_sam_runtime_loads_before_mediapipe_dependencies(self) -> None:
         provider_module = importlib.import_module(
-            f"{self.addon.__name__}.providers.sam3d_body_provider"
+            f"{self.addon.__name__}.providers.sam3d.provider"
+        )
+        state_module = importlib.import_module(
+            f"{self.addon.__name__}.providers.sam3d.state"
         )
         calls = []
         load_arguments = []
@@ -414,7 +417,7 @@ class SamBackendContractTests(unittest.TestCase):
             return object(), object(), object()
 
         with (
-            mock.patch.object(provider_module, "_load_model", load_model),
+            mock.patch.object(state_module, "_load_model", load_model),
             mock.patch.object(
                 provider_module,
                 "import_runtime_dependencies",
@@ -456,8 +459,8 @@ class SamBackendContractTests(unittest.TestCase):
     def test_provider_accelerator_verification_is_forwarded_and_cache_keyed(
         self,
     ) -> None:
-        provider_module = importlib.import_module(
-            f"{self.addon.__name__}.providers.sam3d_body_provider"
+        state_module = importlib.import_module(
+            f"{self.addon.__name__}.providers.sam3d.state"
         )
 
         class Diagnostics:
@@ -472,22 +475,22 @@ class SamBackendContractTests(unittest.TestCase):
             "model_revision": "b" * 40,
         }
         previous = (
-            provider_module._MODEL_KEY,
-            provider_module._ESTIMATOR,
-            provider_module._RUNTIME_DIAGNOSTICS,
+            state_module._MODEL_KEY,
+            state_module._ESTIMATOR,
+            state_module._RUNTIME_DIAGNOSTICS,
         )
-        provider_module._MODEL_KEY = None
-        provider_module._ESTIMATOR = None
-        provider_module._RUNTIME_DIAGNOSTICS = None
+        state_module._MODEL_KEY = None
+        state_module._ESTIMATOR = None
+        state_module._RUNTIME_DIAGNOSTICS = None
         try:
             with mock.patch.object(
-                provider_module.sam3d_ort_runtime,
+                state_module.sam3d_ort_runtime,
                 "load_estimator",
                 side_effect=(first, second),
             ) as load_estimator:
-                normal = provider_module._load_model("VITH", "GPU", paths)
-                cached = provider_module._load_model("VITH", "GPU", paths)
-                verified = provider_module._load_model(
+                normal = state_module._load_model("VITH", "GPU", paths)
+                cached = state_module._load_model("VITH", "GPU", paths)
+                verified = state_module._load_model(
                     "VITH",
                     "GPU",
                     paths,
@@ -506,16 +509,19 @@ class SamBackendContractTests(unittest.TestCase):
             )
             first.close.assert_called_once_with()
         finally:
-            provider_module.unload_model_cache()
+            state_module.unload_model_cache()
             (
-                provider_module._MODEL_KEY,
-                provider_module._ESTIMATOR,
-                provider_module._RUNTIME_DIAGNOSTICS,
+                state_module._MODEL_KEY,
+                state_module._ESTIMATOR,
+                state_module._RUNTIME_DIAGNOSTICS,
             ) = previous
 
     def test_provider_refreshes_profile_diagnostics_after_inference(self) -> None:
         provider_module = importlib.import_module(
-            f"{self.addon.__name__}.providers.sam3d_body_provider"
+            f"{self.addon.__name__}.providers.sam3d.provider"
+        )
+        state_module = importlib.import_module(
+            f"{self.addon.__name__}.providers.sam3d.state"
         )
 
         class Diagnostics:
@@ -551,10 +557,10 @@ class SamBackendContractTests(unittest.TestCase):
         provider.use_hands = True
         image = np.zeros((2, 3, 3), dtype=np.uint8)
 
-        previous_estimator = provider_module._ESTIMATOR
-        previous_diagnostics = provider_module._RUNTIME_DIAGNOSTICS
-        provider_module._ESTIMATOR = estimator
-        provider_module._RUNTIME_DIAGNOSTICS = initial
+        previous_estimator = state_module._ESTIMATOR
+        previous_diagnostics = state_module._RUNTIME_DIAGNOSTICS
+        state_module._ESTIMATOR = estimator
+        state_module._RUNTIME_DIAGNOSTICS = initial
         try:
             with (
                 mock.patch.object(provider, "_input_image", return_value=image),
@@ -563,12 +569,12 @@ class SamBackendContractTests(unittest.TestCase):
             ):
                 self.assertEqual(provider._detect(image, 7), "frame")
             self.assertIs(provider.runtime, verified)
-            self.assertIs(provider_module.runtime_diagnostics(), verified)
+            self.assertIs(state_module.runtime_diagnostics(), verified)
             self.assertTrue(provider.runtime.accelerator_nodes_verified)
             self.assertEqual(provider.device, "webgpu")
         finally:
-            provider_module._ESTIMATOR = previous_estimator
-            provider_module._RUNTIME_DIAGNOSTICS = previous_diagnostics
+            state_module._ESTIMATOR = previous_estimator
+            state_module._RUNTIME_DIAGNOSTICS = previous_diagnostics
 
     def test_download_hash_mismatch_removes_partial_file(self) -> None:
         class Response:
@@ -834,7 +840,7 @@ class SamProviderConversionTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
         cls.provider_module = importlib.import_module(
-            f"{cls.addon.__name__}.providers.sam3d_body_provider"
+            f"{cls.addon.__name__}.providers.sam3d.provider"
         )
 
     def _provider(self):
