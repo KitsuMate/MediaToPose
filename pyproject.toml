@@ -8,15 +8,34 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I", "B", "SIM", "PERF", "N"]
+select = [
+  "E4", "E7", "E9", "F", "I", "B", "SIM", "PERF", "N",
+  "UP", "RET", "PIE", "PTH", "BLE", "TID252",
+]
 ignore = [
   # Blender's RNA registration convention intentionally uses these names.
   "N801",
+  # Deprecated upstream; isinstance tuples are faster than unions.
+  "UP038",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["N802", "N806"]
 "**/__init__.py" = ["N999"]
+# Blender loads the extension as bl_ext.<repository>.media_to_pose, so code
+# inside the package can only use relative imports. TID252 applies to tests/
+# and ci/, which import the package by its absolute name.
+"*.py" = ["TID252"]
+"providers/*.py" = ["TID252"]
+# Temporary until the Phase 4 review narrows these broad handlers.
+"anycalib_backend.py" = ["BLE001"]
+"cache_preview.py" = ["BLE001"]
+"camera_calibration_pipeline.py" = ["BLE001"]
+"operators_capture.py" = ["BLE001"]
+"rohm_backend.py" = ["BLE001"]
+"sam3d_backend.py" = ["BLE001"]
+"sam3d_ort_runtime.py" = ["BLE001"]
+"sam3d_vith_runtime.py" = ["BLE001"]
 
 [tool.ruff.format]
 quote-style = "double"
