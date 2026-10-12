@@ -288,9 +288,19 @@ def _signed_face_value(entry, value: float) -> float:
     return result * entry.influence
 
 
+# Upper lids follow the eyes: they drop a little when looking down and lift
+# when looking up. Lid shape keys already do this; bone lids need the help.
+LID_FOLLOW_GAZE = 0.3
+
+
 def _face_control_values(blendshapes: dict[str, float]) -> dict[str, float]:
     def get(name: str) -> float:
         return _finite_float(blendshapes.get(name, 0.0))
+
+    def lid(side: str) -> float:
+        blink = get(f"eyeBlink{side}")
+        follow = get(f"eyeLookDown{side}") - get(f"eyeLookUp{side}")
+        return min(blink + LID_FOLLOW_GAZE * follow * (1.0 - blink), 1.0)
 
     return {
         "FACE_JAW_OPEN": get("jawOpen"),
@@ -298,8 +308,8 @@ def _face_control_values(blendshapes: dict[str, float]) -> dict[str, float]:
         "FACE_BROW_INNER": get("browInnerUp"),
         "FACE_BROW_OUTER_L": get("browOuterUpLeft") - get("browDownLeft"),
         "FACE_BROW_OUTER_R": get("browOuterUpRight") - get("browDownRight"),
-        "FACE_LID_L": get("eyeBlinkLeft"),
-        "FACE_LID_R": get("eyeBlinkRight"),
+        "FACE_LID_L": lid("Left"),
+        "FACE_LID_R": lid("Right"),
         "FACE_CHEEK_L": max(get("cheekSquintLeft"), get("cheekPuff")),
         "FACE_CHEEK_R": max(get("cheekSquintRight"), get("cheekPuff")),
         "FACE_MOUTH_CORNER_L": get("mouthSmileLeft") - get("mouthFrownLeft"),

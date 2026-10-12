@@ -159,6 +159,17 @@ class FaceTransferTests(unittest.TestCase):
         jaw_bone = self.rig.pose.bones["c_jawbone.x"]
         self.assertAlmostEqual(jaw_bone.rotation_quaternion.angle, 0.0, places=5)
 
+    def test_bone_lids_follow_the_gaze(self) -> None:
+        scale = self.face.face_frame(self.rig, self.entries).scale
+        share = self.face.LID_FOLLOW_GAZE * 0.34 * scale
+        self._apply({"eyeLookDownLeft": 1.0}, "BONES")
+        down = self._world_offset("c_eyelid_top.l").z
+        self.setUp()
+        self._apply({"eyeLookUpLeft": 1.0}, "BONES")
+        up = self._world_offset("c_eyelid_top.l").z
+        self.assertAlmostEqual(down, -share, delta=0.3 * share)
+        self.assertAlmostEqual(up, share, delta=0.3 * share)
+
     def test_eye_gaze_also_drives_eye_bones_with_shape_keys(self) -> None:
         self._apply({"eyeLookOutLeft": 1.0, "eyeLookInRight": 1.0}, "ARKIT")
         target = self._world_offset("c_eye_target.l")
