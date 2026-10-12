@@ -10,6 +10,7 @@ from bpy.props import EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
+from ...core.constants import SHAPE_SCHEMES
 from ...core.coordinator import COORDINATOR
 from ...rig import mapping
 from ...rig.face_schemes import (
@@ -135,7 +136,7 @@ def active_mapping_section(context, armature) -> str:
     section = armature.mtp_rig_config.subtab
     if section == "FACE_RIG":
         settings = context.scene.mtp_settings
-        if settings.face_output in {"ARKIT", "FACS"}:
+        if settings.face_output in SHAPE_SCHEMES:
             return "SHAPES"
     return section
 
@@ -225,7 +226,7 @@ class MTP_OT_use_active_shape_key(_IdleMutationMixin, Operator):
             self.report({"ERROR"}, "Select a mesh with an active shape key")
             return {"CANCELLED"}
         scheme = shape_scheme(block.name)
-        if entry.shape_scheme in {"ARKIT", "FACS"} and scheme != entry.shape_scheme:
+        if entry.shape_scheme in SHAPE_SCHEMES and scheme != entry.shape_scheme:
             self.report(
                 {"ERROR"},
                 f"Selected key is {scheme or 'unclassified'}, expected {entry.shape_scheme}",
@@ -466,10 +467,7 @@ class MTP_OT_select_problem(Operator):
         armature.mtp_rig_config.subtab = (
             "FACE_RIG" if entry.section in {"SHAPES", "FACE_RIG"} else entry.section
         )
-        if entry.section == "SHAPES" and entry.shape_scheme in {
-            "ARKIT",
-            "FACS",
-        }:
+        if entry.section == "SHAPES" and entry.shape_scheme in SHAPE_SCHEMES:
             context.scene.mtp_settings.face_output = entry.shape_scheme
         elif entry.section == "FACE_RIG":
             context.scene.mtp_settings.face_output = "BONES"

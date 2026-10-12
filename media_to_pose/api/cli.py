@@ -88,7 +88,7 @@ def _capture_options(parser: argparse.ArgumentParser, *, cached: bool) -> None:
     )
     parser.add_argument("--start-frame", type=float, help="timeline frame of frame 0")
     parser.add_argument("--root-motion", help="AUTOMATIC, IN_PLACE or OFF")
-    parser.add_argument("--face-output", help="ARKIT, FACS or BONES")
+    parser.add_argument("--face-output", help="ARKIT, FACS, VRM or BONES")
     parser.add_argument(
         "--mirror", action=argparse.BooleanOptionalAction, help="mirror the media"
     )

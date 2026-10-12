@@ -17,6 +17,8 @@ from ..core.constants import (
     PROFILE_AUTO,
     PROFILE_GENERIC,
     PROFILE_RIGIFY,
+    SHAPE_SCHEMES,
+    VRM_EXPRESSIONS,
 )
 from .face_schemes import (
     SIGNED_FACE_CONTROLS,
@@ -345,6 +347,28 @@ def auto_map(
                 force=force_profile,
             )
 
+    for name, _label, keys in VRM_EXPRESSIONS:
+        entry = entries.get(f"VRM_{name}")
+        if not entry or (entry.manual_lock and not force_profile):
+            continue
+        hits = [
+            hit
+            for key in keys
+            for hit in shape_targets.get(normalize_name(key, shape=True), [])
+            if shape_scheme(hit[1]) == "VRM"
+        ]
+        if hits:
+            _set_mapping(
+                entry,
+                hits[0][1],
+                target_kind="SHAPE_KEY",
+                target_object="*",
+                channel="VALUE",
+                source="PROFILE",
+                confidence=1.0,
+                force=force_profile,
+            )
+
     for action_unit, _label in FACS_ACTION_UNITS:
         entry = entries.get(f"FACS_{action_unit}")
         if not entry or (entry.manual_lock and not force_profile):
@@ -489,7 +513,7 @@ def validate_mapping(
     section_counts = {
         section: [0, 0] for section in ("BODY", "HANDS", "SHAPES", "FACE_RIG")
     }
-    scheme_counts = {"ARKIT": [0, 0], "FACS": [0, 0]}
+    scheme_counts = {scheme: [0, 0] for scheme in SHAPE_SCHEMES}
     for entry in config.mappings:
         if entry.section in {"SHAPES", "FACE_RIG"} and not face_enabled:
             entry.status = "OPTIONAL"
@@ -724,6 +748,11 @@ def validate_mapping(
     config.facs_complete = (
         scheme_counts["FACS"][0] / scheme_counts["FACS"][1]
         if scheme_counts["FACS"][1]
+        else 0.0
+    )
+    config.vrm_complete = (
+        scheme_counts["VRM"][0] / scheme_counts["VRM"][1]
+        if scheme_counts["VRM"][1]
         else 0.0
     )
     config.face_complete = completeness("FACE_RIG")

@@ -166,3 +166,57 @@ class FaceTransferTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class VroidExpressionTests(unittest.TestCase):
+    """VRM / VRoid expression keys driven from ARKit coefficients."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.addon = register_addon()
+        bpy.ops.wm.open_mainfile(filepath=str(fixture_path("vroid_test_rig")))
+        cls.addon.register()
+        settings = bpy.context.scene.mtp_settings
+        settings.use_face = True
+        settings.face_output = "VRM"
+        cls.rig = bpy.data.objects["Armature"]
+        settings.target_armature = cls.rig
+        cls.addon.api.auto_map(cls.rig.name)
+        cls.keys = bpy.data.objects["Face"].data.shape_keys.key_blocks
+
+    def setUp(self) -> None:
+        for block in self.keys:
+            block.value = 0.0
+
+    def _apply(self, blendshapes: dict[str, float]) -> None:
+        frame = self.addon.core.types.CanonicalFrame(
+            timestamp_ms=0, blendshapes=dict(blendshapes)
+        )
+        settings = SimpleNamespace(
+            provider="MEDIAPIPE",
+            use_body=False,
+            use_hands=False,
+            use_face=True,
+            face_output="VRM",
+        )
+        self.addon.retarget.apply_frame(
+            self.rig, frame, settings, post_process=False, scene_context=scene_context()
+        )
+
+    def test_every_vrm_expression_is_mapped(self) -> None:
+        described = self.addon.api.describe_rig(self.rig.name)
+        self.assertEqual(described["completeness"]["vrm"], 1.0)
+        self.assertIn("VRM", described["shape_keys"]["Face"]["schemes"])
+
+    def test_blinks_visemes_and_brows(self) -> None:
+        self._apply({"eyeBlinkLeft": 1.0, "jawOpen": 1.0, "browInnerUp": 1.0})
+        self.assertAlmostEqual(self.keys["Fcl_EYE_Close_L"].value, 1.0, places=3)
+        self.assertEqual(self.keys["Fcl_EYE_Close_R"].value, 0.0)
+        self.assertEqual(self.keys["Fcl_EYE_Close"].value, 0.0)
+        self.assertAlmostEqual(self.keys["Fcl_MTH_A"].value, 1.0, places=3)
+        self.assertAlmostEqual(self.keys["Fcl_BRW_Surprised"].value, 1.0, places=3)
+        self.setUp()
+        self._apply({"mouthPucker": 1.0, "mouthSmileLeft": 1.0, "mouthSmileRight": 1.0})
+        self.assertAlmostEqual(self.keys["Fcl_MTH_U"].value, 1.0, places=3)
+        self.assertAlmostEqual(self.keys["Fcl_MTH_Joy"].value, 1.0, places=3)
+        self.assertEqual(self.keys["Fcl_MTH_A"].value, 0.0)

@@ -66,6 +66,7 @@ class MTPMappingEntry(PropertyGroup):
             ("NONE", "None", "Not a morph mapping"),
             ("ARKIT", "ARKit", "Apple ARKit-compatible blendshape"),
             ("FACS", "FACS", "FACS-compatible morph"),
+            ("VRM", "VRM", "VRM / VRoid expression morph"),
         ),
         default="NONE",
     )
@@ -254,6 +255,7 @@ class MTPRigConfig(PropertyGroup):
     shapes_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     arkit_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     facs_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
+    vrm_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     face_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     arm_fk_switch_bone_l: StringProperty(
         name="Left Arm Switch Bone", update=_fk_switch_edited

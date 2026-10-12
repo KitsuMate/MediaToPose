@@ -105,6 +105,7 @@ def describe_rig(armature, *, scene=None) -> dict[str, Any]:
                     ("shapes", config.shapes_complete),
                     ("arkit", config.arkit_complete),
                     ("facs", config.facs_complete),
+                    ("vrm", config.vrm_complete),
                     ("face", config.face_complete),
                 )
             },

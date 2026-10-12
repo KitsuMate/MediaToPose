@@ -133,7 +133,11 @@ print(result.face_output_warning)
 
 Use `face_output="ARKIT"` or `"FACS"` when the meshes have matching shape
 keys (`completeness.arkit` / `completeness.facs` close to 1.0), `"BONES"`
-for a bone-driven face rig. `face_output_warning` says what is missing.
+for a bone-driven face rig. For VRoid and other VRM characters use
+`face_output="VRM"`: it drives the `Fcl_*` expression keys (per-eye
+blinks, the A/I/U/E/O mouth shapes, smiling, sad and angry mouth and brows,
+wide and smiling eyes) from the same ARKit coefficients.
+`face_output_warning` says what is missing.
 
 ### Run from the Blender MCP server
 

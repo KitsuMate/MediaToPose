@@ -35,6 +35,7 @@ class RootMotionMode(StrEnum):
 class FaceOutput(StrEnum):
     ARKIT = "ARKIT"
     FACS = "FACS"
+    VRM = "VRM"
     BONES = "BONES"
 
 

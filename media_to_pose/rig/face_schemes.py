@@ -6,7 +6,7 @@ import re
 
 import bpy
 
-from ..core.constants import FACE_BLENDSHAPES
+from ..core.constants import FACE_BLENDSHAPES, SHAPE_SCHEMES
 from .names import normalize_name
 
 _ARKIT_NORMALIZED = {
@@ -125,7 +125,7 @@ def matching_shape_blocks(armature: bpy.types.Object, entry):
             for block in keys.key_blocks
             if normalize_name(block.name, shape=True) == normalized
             and not (
-                entry.shape_scheme in {"ARKIT", "FACS"}
+                entry.shape_scheme in SHAPE_SCHEMES
                 and shape_scheme(block.name) != entry.shape_scheme
             )
         ]
@@ -141,13 +141,16 @@ def matching_shape_blocks(armature: bpy.types.Object, entry):
 
 
 def shape_scheme(name: str) -> str:
-    """``ARKIT``, ``FACS`` or ``NONE`` from what the name says, not its prefix.
+    """``ARKIT``, ``FACS``, ``VRM`` or ``NONE`` from what the name says.
 
     ``facs_bs_EyeBlinkLeft`` is the ARKit coefficient ``eyeBlinkLeft``
-    behind an exporter prefix; correctives are never driven directly.
+    behind an exporter prefix; correctives are never driven directly;
+    VRoid expression keys start with ``Fcl_``.
     """
     if shape_kind(name) == "CORRECTIVE":
         return "NONE"
+    if name.casefold().startswith(("fcl_", "vrm_")):
+        return "VRM"
     normalized = normalize_name(name, shape=True)
     if normalized in _ARKIT_NORMALIZED:
         return "ARKIT"

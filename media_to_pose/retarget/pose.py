@@ -210,7 +210,7 @@ def build_target_pose(
         # driven whichever face output is chosen.
         _apply_eye_gaze(armature, entries, frame, target_pose)
     if settings.use_face and getattr(settings, "provider", "MEDIAPIPE") == "MEDIAPIPE":
-        if settings.face_output in {FaceOutput.ARKIT, FaceOutput.FACS}:
+        if settings.face_output in {FaceOutput.ARKIT, FaceOutput.FACS, FaceOutput.VRM}:
             if frame.blendshapes:
                 _apply_shapes(
                     armature,

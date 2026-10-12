@@ -5,6 +5,7 @@ from __future__ import annotations
 import bpy
 from bpy.types import Panel, UIList
 
+from ....core.constants import SHAPE_SCHEMES
 from ....core.coordinator import COORDINATOR
 from ....rig.profiles.common import PROFILE_LABELS, detect_profile, profile_label
 from ...operators.mapping import active_entry, active_mapping_section
@@ -58,7 +59,7 @@ class MTP_UL_mappings(UIList):
         selected_output = settings.face_output if settings else "ARKIT"
         effective_section = (
             "SHAPES"
-            if section == "FACE_RIG" and selected_output in {"ARKIT", "FACS"}
+            if section == "FACE_RIG" and selected_output in SHAPE_SCHEMES
             else section
         )
         text = data.filter_text.casefold().strip()
@@ -358,6 +359,8 @@ class MTP_PT_rig_setup(Panel):
             completeness.label(text=f"ARKit {config.arkit_complete:.0%}")
         elif settings.face_output == "FACS":
             completeness.label(text=f"FACS {config.facs_complete:.0%}")
+        elif settings.face_output == "VRM":
+            completeness.label(text=f"VRM {config.vrm_complete:.0%}")
         else:
             completeness.label(text=f"Face {config.face_complete:.0%}")
         if required:

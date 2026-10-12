@@ -75,11 +75,7 @@ def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
     provider = _descriptor(settings.provider)
     face_enabled = settings.use_face and "FACE" in provider.capabilities
     if face_enabled:
-        completeness = {
-            "ARKIT": config.arkit_complete,
-            "FACS": config.facs_complete,
-            "BONES": config.face_complete,
-        }[settings.face_output]
+        completeness = _output_completeness(config, settings.face_output)
         if completeness == 0.0 and not (settings.use_body or settings.use_hands):
             issues.append(
                 f"The selected {settings.face_output} face output is fully missing"
@@ -87,19 +83,27 @@ def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
     return tuple(issues)
 
 
+def _output_completeness(config, face_output: str) -> float:
+    """How completely the rig maps the selected face output (0 to 1)."""
+    field = {
+        "ARKIT": "arkit_complete",
+        "FACS": "facs_complete",
+        "VRM": "vrm_complete",
+        "BONES": "face_complete",
+    }[face_output]
+    return float(getattr(config, field))
+
+
 def face_output_warning(armature, settings) -> str:
     provider = _descriptor(settings.provider)
     if not settings.use_face or "FACE" not in provider.capabilities:
         return ""
     config = armature.mtp_rig_config
-    completeness = {
-        "ARKIT": config.arkit_complete,
-        "FACS": config.facs_complete,
-        "BONES": config.face_complete,
-    }[settings.face_output]
+    completeness = _output_completeness(config, settings.face_output)
     label = {
         "ARKIT": "ARKit morphs",
         "FACS": "FACS morphs",
+        "VRM": "VRM expressions",
         "BONES": "facial bones",
     }[settings.face_output]
     if completeness == 0.0:

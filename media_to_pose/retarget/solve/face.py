@@ -91,6 +91,50 @@ def facs_values(blendshapes: dict[str, float]) -> dict[str, float]:
     return values
 
 
+def vrm_values(blendshapes: dict[str, float]) -> dict[str, float]:
+    """Approximate VRM / VRoid expression weights from ARKit coefficients.
+
+    Visemes come from the mouth shape (open jaw, funnel, pucker, stretch);
+    emotions from the matching brow, eye and mouth coefficients. Each
+    expression is driven only by the coefficients that describe it, so they
+    combine instead of replacing the whole face.
+    """
+
+    def get(name: str) -> float:
+        return min(max(_finite_float(blendshapes.get(name, 0.0)), 0.0), 1.0)
+
+    def both(left: str, right: str) -> float:
+        return (get(left) + get(right)) / 2.0
+
+    def clamp(value: float) -> float:
+        return min(max(value, 0.0), 1.0)
+
+    jaw = get("jawOpen")
+    funnel = get("mouthFunnel")
+    pucker = get("mouthPucker")
+    stretch = both("mouthStretchLeft", "mouthStretchRight")
+    smile = both("mouthSmileLeft", "mouthSmileRight")
+    outer_up = both("browOuterUpLeft", "browOuterUpRight")
+    return {
+        "blinkLeft": get("eyeBlinkLeft"),
+        "blinkRight": get("eyeBlinkRight"),
+        "aa": clamp(jaw - 0.5 * max(funnel, pucker)),
+        "oh": clamp(min(funnel, jaw + 0.3)),
+        "ou": pucker,
+        "ee": clamp(stretch * (1.0 - jaw)),
+        "ih": clamp(smile * 0.4 * (1.0 - jaw)),
+        "mouthJoy": smile,
+        "mouthSorrow": both("mouthFrownLeft", "mouthFrownRight"),
+        "mouthAngry": both("mouthPressLeft", "mouthPressRight"),
+        "browSurprised": max(get("browInnerUp"), outer_up),
+        "browAngry": both("browDownLeft", "browDownRight"),
+        "browSorrow": clamp(get("browInnerUp") - outer_up),
+        "eyeSurprised": both("eyeWideLeft", "eyeWideRight"),
+        "eyeJoyLeft": get("cheekSquintLeft"),
+        "eyeJoyRight": get("cheekSquintRight"),
+    }
+
+
 def _matching_shape_blocks(armature, entry):
     yield from matching_shape_blocks(armature, entry)
 
@@ -98,7 +142,11 @@ def _matching_shape_blocks(armature, entry):
 def _apply_shapes(armature, entries, frame, scheme: str, target_pose: TargetPose):
     changed = []
     expression_values = (
-        facs_values(frame.blendshapes) if scheme == "FACS" else frame.blendshapes
+        facs_values(frame.blendshapes)
+        if scheme == "FACS"
+        else vrm_values(frame.blendshapes)
+        if scheme == "VRM"
+        else frame.blendshapes
     )
     for name, raw_value in expression_values.items():
         entry = entries.get(f"{scheme}_{name}")
