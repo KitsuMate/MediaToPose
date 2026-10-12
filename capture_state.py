@@ -3,9 +3,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
-from . import detection_cache, mapping, sam3d_backend
-from .providers import descriptor
+
+def _descriptor(provider: str):
+    # Provider descriptors pull in the inference backends; import on use so
+    # the readiness rules stay importable (and testable) without Blender.
+    from .providers import descriptor
+
+    return descriptor(provider)
+
+
+def _fk_switch_issues(armature, *, include_arms: bool, include_legs: bool):
+    from . import mapping
+
+    return mapping.fk_switch_issues(
+        armature, include_arms=include_arms, include_legs=include_legs
+    )
 
 
 @dataclass(frozen=True)
@@ -16,7 +30,7 @@ class CaptureReadiness:
     provider_issue: str
     enabled_scope: bool
     mapping_issues: tuple[str, ...]
-    media_source: detection_cache.MediaSourceState
+    media_source: Any
 
 
 def enabled_capture_scope(settings, capabilities) -> bool:
@@ -52,13 +66,13 @@ def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
         issues.append("No finger mappings are available")
     if settings.use_body or settings.use_hands:
         issues.extend(
-            mapping.fk_switch_issues(
+            _fk_switch_issues(
                 armature,
                 include_arms=settings.use_body or settings.use_hands,
                 include_legs=settings.use_body,
             )
         )
-    provider = descriptor(settings.provider)
+    provider = _descriptor(settings.provider)
     face_enabled = settings.use_face and "FACE" in provider.capabilities
     if face_enabled:
         completeness = {
@@ -74,7 +88,7 @@ def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
 
 
 def face_output_warning(armature, settings) -> str:
-    provider = descriptor(settings.provider)
+    provider = _descriptor(settings.provider)
     if not settings.use_face or "FACE" not in provider.capabilities:
         return ""
     config = armature.mtp_rig_config
@@ -103,7 +117,9 @@ def evaluate_apply_readiness(
     media_source=None,
 ) -> CaptureReadiness:
     """Evaluate the exact side-effect-free state shared by UI and Apply."""
-    provider = provider or descriptor(settings.provider)
+    from . import detection_cache, sam3d_backend
+
+    provider = provider or _descriptor(settings.provider)
     source = (
         media_source
         if media_source is not None
