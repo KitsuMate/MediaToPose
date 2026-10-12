@@ -24,6 +24,7 @@ from .face_schemes import (
     associated_meshes,
     find_shape_targets,
     matching_shape_blocks,
+    shape_priority,
     shape_scheme,
 )
 from .locks import suppress_manual_locks
@@ -324,11 +325,14 @@ def auto_map(
         entry = entries.get(f"ARKIT_{blendshape}")
         if not entry or (entry.manual_lock and not force_profile):
             continue
-        hits = [
-            hit
-            for hit in shape_targets.get(normalize_name(blendshape, shape=True), [])
-            if shape_scheme(hit[1]) == "ARKIT"
-        ]
+        hits = sorted(
+            (
+                hit
+                for hit in shape_targets.get(normalize_name(blendshape, shape=True), [])
+                if shape_scheme(hit[1]) == "ARKIT"
+            ),
+            key=lambda hit: shape_priority(hit[1]),
+        )
         if hits:
             _set_mapping(
                 entry,
@@ -352,6 +356,7 @@ def auto_map(
                 for hit in shape_targets.get(normalize_name(alias, shape=True), [])
                 if shape_scheme(hit[1]) == "FACS"
             )
+        hits.sort(key=lambda hit: shape_priority(hit[1]))
         if hits:
             _set_mapping(
                 entry,
