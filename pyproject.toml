@@ -46,6 +46,7 @@ line-ending = "lf"
 typeCheckingMode = "basic"
 pythonVersion = "3.13"
 include = [
+  "media_to_pose/backends/lifecycle.py",
   "media_to_pose/camera_motion_correction.py",
   "media_to_pose/constants.py",
   "media_to_pose/core",

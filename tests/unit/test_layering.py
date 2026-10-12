@@ -13,6 +13,8 @@ resolved to a package-relative module name and checked against these rules:
   has a pure-Python fallback (``core.geometry`` uses ``mathutils`` when
   Blender provides it).
 - ``bpy`` and ``mathutils`` are used only where the layer allows them.
+  ``backends/`` may use ``bpy`` only for paths (``bpy.utils``, ``bpy.path``,
+  ``bpy.app``), never for Blender data, types or operators.
 - Only ``blender/operators/`` and ``api/`` read ``bpy.context``.
 
 ``ALLOWLIST`` records known violations. Entries must be removed as the code
@@ -44,8 +46,18 @@ LEVELS = {
     "blender": 7,
     "root": 8,
 }
-BPY_LAYERS = {"blender", "api", "session", "retarget", "rig", "evaluate", "root"}
-MATHUTILS_LAYERS = BPY_LAYERS | {"postprocess"}
+BPY_LAYERS = {
+    "blender",
+    "api",
+    "session",
+    "retarget",
+    "rig",
+    "evaluate",
+    "root",
+    "backends",
+}
+MATHUTILS_LAYERS = (BPY_LAYERS - {"backends"}) | {"postprocess"}
+BACKEND_BPY_ATTRIBUTES = {"utils", "path", "app"}
 CORE_THIRD_PARTY = {"numpy"}
 BLENDER_MODULES = {"bpy", "mathutils", "bmesh", "gpu", "gpu_extras", "blf", "bl_ui"}
 
@@ -95,7 +107,7 @@ LEGACY_LAYERS: dict[str, str] = {
 # (module, rule, detail) tuples for known violations.
 ALLOWLIST: set[tuple[str, str, str]] = {
     ("anycalib_backend", "imports-blender", "registration"),
-    ("anycalib_backend", "uses-bpy", "bpy"),
+    ("anycalib_backend", "backend-bpy-api", "bpy.data"),
     ("cache_preview", "reads-bpy-context", "bpy.context"),
     ("camera_calibration_pipeline", "upward-import", "anycalib_backend"),
     ("detection_cache", "upward-import", "anycalib_backend"),
@@ -108,10 +120,11 @@ ALLOWLIST: set[tuple[str, str, str]] = {
     ("pose_translation_solver", "reads-bpy-context", "bpy.context"),
     ("retarget", "reads-bpy-context", "bpy.context"),
     ("rohm_backend", "imports-blender", "registration"),
-    ("rohm_backend", "uses-bpy", "bpy"),
+    ("rohm_backend", "backend-bpy-api", "bpy.data"),
     ("rohm_correction", "upward-import", "rohm_ort_runtime"),
     ("sam3d_backend", "imports-blender", "registration"),
-    ("sam3d_backend", "uses-bpy", "bpy"),
+    ("sam3d_backend", "backend-bpy-api", "bpy.data"),
+    ("sam3d_backend", "backend-bpy-api", "bpy.ops"),
     ("target_pose", "reads-bpy-context", "bpy.context"),
     ("ui", "reads-bpy-context", "bpy.context"),
 }
@@ -171,6 +184,7 @@ class _ImportVisitor(ast.NodeVisitor):
         self.external: set[str] = set()
         self.optional: set[str] = set()
         self.reads_context = False
+        self.bpy_attributes: set[str] = set()
         self._optional_depth = 0
 
     def visit_Try(self, node: ast.Try) -> None:
@@ -211,12 +225,10 @@ class _ImportVisitor(ast.NodeVisitor):
                 self.internal.add(_closest_module(base, self.modules))
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
-        if (
-            node.attr == "context"
-            and isinstance(node.value, ast.Name)
-            and node.value.id == "bpy"
-        ):
-            self.reads_context = True
+        if isinstance(node.value, ast.Name) and node.value.id == "bpy":
+            self.bpy_attributes.add(node.attr)
+            if node.attr == "context":
+                self.reads_context = True
         self.generic_visit(node)
 
 
@@ -251,6 +263,9 @@ def collect_violations() -> set[tuple[str, str, str]]:
                 layer == "core" and name not in stdlib and name not in CORE_THIRD_PARTY
             ):
                 violations.add((module, "core-third-party", name))
+        if layer == "backends":
+            for attribute in sorted(visitor.bpy_attributes - BACKEND_BPY_ATTRIBUTES):
+                violations.add((module, "backend-bpy-api", f"bpy.{attribute}"))
         if visitor.reads_context and not (
             module.startswith(("blender.operators", "api")) or layer == "root"
         ):
