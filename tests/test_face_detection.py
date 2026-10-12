@@ -61,6 +61,27 @@ class FaceDetectionTests(unittest.TestCase):
                 self.assertTrue(entry["source_url"].startswith("https://"))
                 self.assertTrue((FIXTURES / entry["path"]).is_file())
 
+    def test_mirrored_input_mirrors_the_face_like_the_body(self) -> None:
+        provider_module = self.addon.providers.mediapipe.provider
+        provider = provider_module.MediaPipeProvider(
+            str(self.addon.core.paths.BUNDLED_MODELS),
+            use_body=True,
+            use_hands=False,
+            use_face=True,
+            mirror=True,
+            smoothing=0.0,
+        )
+        try:
+            mirrored = provider.detect_image(str(verify_fixture("face_wink_left")))
+        finally:
+            provider.close()
+        plain = self.detected["face_wink_left"].blendshapes
+        flipped = mirrored.blendshapes
+        # The left wink becomes a right wink, as the body's left becomes the
+        # character's right.
+        self.assertGreater(plain["eyeSquintLeft"], plain["eyeSquintRight"])
+        self.assertGreater(flipped["eyeSquintRight"], flipped["eyeSquintLeft"])
+
     def test_detected_expressions_match_the_stills(self) -> None:
         unexpected_passes = []
         for still_id, expectation in self.expected.items():

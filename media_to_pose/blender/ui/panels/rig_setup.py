@@ -352,7 +352,9 @@ class MTP_PT_rig_setup(Panel):
         completeness = header.row(align=True)
         completeness.label(text=f"Body {config.body_complete:.0%}")
         completeness.label(text=f"Hands {config.hands_complete:.0%}")
-        if settings.face_output == "ARKIT":
+        if not settings.use_face:
+            pass
+        elif settings.face_output == "ARKIT":
             completeness.label(text=f"ARKit {config.arkit_complete:.0%}")
         elif settings.face_output == "FACS":
             completeness.label(text=f"FACS {config.facs_complete:.0%}")

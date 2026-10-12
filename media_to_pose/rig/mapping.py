@@ -707,9 +707,11 @@ def validate_mapping(
                 )
                 warnings += 1
 
+    # A section with nothing in scope (face capture off) is not complete:
+    # it reports 0 and readers treat it as not requested.
     def completeness(section: str) -> float:
         mapped, total = section_counts[section]
-        return mapped / total if total else 1.0
+        return mapped / total if total else 0.0
 
     config.body_complete = completeness("BODY")
     config.hands_complete = completeness("HANDS")
@@ -717,12 +719,12 @@ def validate_mapping(
     config.arkit_complete = (
         scheme_counts["ARKIT"][0] / scheme_counts["ARKIT"][1]
         if scheme_counts["ARKIT"][1]
-        else 1.0
+        else 0.0
     )
     config.facs_complete = (
         scheme_counts["FACS"][0] / scheme_counts["FACS"][1]
         if scheme_counts["FACS"][1]
-        else 1.0
+        else 0.0
     )
     config.face_complete = completeness("FACE_RIG")
     config.validation_summary = (

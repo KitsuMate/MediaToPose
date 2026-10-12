@@ -72,6 +72,19 @@ class FaceTransferTests(unittest.TestCase):
         face = described["sections"]["FACE_RIG"]
         self.assertEqual(face["mapped"], face["enabled"])
 
+    def test_face_completeness_is_null_when_face_capture_is_off(self) -> None:
+        settings = bpy.context.scene.mtp_settings
+        try:
+            settings.use_face = False
+            off = self.addon.api.describe_rig(self.rig.name)["completeness"]
+        finally:
+            settings.use_face = True
+        on = self.addon.api.describe_rig(self.rig.name)["completeness"]
+        self.assertIsNone(off["arkit"])
+        self.assertIsNone(off["face"])
+        self.assertGreater(on["arkit"], 0.9)
+        self.assertEqual(on["face"], 1.0)
+
     def test_prefixed_arkit_names_and_correctives(self) -> None:
         scheme = self.addon.rig.face_schemes.shape_scheme
         self.assertEqual(scheme("facs_bs_EyeBlinkLeft"), "ARKIT")

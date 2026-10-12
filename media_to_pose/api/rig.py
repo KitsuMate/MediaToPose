@@ -87,19 +87,27 @@ def describe_rig(armature, *, scene=None) -> dict[str, Any]:
         and entry.target_name
     )
     detected = detect_profile(target)
+    face_requested = bool(getattr(settings, "use_face", False))
     return {
         "armature": target.name,
         "profile": config.profile,
         "detected_profile": detected,
         "profile_label": PROFILE_LABELS.get(detected, detected),
         "validation": config.validation_summary,
+        # Face sections are only validated when face capture is on;
+        # otherwise their completeness is not meaningful and is null.
         "completeness": {
             "body": round(config.body_complete, 4),
             "hands": round(config.hands_complete, 4),
-            "shapes": round(config.shapes_complete, 4),
-            "arkit": round(config.arkit_complete, 4),
-            "facs": round(config.facs_complete, 4),
-            "face": round(config.face_complete, 4),
+            **{
+                name: round(value, 4) if face_requested else None
+                for name, value in (
+                    ("shapes", config.shapes_complete),
+                    ("arkit", config.arkit_complete),
+                    ("facs", config.facs_complete),
+                    ("face", config.face_complete),
+                )
+            },
         },
         "sections": sections,
         "shape_keys": shape_keys,
