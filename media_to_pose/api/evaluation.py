@@ -68,6 +68,7 @@ def evaluate(
     frame_range: tuple[int, int] | None = None,
     result=None,
     ground_height: float = 0.0,
+    face_output: str | None = None,
     scene=None,
     out=None,
 ) -> metrics_module.Metrics:
@@ -80,6 +81,8 @@ def evaluate(
     - ``result``: a capture result (object, dict or JSON path); its retained
       detections give ``landmark_fit_error_deg``.
     - ``ground_height``: world Z of the floor for ground penetration.
+    - ``face_output``: measure the face metrics for this face output; by
+      default the one the ``result`` used, if it captured the face.
     - ``out``: also write the metrics as JSON there.
     """
     target = resolve_armature(armature)
@@ -89,6 +92,8 @@ def evaluate(
         first, last = data["timeline_frame_range"]
         frame_range = (int(round(first)), int(round(last)))
     detections = list(_detections(data).values()) if data else None
+    if face_output is None and data:
+        face_output = data.get("face", {}).get("output") or None
     animation_data = target.animation_data_create()
     original = animation_data.action
     if action is not None:
@@ -103,6 +108,7 @@ def evaluate(
             frame_range=frame_range,
             ground_height=float(ground_height),
             detections=detections or None,
+            face_output=face_output,
         )
     finally:
         if action is not None:

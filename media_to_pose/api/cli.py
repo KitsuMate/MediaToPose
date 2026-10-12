@@ -144,6 +144,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--frame-range", type=_frame_range, help="timeline FIRST:LAST")
     sub.add_argument("--result", help="capture result JSON for landmark fit")
     sub.add_argument("--ground-height", type=float, default=0.0)
+    sub.add_argument(
+        "--face-output",
+        help="Measure face metrics for ARKIT, FACS, VRM or BONES (default: the result's)",
+    )
     sub.add_argument("--out")
     _common(sub)
 
@@ -229,6 +233,7 @@ def run(args) -> Any:
             frame_range=args.frame_range,
             result=args.result,
             ground_height=args.ground_height,
+            face_output=args.face_output,
         ).to_dict()
     elif command == "config":
         if args.action == "set":

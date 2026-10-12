@@ -167,6 +167,7 @@ path; `api.load_result(result)` returns the dict.
 | `cleanup_steps` | Each enabled clean-up module: `parameters` used and `statistics` (for example `rejected_observations`, `repaired_samples`, `contact_frames`, `root_drift_removed_mean`) |
 | `mapping_issues` | Rig mapping entries with warnings or errors |
 | `face_output_warning` | Why face output may be incomplete |
+| `face` | With face capture: `output`, `frames_with_face`, `expressions` (each mapped expression's `peak` and `mean` value sent to the rig, after the mapping's gain and clamp) and `unmapped_expressions` (detected at 0.1 or more but with no target). Names are the face output's: ARKit coefficients, FACS units such as `AU12_L`, VRM expressions such as `blinkLeft`, or `FACE_*` controls for `BONES`. For video, Face Expression Cleanup changes the values further before keying; `evaluate` measures what the rig shows |
 | `warnings` | `{code, message}`; branch on `code` |
 
 Warning codes: `DETECTIONS_REJECTED`, `GAPS_FILLED`, `MANUAL_MASK`,
@@ -192,6 +193,17 @@ the comparison render before acting on a borderline value.
 | `joint_limit_violations`: elbows or knees bent past 160°, or bones rotated over 170° from rest | 0 | > 0 | Mask the frames in `worst_frames.joint_limits` with `DETECTION_FILTER.manual_bad_frames`; check the mapping |
 | `root_speed_spikes`: frames whose root speed is over four times the median and over half a body height per second | 0 | > 0 | `DETECTION_FILTER.reject_unusable_frames`; mask the frames; `CAMERA_MOTION_CORRECTION` for camera pans |
 | `landmark_fit_error_deg`: mean difference between detected and rig elbow and knee bends | < 10 | > 20 | Lower `smoothing_strength` if over-smoothed; fix `mapping_issues`; check `mirror` |
+
+Face metrics are measured when the capture used face output (or with
+`face_output=`); they are in expression units (0 to 1) and `None` otherwise.
+All but `face_jitter` need the result's retained detections.
+
+| Metric | Good | Investigate | What to change |
+| --- | --- | --- | --- |
+| `expression_fit`: mean difference between each mapped expression's detected value (after gain and clamp) and the value the rig shows | < 0.05 | > 0.15 | High for video with Face Expression Cleanup is expected (it calibrates and smooths); otherwise check the mapping's `gain`, `clamp_max` and shape key slider ranges, and `unmapped_expressions` |
+| `blink_recall`: share of detected blinks that close the rig's eye to at least 0.8 | 1.0 | < 0.8 | Keep `FACE_CORRECTION.preserve_blinks` on; lower `face_smoothing`; raise the blink mapping's `gain` |
+| `face_jitter`: RMS distance of face values from the midpoint of their neighbours in time | < 0.03 | > 0.08 | Enable `FACE_CORRECTION.smooth_face`, raise `face_smoothing` or `face_deadzone` |
+| `asymmetry`: mean left/right difference on the rig where the detection was symmetric | < 0.05 | > 0.1 | Check the left/right mapping and `mirror`; a rig whose left and right keys differ in strength needs per-side `gain` |
 
 `foot_contact_ratio`, `penetration_frames` and `max_root_speed_m_per_s` add
 context. `worst_frames` holds up to five timeline frames per problem.
@@ -231,7 +243,7 @@ the JSON document and `--save` to save the .blend afterwards.
 | `retarget` (same options, without `--no-cache`) | `api.retarget_cached` |
 | `describe-rig --armature A` | `api.describe_rig` |
 | `auto-map --armature A [--force-profile]` | `api.auto_map` |
-| `evaluate --armature A [--action] [--frame-range FIRST:LAST] [--result FILE] [--ground-height Z]` | `api.evaluate` |
+| `evaluate --armature A [--action] [--frame-range FIRST:LAST] [--result FILE] [--ground-height Z] [--face-output]` | `api.evaluate` |
 | `config get --armature A [--out FILE]` / `config set FILE --armature A` | `api.get_config` / `api.set_config` |
 | `postprocessors [--armature A]` | `api.list_postprocessors` |
 | `providers`, `models` | `api.list_providers`, `api.model_status` |

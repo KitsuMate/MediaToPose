@@ -272,7 +272,9 @@ class FaceSequenceTests(unittest.TestCase):
         cls.addon.api.auto_map(cls.rig.name)
         cls.mesh = bpy.data.objects["FaceFX"]
 
-    def _run(self, face_cleanup: bool) -> dict[str, list[float]]:
+    def _run(
+        self, face_cleanup: bool, face_output: str = "ARKIT"
+    ) -> dict[str, list[float]]:
         config = self.rig.mtp_rig_config
         module_config = self.addon.postprocess.module_config
         saved = [(item, item.enabled) for item in config.post_processing_modules]
@@ -292,12 +294,13 @@ class FaceSequenceTests(unittest.TestCase):
             )
             for index, values in enumerate(_blink_clip())
         ]
+        self.detections = [(1.0 + index, frame) for index, frame in enumerate(frames)]
         settings = SimpleNamespace(
             provider="MEDIAPIPE",
             use_body=False,
             use_hands=False,
             use_face=True,
-            face_output="ARKIT",
+            face_output=face_output,
             media_kind="VIDEO",
             root_motion_mode="OFF",
             keep_original_root_position=False,
@@ -306,6 +309,11 @@ class FaceSequenceTests(unittest.TestCase):
         keys = self.mesh.data.shape_keys
         keys.animation_data_clear()
         self.addCleanup(keys.animation_data_clear)
+        self.rig.animation_data_clear()
+        self.addCleanup(self.rig.animation_data_clear)
+        self.addCleanup(
+            lambda: [b.matrix_basis.identity() for b in self.rig.pose.bones]
+        )
         self.addon.retarget.apply_sequence(
             self.rig, frames, settings, 1.0, scene_context=context
         )
@@ -349,6 +357,85 @@ class FaceSequenceTests(unittest.TestCase):
         smile = values["mouthSmileLeft"]
         # No calibration: the resting smile stays.
         self.assertGreater(sum(smile) / len(smile), 0.2)
+
+    def _metrics(self, face_output: str):
+        return self.addon.evaluate.metrics.evaluate(
+            scene_context(),
+            self.rig,
+            frame_range=(1, len(self.detections)),
+            detections=self.detections,
+            face_output=face_output,
+        )
+
+    def test_face_metrics_on_shape_keys(self) -> None:
+        self._run(face_cleanup=False)
+        plain = self._metrics("ARKIT")
+        self._run(face_cleanup=True)
+        cleaned = self._metrics("ARKIT")
+        self.assertEqual(cleaned.blink_recall, 1.0)
+        # Cleanup smooths the jittery smile and removes its resting level.
+        self.assertLess(cleaned.face_jitter, plain.face_jitter)
+        self.assertGreater(cleaned.expression_fit, plain.expression_fit)
+        self.assertLess(cleaned.asymmetry, 0.05)
+        self.assertIsNone(
+            self.addon.evaluate.metrics.evaluate(
+                scene_context(), self.rig, frame_range=(1, 5)
+            ).face_jitter
+        )
+
+    def test_face_metrics_on_bones(self) -> None:
+        self._run(face_cleanup=True, face_output="BONES")
+        measured = self._metrics("BONES")
+        self.assertEqual(measured.blink_recall, 1.0)
+        self.assertLess(measured.asymmetry, 0.05)
+        self.assertIsNotNone(measured.expression_fit)
+
+
+class FaceCaptureResultTests(unittest.TestCase):
+    """A real still captured through the API reports its face values."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.addon = register_addon()
+        bpy.ops.wm.open_mainfile(filepath=str(fixture_path("facefx_face_rig")))
+        cls.addon.register()
+        cls.rig = bpy.data.objects["FaceFX.Rig"]
+        cls.addon.api.auto_map(cls.rig.name)
+
+    def test_smile_result_lists_applied_and_unmapped_expressions(self) -> None:
+        result = self.addon.api.capture(
+            str(fixture_path("face_smile_open")),
+            self.rig.name,
+            parts={"face"},
+            face_output="ARKIT",
+            keep_cache=False,
+        )
+        self.assertTrue(result.succeeded, result.message)
+        face = result.face
+        self.assertEqual(face["output"], "ARKIT")
+        self.assertEqual(face["frames_with_face"], 1)
+        smile = face["expressions"]["mouthSmileLeft"]
+        self.assertGreater(smile["peak"], 0.3)
+        self.assertEqual(smile["peak"], smile["mean"])
+        self.assertEqual(face["unmapped_expressions"], [])
+
+    def test_disabled_mapping_is_reported_unmapped(self) -> None:
+        entry = next(
+            item
+            for item in self.rig.mtp_rig_config.mappings
+            if item.semantic_id == "ARKIT_mouthSmileRight"
+        )
+        entry.enabled = False
+        self.addCleanup(setattr, entry, "enabled", True)
+        result = self.addon.api.capture(
+            str(fixture_path("face_smile_open")),
+            self.rig.name,
+            parts={"face"},
+            face_output="ARKIT",
+            keep_cache=False,
+        )
+        self.assertIn("mouthSmileRight", result.face["unmapped_expressions"])
+        self.assertNotIn("mouthSmileRight", result.face["expressions"])
 
 
 if __name__ == "__main__":

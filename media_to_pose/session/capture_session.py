@@ -63,7 +63,7 @@ from .progress import (
     sequence_progress_status,
 )
 from .readiness import enabled_capture_scope, face_output_warning, mapping_scope_issues
-from .results import part_confidence
+from .results import FaceSummary, part_confidence
 from .transaction import CaptureTransaction
 from .worker import DetectionJob, run_detection
 
@@ -204,6 +204,7 @@ class CaptureSession:
         )
         # Per applied frame: source frame, timeline frame and part confidence.
         self.frame_confidence: list[dict] = []
+        self.face_summary = FaceSummary.for_request(request)
         self.timeline_frames: tuple[float, float] | None = None
         self.state = SessionState.PREPARED
         self.status = ""
@@ -708,6 +709,8 @@ class CaptureSession:
                 **part_confidence(frame),
             }
         )
+        if self.face_summary is not None:
+            self.face_summary.observe(frame)
         first = self.timeline_frames[0] if self.timeline_frames else timeline
         self.timeline_frames = (first, timeline)
 

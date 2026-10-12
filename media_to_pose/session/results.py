@@ -13,6 +13,7 @@ from typing import Any
 
 from ..core.fs import atomic_json
 from ..core.report import CaptureReport, frame_ranges
+from ..core.requests import FaceOutput
 from ..core.types import CanonicalFrame
 
 RESULT_SCHEMA_VERSION = 1
@@ -63,6 +64,59 @@ def part_confidence(frame: CanonicalFrame) -> dict[str, float]:
     }
 
 
+class FaceSummary:
+    """Per capture: the value each mapped expression was sent, and what had
+    no target.
+
+    Values are after the mapping's gain and clamp, from the detections; for
+    video, Face Expression Cleanup changes them further before they are
+    keyed, and ``evaluate`` measures what the rig shows.
+    """
+
+    def __init__(self, entries, face_output: FaceOutput):
+        self.entries = entries
+        self.face_output = FaceOutput(face_output)
+        self.frames = 0
+        self.peak: dict[str, float] = {}
+        self.total: dict[str, float] = {}
+        self.unmapped: set[str] = set()
+
+    @classmethod
+    def for_request(cls, request) -> FaceSummary | None:
+        if not request.use_face or request.provider_id != "MEDIAPIPE":
+            return None
+        return cls(request.mapping_entries, request.face_output)
+
+    def observe(self, frame: CanonicalFrame) -> None:
+        if not frame.blendshapes:
+            return
+        # Imported here: the solver needs Blender, this module does not.
+        from ..retarget.solve.face_values import mapped_expressions
+
+        self.frames += 1
+        applied, unmapped = mapped_expressions(
+            self.entries, dict(frame.blendshapes), self.face_output
+        )
+        for name, value in applied.items():
+            self.peak[name] = max(self.peak.get(name, value), value)
+            self.total[name] = self.total.get(name, 0.0) + value
+        self.unmapped.update(unmapped)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "output": str(self.face_output),
+            "frames_with_face": self.frames,
+            "expressions": {
+                name: {
+                    "peak": round(self.peak[name], 4),
+                    "mean": round(self.total[name] / self.frames, 4),
+                }
+                for name in sorted(self.peak)
+            },
+            "unmapped_expressions": sorted(self.unmapped),
+        }
+
+
 @dataclass
 class CaptureResult:
     """What a capture produced; see the module docstring for frame numbers."""
@@ -89,6 +143,7 @@ class CaptureResult:
     cleanup_steps: list[dict[str, Any]] = field(default_factory=list)
     mapping_issues: list[dict[str, Any]] = field(default_factory=list)
     face_output_warning: str = ""
+    face: dict[str, Any] = field(default_factory=dict)
     warnings: list[dict[str, str]] = field(default_factory=list)
     schema_version: int = RESULT_SCHEMA_VERSION
 
@@ -221,6 +276,7 @@ def build_capture_result(session, *, armature=None) -> CaptureResult:
         face_output_warning=next(
             (message for kind, message in session.notices if kind == "WARNING"), ""
         ),
+        face=session.face_summary.to_dict() if session.face_summary else {},
         warnings=[
             {"code": warning_code(message), "message": message}
             for message in outcome.warnings
@@ -231,6 +287,7 @@ def build_capture_result(session, *, armature=None) -> CaptureResult:
 __all__ = [
     "RESULT_SCHEMA_VERSION",
     "CaptureResult",
+    "FaceSummary",
     "build_capture_result",
     "cleanup_steps",
     "mapping_issues",
