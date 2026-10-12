@@ -12,8 +12,9 @@ from pathlib import Path
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "media_to_pose"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-SOURCE_PACKAGE_NAME = "media_to_pose_test"
+SOURCE_PACKAGE_NAME = "media_to_pose"
 INSTALLED_PACKAGE_NAME = "bl_ext.user_default.media_to_pose"
 PACKAGE_NAME = (
     INSTALLED_PACKAGE_NAME
@@ -36,14 +37,20 @@ def load_addon() -> ModuleType:
         return importlib.import_module(package_name)
     spec = importlib.util.spec_from_file_location(
         package_name,
-        ROOT / "__init__.py",
-        submodule_search_locations=[str(ROOT)],
+        SOURCE / "__init__.py",
+        submodule_search_locations=[str(SOURCE)],
     )
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to construct the Media to Pose test package")
     module = importlib.util.module_from_spec(spec)
     sys.modules[package_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        # Never leave a half-initialised package behind: later tests would
+        # see a module without register() instead of the real import error.
+        sys.modules.pop(package_name, None)
+        raise
     return module
 
 
@@ -82,3 +89,10 @@ def verify_fixture(fixture_id: str) -> Path:
     if digest != entry["sha256"]:
         raise AssertionError(f"Fixture {fixture_id} hash mismatch: {digest}")
     return path
+
+
+def scene_context():
+    """The explicit scene context retargeting needs, from the active context."""
+    import bpy
+
+    return load_addon().core.scene.SceneContext.from_context(bpy.context)

@@ -14,7 +14,7 @@ from tests.blender_test_support import load_addon
 class CameraMotionCorrectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.module = load_addon().camera_motion_correction
+        cls.module = load_addon().core.camera.motion_correction
 
     def _inputs(self, xs, *, times=None, depths=None):
         times = times or [index * 50 for index in range(len(xs))]

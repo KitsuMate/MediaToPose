@@ -12,7 +12,7 @@ from tests.blender_test_support import load_addon
 class SamSplitBundleContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.runtime = load_addon().sam3d_ort_runtime
+        cls.runtime = load_addon().backends.sam3d.ort_runtime
 
     @staticmethod
     def _record(path: Path) -> dict[str, object]:

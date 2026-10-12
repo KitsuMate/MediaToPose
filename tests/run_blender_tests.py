@@ -1,7 +1,12 @@
-"""Run the CI test suite once inside Blender."""
+"""Run the CI test suite once inside Blender.
+
+Pass ``-- --update-golden`` after the Blender arguments to rewrite the golden
+retarget snapshots instead of comparing against them.
+"""
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -14,26 +19,29 @@ from tests.blender_test_support import unregister_addon  # noqa: E402
 
 TEST_MODULES = (
     "tests.test_core_cache",
-    "tests.test_camera_calibration",
     "tests.test_mapping",
     "tests.test_postprocess",
     "tests.test_camera_motion_correction",
     "tests.test_rohm_backend",
-    "tests.test_rohm_ort_runtime",
-    "tests.test_rohm_correction",
-    "tests.test_grounded_cleanup",
     "tests.test_e2e_vroid",
+    "tests.test_golden_retarget",
     "tests.test_capture_operations",
+    "tests.test_capture_session",
+    "tests.test_api",
     "tests.test_registration",
+    "tests.test_settings_schema",
     "tests.test_anycalib_backend",
+    "tests.test_model_backends",
     "tests.test_sam3d_backend",
     "tests.test_sam3d_split_bundle",
-    "tests.test_sam3d_mhr_runtime",
     "tests.test_sam3d_vith_runtime",
 )
 
 
 def main() -> None:
+    arguments = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
+    if "--update-golden" in arguments:
+        os.environ["MTP_UPDATE_GOLDEN"] = "1"
     loader = unittest.defaultTestLoader
     suite = unittest.TestSuite()
     for module_name in TEST_MODULES:

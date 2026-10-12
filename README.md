@@ -86,14 +86,37 @@ MediaPipe face capture is experimental. You can select ARKit morphs, FACS
 morphs, or facial bones. The selected character must have matching shape keys,
 bones, or custom properties in **Rig Setup**.
 
+## Scripting and command line
+
+Everything in the sidebar also runs without UI, from Python inside Blender
+(including `blender -b` and AI agents using the Blender MCP server) and from
+the command line:
+
+```
+blender -b scene.blend -c media_to_pose capture --media clip.mp4 \
+    --armature Rig --parts body,hands --out result.json --save
+blender -b scene.blend -c media_to_pose evaluate --armature Rig \
+    --result result.json --json
+```
+
+Each capture returns a JSON result (frames, confidence, rejected and filled
+frames, clean-up statistics, warnings with codes). `evaluate` measures foot
+sliding, jitter, twist and root speed spikes. Clean-up settings can be
+changed and the capture re-applied from its retained detections in seconds.
+See [docs/agents.md](docs/agents.md) for the Python API, recipes and what
+each metric means.
+
 ## Development
 
 Pull requests run Ruff and the complete Blender test suite against an
 installed Linux release package. Weekly integration tests run real MediaPipe
 inference. SAM 3D GPU testing uses a protected runner.
 
-Release scripts are in `ci/`. Local files and downloaded models belong in
-`.workspace/`. Built release packages belong in `dist/`.
+The extension source is in `media_to_pose/`; `AGENTS.md` describes its
+layout, the layering rules and the checks to run before a commit. Release
+scripts are in `ci/` and the release steps in `docs/RELEASING.md`. Local
+files and downloaded models belong in `.workspace/`. Built release packages
+belong in `dist/`.
 
 ## License
 

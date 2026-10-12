@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import tempfile
@@ -12,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE_SCRIPT = Path(__file__).with_name("release_smoke_blender.py")
+RIG_FIXTURE = ROOT / "tests" / "fixtures" / "rigs" / "vroid_test.blend"
 
 
 def _run(command: list[str], environment: dict[str, str]) -> str:
@@ -44,6 +46,16 @@ def _assert_smoke_markers(output: str) -> None:
         raise AssertionError("Installed extension smoke marker is missing")
     if os.environ.get("MTP_ROHM_BUNDLE") and "MTP_ROHM_RUNTIME_OK=" not in output:
         raise AssertionError("Installed extension RoHM runtime marker is missing")
+
+
+def _assert_command_output(output: str) -> None:
+    """The installed package registered ``-c media_to_pose`` and it answered."""
+    lines = [line for line in output.splitlines() if line.startswith('{"armature"')]
+    if not lines:
+        raise AssertionError("media_to_pose command printed no rig description")
+    described = json.loads(lines[-1])
+    if not described["sections"]["BODY"]["mapped"]:
+        raise AssertionError("media_to_pose command mapped no body bones")
 
 
 def main() -> None:
@@ -125,6 +137,20 @@ def main() -> None:
             environment,
         )
         _assert_smoke_markers(smoke)
+        command = _run(
+            _blender_command(
+                blender,
+                str(RIG_FIXTURE),
+                "--command",
+                "media_to_pose",
+                "describe-rig",
+                "--armature",
+                "Armature",
+                "--json",
+            ),
+            environment,
+        )
+        _assert_command_output(command)
 
         removed = _run(
             _blender_command(

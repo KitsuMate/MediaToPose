@@ -8,17 +8,64 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I", "B", "SIM", "PERF", "N"]
+select = [
+  "E4", "E7", "E9", "F", "I", "B", "SIM", "PERF", "N",
+  "UP", "RET", "PIE", "PTH", "BLE", "TID252", "T20",
+]
 ignore = [
   # Blender's RNA registration convention intentionally uses these names.
   "N801",
+  # Deprecated upstream; isinstance tuples are faster than unions.
+  "UP038",
 ]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["N802", "N806"]
+# Release and integration scripts report to the CI log on stdout.
+"ci/**/*.py" = ["T20"]
 "**/__init__.py" = ["N999"]
+# The error names are part of the public API and read better without a suffix.
+"media_to_pose/core/errors.py" = ["N818"]
+# Blender loads the extension as bl_ext.<repository>.media_to_pose, so code
+# inside the package can only use relative imports. TID252 applies to tests/
+# and ci/, which import the package by its absolute name.
+"media_to_pose/**/*.py" = ["TID252"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
+
+[tool.pyright]
+# Basic mode on modules that already pass. Widen this list as modules are
+# moved into core/, providers/, postprocess/ and api/.
+typeCheckingMode = "basic"
+pythonVersion = "3.13"
+include = [
+  "media_to_pose/backends/lifecycle.py",
+  "media_to_pose/backends/rohm/runtime.py",
+  "media_to_pose/core/__init__.py",
+  "media_to_pose/core/cache",
+  "media_to_pose/core/camera/motion_correction.py",
+  "media_to_pose/core/constants.py",
+  "media_to_pose/core/coordinator.py",
+  "media_to_pose/core/dependencies.py",
+  "media_to_pose/core/errors.py",
+  "media_to_pose/core/fs.py",
+  "media_to_pose/core/log.py",
+  "media_to_pose/core/media_io.py",
+  "media_to_pose/core/motion/rohm_format.py",
+  "media_to_pose/core/paths.py",
+  "media_to_pose/core/report.py",
+  "media_to_pose/core/requests.py",
+  "media_to_pose/core/scene.py",
+  "media_to_pose/core/types.py",
+  "media_to_pose/providers/base.py",
+  "media_to_pose/session/results.py",
+]
+
+[tool.pytest.ini_options]
+# Plain unit tier: runs without Blender. The Blender suite is started with
+# tests/run_blender_tests.py.
+testpaths = ["tests/unit"]
+addopts = "--import-mode=importlib -p no:cacheprovider"

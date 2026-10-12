@@ -1,5 +1,5 @@
-/wheels/*.whl filter=lfs diff=lfs merge=lfs -text
-/assets/models/*.task filter=lfs diff=lfs merge=lfs -text
+/media_to_pose/wheels/*.whl filter=lfs diff=lfs merge=lfs -text
+/media_to_pose/assets/models/*.task filter=lfs diff=lfs merge=lfs -text
 /assets/branding/*.png filter=lfs diff=lfs merge=lfs -text
 /docs/media/*.png filter=lfs diff=lfs merge=lfs -text
 /docs/media/*.mp4 filter=lfs diff=lfs merge=lfs -text

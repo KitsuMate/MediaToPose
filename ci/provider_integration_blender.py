@@ -62,7 +62,7 @@ def _detect(addon, provider_name: str, image: Path, sam_device: str):
             **common,
         )
     else:
-        options = addon.sam3d_backend.runtime_paths()
+        options = addon.backends.sam3d.backend.runtime_paths()
         provider = addon.providers.SAM3DBodyProvider(
             variant="VITH",
             device=sam_device,
@@ -77,8 +77,8 @@ def _detect(addon, provider_name: str, image: Path, sam_device: str):
 
 
 def _spine_quality(addon, armature, frame):
-    entries = addon.mapping.mapping_by_id(armature.mtp_rig_config)
-    samples, inferred = addon.post_processing.CORRECTION_REGISTRY[
+    entries = addon.rig.mapping.mapping_by_id(armature.mtp_rig_config)
+    samples, inferred = addon.postprocess.CORRECTION_REGISTRY[
         "SPINE_CORRECTION"
     ]._source_curve(SimpleNamespace(frame=frame))
     channels = []
@@ -110,10 +110,10 @@ def _spine_quality(addon, armature, frame):
         start_fraction = cursor / total
         cursor += length
         end_fraction = cursor / total
-        source_segment = addon.post_processing._arc_point(
+        source_segment = addon.postprocess.base._arc_point(
             samples, end_fraction
-        ) - addon.post_processing._arc_point(samples, start_fraction)
-        intended = addon.retarget._to_target_direction(
+        ) - addon.postprocess.base._arc_point(samples, start_fraction)
+        intended = addon.retarget.solve.frames._to_target_direction(
             source_segment,
             source_basis,
             target_basis,
@@ -134,7 +134,7 @@ def _retarget_and_assert(addon, provider_name: str, frame) -> dict:
     if armature is None:
         raise AssertionError("VRoid fixture has no armature")
     armature.mtp_rig_config.mappings.clear()
-    addon.mapping.auto_map(armature, force_profile=True)
+    addon.rig.mapping.auto_map(armature, force_profile=True)
     addon.retarget.prepare_limb_ownership(armature)
     for bone in armature.pose.bones:
         bone.matrix_basis = Matrix.Identity(4)
@@ -149,6 +149,7 @@ def _retarget_and_assert(addon, provider_name: str, frame) -> dict:
         armature,
         frame,
         settings,
+        scene_context=addon.core.scene.SceneContext.from_context(bpy.context),
     )
     if changed_bones != 51 or changed_shapes != 0:
         raise AssertionError(
@@ -173,11 +174,13 @@ def _retarget_and_assert(addon, provider_name: str, frame) -> dict:
         raise AssertionError(
             f"SAM spine quality failed: tangent={tangents}, drift={drift}"
         )
-    head_errors = addon.retarget.normalized_head_position_errors(armature, frame)
+    head_errors = addon.retarget.diagnostics.normalized_head_position_errors(
+        armature, frame
+    )
     if not head_errors or max(head_errors.values()) >= 0.01:
         raise AssertionError(f"Head endpoint quality failed: {head_errors}")
-    entries = addon.mapping.mapping_by_id(armature.mtp_rig_config)
-    finger_errors = addon.retarget.finger_world_position_errors(
+    entries = addon.rig.mapping.mapping_by_id(armature.mtp_rig_config)
+    finger_errors = addon.retarget.diagnostics.finger_world_position_errors(
         armature,
         entries,
         frame,
@@ -204,7 +207,7 @@ def main() -> None:
     if not image.is_file():
         raise FileNotFoundError(image)
     addon = _installed_addon()
-    available, message = addon.dependency_bootstrap.ensure_bundled_dependencies()
+    available, message = addon.core.dependencies.ensure_bundled_dependencies()
     if not available:
         raise RuntimeError(message)
     frame = _detect(addon, arguments.provider, image, arguments.sam_device)
@@ -219,7 +222,7 @@ def main() -> None:
         raise AssertionError(f"Both hands were not detected: {sorted(frame.hands)}")
     report = _retarget_and_assert(addon, arguments.provider, frame)
     if arguments.provider == "sam3d":
-        diagnostics = addon.sam3d_backend.runtime_diagnostics(
+        diagnostics = addon.backends.sam3d.backend.runtime_diagnostics(
             "VITH",
             arguments.sam_device,
         )

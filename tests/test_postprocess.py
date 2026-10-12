@@ -8,7 +8,7 @@ from unittest import mock
 
 from mathutils import Matrix, Quaternion, Vector
 
-from tests.blender_test_support import load_addon
+from tests.blender_test_support import load_addon, scene_context
 
 
 class _Collection(list):
@@ -25,7 +25,7 @@ class PostProcessCompilationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
-        cls.post = cls.addon.post_processing
+        cls.post = cls.addon.postprocess
 
     def _config(self):
         modules = _Collection()
@@ -89,16 +89,16 @@ class PostProcessCompilationTests(unittest.TestCase):
             compiled.modules[0].values["strength"] = 0.0
 
     def test_required_cleanup_modules_and_optional_rohm_are_configured(self) -> None:
-        constants = importlib.import_module(f"{self.addon.__name__}.constants")
+        constants = importlib.import_module(f"{self.addon.__name__}.core.constants")
         identifiers = [item[0] for item in self.post.POST_PROCESSING_MODULES]
         self.assertEqual(constants.SCHEMA_VERSION, 18)
         self.assertIn("SPINE_CORRECTION", identifiers)
         self.assertNotIn("SPINE_RECONSTRUCTION", identifiers)
-        self.assertFalse(constants.POST_PROCESSING_DEFAULT_ENABLED["SPINE_CORRECTION"])
+        self.assertFalse(self.post.POST_PROCESSING_DEFAULT_ENABLED["SPINE_CORRECTION"])
         self.assertTrue(
-            constants.POST_PROCESSING_DEFAULT_ENABLED["CAMERA_MOTION_CORRECTION"]
+            self.post.POST_PROCESSING_DEFAULT_ENABLED["CAMERA_MOTION_CORRECTION"]
         )
-        self.assertFalse(constants.POST_PROCESSING_DEFAULT_ENABLED["ROHM_CORRECTION"])
+        self.assertFalse(self.post.POST_PROCESSING_DEFAULT_ENABLED["ROHM_CORRECTION"])
 
     def test_temporal_processor_is_sequence_only(self) -> None:
         config = self._config()
@@ -145,7 +145,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_detection_filter_caps_only_new_rejections_and_repairs_boundary(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         samples = []
         for frame_index in range(3):
@@ -212,7 +214,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_manual_source_frame_ranges_mask_requested_scope_outside_budget(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         frames = motion_filter.parse_source_frame_ranges("1, 3-5, 99", 6)
         self.assertEqual(frames, frozenset({0, 2, 3, 4}))
         self.assertEqual(
@@ -254,7 +258,8 @@ class PostProcessCompilationTests(unittest.TestCase):
                 timestamp_seconds=index / 30.0,
                 warning_sink=[],
                 rohm_confidence={
-                    semantic: 1.0 for semantic in retarget.motion_filter.SMPLX_SEMANTICS
+                    semantic: 1.0
+                    for semantic in load_addon().core.motion.motion_filter.SMPLX_SEMANTICS
                 },
                 rohm_root_confidence=value,
             )
@@ -268,23 +273,25 @@ class PostProcessCompilationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            retarget._rohm_requested_work(samples, settings, "AUTOMATIC"),
+            retarget.rohm._rohm_requested_work(samples, settings, "AUTOMATIC"),
             (False, True),
         )
         samples[1].rohm_root_confidence = 1.0
         self.assertEqual(
-            retarget._rohm_requested_work(samples, settings, "AUTOMATIC"),
+            retarget.rohm._rohm_requested_work(samples, settings, "AUTOMATIC"),
             (False, False),
         )
         samples[1].rohm_confidence["UPPER_ARM_L"] = 0.0
         settings.learned_pose_residual = True
         self.assertEqual(
-            retarget._rohm_requested_work(samples, settings, "OFF"),
+            retarget.rohm._rohm_requested_work(samples, settings, "OFF"),
             (True, False),
         )
 
     def test_detection_filter_rejects_confident_source_pose_collapse(self) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         stable = {
             "LEFT_SHOULDER": Vector((-0.3, 0.0, 1.4)),
@@ -356,7 +363,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_detection_filter_rejects_consecutive_confident_scale_collapse(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         stable = {
             "LEFT_SHOULDER": Vector((-0.3, 0.0, 1.4)),
@@ -420,7 +429,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_detection_filter_rejects_consecutive_confident_bad_geometry(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         stable = {
             "LEFT_SHOULDER": Vector((-0.3, 0.0, 1.4)),
@@ -484,7 +495,9 @@ class PostProcessCompilationTests(unittest.TestCase):
         self.assertTrue({4, 5}.issubset(stats.rejected_root_frames))
 
     def test_fallback_interpolates_consecutive_internal_body_gaps(self) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantic = "UPPER_ARM_L"
         samples = []
         for frame_index in range(5):
@@ -533,7 +546,7 @@ class PostProcessCompilationTests(unittest.TestCase):
             reject_unusable_frames=True,
             maximum_motion_rejected=30.0,
         )
-        stats = retarget.motion_filter.MotionFilterStats(
+        stats = load_addon().core.motion.motion_filter.MotionFilterStats(
             total_observations=22,
             native_missing_observations=0,
             rejected_observations=0,
@@ -548,7 +561,8 @@ class PostProcessCompilationTests(unittest.TestCase):
                 timestamp_seconds=index / 30.0,
                 warning_sink=[],
                 rohm_confidence={
-                    semantic: 1.0 for semantic in retarget.motion_filter.SMPLX_SEMANTICS
+                    semantic: 1.0
+                    for semantic in load_addon().core.motion.motion_filter.SMPLX_SEMANTICS
                 },
                 rohm_root_confidence=value,
             )
@@ -562,19 +576,21 @@ class PostProcessCompilationTests(unittest.TestCase):
         )
         with (
             mock.patch.object(
-                retarget.motion_filter,
+                load_addon().core.motion.motion_filter,
                 "filter_motion_observations",
                 return_value=stats,
             ),
             mock.patch.object(
-                retarget.motion_filter,
+                load_addon().core.motion.motion_filter,
                 "repair_body_gaps",
                 return_value=3,
             ) as repair_body,
-            mock.patch.object(retarget, "_repair_root_gaps_without_ai") as repair_root,
+            mock.patch.object(
+                retarget.detection_filter, "_repair_root_gaps_without_ai"
+            ) as repair_root,
         ):
             list(
-                retarget._iter_detection_filter(
+                retarget.detection_filter._iter_detection_filter(
                     samples,
                     settings,
                     rohm_settings=rohm_settings,
@@ -595,11 +611,11 @@ class PostProcessCompilationTests(unittest.TestCase):
                 }
             )
         ]
-        self.assertFalse(retarget._has_groundable_body_channels(face_only))
+        self.assertFalse(retarget.grounding._has_groundable_body_channels(face_only))
         body = [
             SimpleNamespace(bones={"leg": SimpleNamespace(semantic_id="LOWER_LEG_L")})
         ]
-        self.assertTrue(retarget._has_groundable_body_channels(body))
+        self.assertTrue(retarget.grounding._has_groundable_body_channels(body))
 
     def test_low_confidence_palm_roll_is_weighted_not_disabled(self) -> None:
         forearm = SimpleNamespace(
@@ -640,11 +656,13 @@ class PostProcessCompilationTests(unittest.TestCase):
             forearm_twist_limit=math.pi,
         )
 
-        observation = self.post.ArmAxisCorrection()._palm_forearm_twist(
-            pose,
-            "L",
-            settings,
-            self.post.PostProcessingSession(),
+        observation = (
+            self.post.modules.limb_axis.ArmAxisCorrection()._palm_forearm_twist(
+                pose,
+                "L",
+                settings,
+                self.post.PostProcessingSession(),
+            )
         )
 
         self.assertIsNotNone(observation)
@@ -694,7 +712,7 @@ class PostProcessCompilationTests(unittest.TestCase):
             palm_roll_strength=1.0,
             forearm_twist_limit=math.radians(90.0),
         )
-        processor = self.post.ArmAxisCorrection()
+        processor = self.post.modules.limb_axis.ArmAxisCorrection()
         session = self.post.PostProcessingSession()
         session.prepare_frame(0)
         before = processor._palm_forearm_twist(pose_at(-170.0), "L", settings, session)
@@ -720,7 +738,7 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_generated_ik_controls_inherit_limb_confidence(self) -> None:
         retarget = self.addon.retarget
         target, pole, bend, toe = object(), object(), object(), object()
-        confidences = retarget._ik_bone_confidences(
+        confidences = retarget.capture._ik_bone_confidences(
             [
                 {
                     "target": target,
@@ -747,7 +765,7 @@ class PostProcessCompilationTests(unittest.TestCase):
         class Solver:
             instances = []
 
-            def __init__(self):
+            def __init__(self, _update):
                 self.events = []
                 self.instances.append(self)
 
@@ -782,14 +800,16 @@ class PostProcessCompilationTests(unittest.TestCase):
         }
 
         with (
-            mock.patch.object(retarget, "PoseTranslationSolver", Solver),
+            mock.patch.object(retarget.solve.ik, "PoseTranslationSolver", Solver),
             mock.patch.object(
-                retarget,
+                retarget.solve.ik,
                 "evaluated_semantic_bone",
                 side_effect=lambda _armature, _entries, role: outputs[role],
             ),
         ):
-            retarget._commit_ik_output([proposal])
+            retarget.solve.ik._commit_ik_output(
+                [proposal], scene_context=scene_context()
+            )
 
         events = Solver.instances[0].events
         invalidation = events.index(("invalidate", pole.name))
@@ -830,169 +850,7 @@ class AnimationCleanupTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
-        cls.cleanup = cls.addon.animation_cleanup
-
-    def test_isolated_scalar_and_vector_spikes_are_rejected(self) -> None:
-        noisy = [0.0, 1.0, 2.0, 20.0, 4.0, 5.0, 6.0]
-        times = [float(index) for index in range(len(noisy))]
-        cleaned, _count = self.cleanup.reduce_scalar_outliers(noisy, times)
-        cleaned = self.cleanup.smooth_scalars(cleaned, times, None, 1.0)
-        self.assertLessEqual(abs(cleaned[3] - 3.0), abs(noisy[3] - 3.0) * 0.2)
-        self.assertLess(abs(cleaned[0] - noisy[0]), 1.0)
-        vectors = [Vector((value, value * 0.5, 0.0)) for value in noisy]
-        cleaned_vectors, _count = self.cleanup.reduce_vector_outliers(vectors, times)
-        cleaned_vectors = self.cleanup.smooth_vectors(cleaned_vectors, times, None, 1.0)
-        self.assertLessEqual(
-            abs(cleaned_vectors[3].x - 3.0),
-            abs(vectors[3].x - 3.0) * 0.2,
-        )
-
-    def test_quaternion_cleanup_keeps_short_continuous_hemisphere(self) -> None:
-        crossing = [
-            Quaternion((0.0, 0.0, 1.0), math.radians(degrees))
-            for degrees in (170.0, 179.0, -179.0, -170.0)
-        ]
-        times = [float(index) for index in range(len(crossing))]
-        cleaned = self.cleanup.smooth_quaternions(crossing, times, None, 0.7)
-        for first, second in zip(cleaned, cleaned[1:], strict=False):
-            self.assertGreaterEqual(first.dot(second), 0.0)
-            self.assertLess(
-                first.rotation_difference(second).angle,
-                math.radians(25.0),
-            )
-
-    def test_isolated_half_turn_is_removed(self) -> None:
-        samples = [
-            Quaternion(),
-            Quaternion((0.0, 1.0, 0.0), math.radians(3.0)),
-            Quaternion((0.0, 1.0, 0.0), math.radians(180.0)),
-            Quaternion((0.0, 1.0, 0.0), math.radians(5.0)),
-            Quaternion((0.0, 1.0, 0.0), math.radians(7.0)),
-        ]
-        times = [float(index) for index in range(len(samples))]
-        cleaned, _count = self.cleanup.reduce_quaternion_outliers(samples, times)
-        cleaned = self.cleanup.smooth_quaternions(cleaned, times, None, 1.0)
-        self.assertLess(cleaned[2].angle, math.radians(20.0))
-
-    def test_short_hand_rotation_burst_is_bridged(self) -> None:
-        values = [
-            Quaternion((0.0, 1.0, 0.0), math.radians(degrees))
-            for degrees in (0.0, 4.0, 82.0, -70.0, 7.0, 10.0)
-        ]
-        times = [index / 24.0 for index in range(len(values))]
-        cleaned, count = self.cleanup.reduce_short_quaternion_bursts(
-            values,
-            times,
-            minimum_excursion=math.radians(30.0),
-        )
-        self.assertGreaterEqual(count, 2)
-        self.assertLess(
-            max(
-                math.degrees(left.rotation_difference(right).angle)
-                for left, right in zip(cleaned, cleaned[1:], strict=False)
-            ),
-            20.0,
-        )
-
-    def test_sustained_fast_hand_turn_is_preserved(self) -> None:
-        values = [
-            Quaternion((0.0, 1.0, 0.0), math.radians(degrees))
-            for degrees in (0.0, 25.0, 55.0, 90.0, 125.0, 155.0)
-        ]
-        times = [index / 24.0 for index in range(len(values))]
-        cleaned, count = self.cleanup.reduce_short_quaternion_bursts(
-            values,
-            times,
-            minimum_excursion=math.radians(30.0),
-        )
-        self.assertEqual(count, 0)
-        self.assertLess(
-            cleaned[-1].rotation_difference(values[-1]).angle,
-            1.0e-6,
-        )
-
-    def test_distal_finger_speed_is_bounded(self) -> None:
-        values = [
-            Quaternion((0.0, 1.0, 0.0), math.radians(degrees))
-            for degrees in (0.0, 8.0, 130.0, 142.0)
-        ]
-        times = [index / 24.0 for index in range(len(values))]
-        cleaned, count = self.cleanup.limit_quaternion_speed(
-            values,
-            times,
-            math.radians(1200.0),
-        )
-        self.assertGreaterEqual(count, 1)
-        self.assertLessEqual(
-            max(
-                math.degrees(left.rotation_difference(right).angle)
-                for left, right in zip(cleaned, cleaned[1:], strict=False)
-            ),
-            50.0001,
-        )
-
-    def test_time_aware_smoothing_preserves_linear_motion(self) -> None:
-        times = [0.0, 0.03, 0.08, 0.12, 0.20, 0.27]
-        values = [2.0 * value + 1.0 for value in times]
-        cleaned = self.cleanup.smooth_scalars(values, times, None, 1.0)
-        for expected, actual in zip(values, cleaned, strict=True):
-            self.assertAlmostEqual(expected, actual, places=5)
-
-    def test_vector_outlier_uses_vector_residual(self) -> None:
-        times = [index / 30.0 for index in range(7)]
-        values = [Vector((float(index), 0.0, 0.0)) for index in range(7)]
-        values[3] = Vector((3.0, 20.0, 0.0))
-        cleaned, count = self.cleanup.reduce_vector_outliers(values, times)
-        self.assertEqual(count, 1)
-        self.assertLess(cleaned[3].y, 1.0)
-
-    def test_default_smoothing_halves_stationary_jitter_without_phase_shift(
-        self,
-    ) -> None:
-        times = [index / 30.0 for index in range(61)]
-        values = [0.1 if index % 2 else -0.1 for index in range(61)]
-        cleaned = self.cleanup.smooth_scalars(values, times, None, 0.5)
-        before = math.sqrt(sum(value * value for value in values) / len(values))
-        after = math.sqrt(sum(value * value for value in cleaned) / len(cleaned))
-        self.assertLessEqual(after, before * 0.5)
-
-        event = [0.0] * 21
-        for offset, value in enumerate((0.2, 0.65, 1.0, 0.65, 0.2)):
-            event[8 + offset] = value
-        event_times = [index / 30.0 for index in range(len(event))]
-        stabilized = self.cleanup.smooth_scalars(event, event_times, None, 0.5)
-        self.assertEqual(stabilized.index(max(stabilized)), 10)
-        self.assertGreaterEqual(max(stabilized), 0.9)
-
-    def test_quaternion_smoothing_stays_normalized(self) -> None:
-        times = [index / 30.0 for index in range(12)]
-        values = [
-            Quaternion((0.2, 0.8, 0.1), math.radians(index * 7.0))
-            for index in range(12)
-        ]
-        cleaned = self.cleanup.smooth_quaternions(values, times, None, 0.7)
-        for value in cleaned:
-            self.assertAlmostEqual(value.magnitude, 1.0, places=6)
-
-    def test_bounded_quaternion_smoothing_does_not_overshoot_axis_range(self) -> None:
-        times = [index / 24.0 for index in range(7)]
-        values = [
-            Quaternion((0.0, 0.0, 1.0), math.radians(degrees))
-            for degrees in (0.0, 5.0, 20.0, 45.0, 70.0, 85.0, 90.0)
-        ]
-
-        cleaned = self.cleanup.smooth_quaternions_bounded(
-            values,
-            times,
-            None,
-            1.0,
-        )
-
-        for value in cleaned:
-            angle = math.degrees(value.to_euler("XYZ").z)
-            self.assertGreaterEqual(angle, -1.0e-5)
-            self.assertLessEqual(angle, 90.0 + 1.0e-5)
-            self.assertAlmostEqual(value.magnitude, 1.0, places=6)
+        cls.cleanup = cls.addon.core.motion.animation_cleanup
 
     def test_anatomical_finger_hinge_allows_only_small_hyperextension(self) -> None:
         rest = Vector((1.0, 0.0, 0.0))
@@ -1006,7 +864,7 @@ class AnimationCleanupTests(unittest.TestCase):
         )
 
         result, constrained = (
-            self.addon.retarget._bounded_parent_relative_direction_delta(
+            self.addon.retarget.solve.common._bounded_parent_relative_direction_delta(
                 rest,
                 backward,
                 Quaternion(),
@@ -1021,86 +879,11 @@ class AnimationCleanupTests(unittest.TestCase):
         self.assertTrue(constrained)
         self.assertAlmostEqual(flexion, -15.0, places=4)
 
-    def test_hand_stabilizer_holds_sustained_detector_burst(self) -> None:
-        times = [index / 25.0 for index in range(24)]
-        angles = [0.0] * 5 + [82.0] * 13 + [0.0] * 6
-        values = [Quaternion((0.0, 0.0, 1.0), math.radians(angle)) for angle in angles]
-
-        cleaned, held = self.cleanup.stabilize_quaternion_jumps(
-            values,
-            times,
-            math.radians(600.0),
-            reacquire_seconds=0.8,
-        )
-
-        self.assertEqual(held, 13)
-        self.assertLess(
-            max(value.rotation_difference(values[0]).angle for value in cleaned),
-            math.radians(0.01),
-        )
-
-    def test_hand_stabilizer_reacquires_a_persistent_new_pose_boundedly(self) -> None:
-        times = [index / 25.0 for index in range(32)]
-        values = [Quaternion() for _index in range(3)] + [
-            Quaternion((0.0, 0.0, 1.0), math.radians(90.0)) for _index in range(29)
-        ]
-
-        cleaned, held = self.cleanup.stabilize_quaternion_jumps(
-            values,
-            times,
-            math.radians(600.0),
-            reacquire_seconds=0.8,
-        )
-
-        self.assertGreaterEqual(held, 20)
-        self.assertLess(cleaned[20].rotation_difference(values[0]).angle, 1.0e-6)
-        self.assertLess(
-            cleaned[-1].rotation_difference(values[-1]).angle,
-            math.radians(0.01),
-        )
-        self.assertLessEqual(
-            max(
-                cleaned[index - 1].rotation_difference(cleaned[index]).angle
-                for index in range(1, len(cleaned))
-            ),
-            math.radians(24.0) + 1.0e-6,
-        )
-
-    def test_weak_wrist_interval_holds_then_eases_without_default_pose(self) -> None:
-        times = [index * 0.1 for index in range(8)]
-        values = [
-            Quaternion((0.0, 1.0, 0.0), math.radians(degrees))
-            for degrees in (10.0, 100.0, -80.0, 120.0, -110.0, 90.0, -70.0, 40.0)
-        ]
-        confidences = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-        bridged = self.cleanup.bridge_low_confidence_quaternions(
-            values, times, confidences
-        )
-        self.assertLess(
-            bridged[3].rotation_difference(values[0]).angle,
-            math.radians(0.1),
-        )
-        self.assertGreater(math.degrees(bridged[6].angle), 12.0)
-        self.assertLess(math.degrees(bridged[6].angle), 40.0)
-        for first, second in zip(bridged, bridged[1:], strict=False):
-            self.assertGreaterEqual(first.dot(second), 0.0)
-
-    def test_weak_ik_location_interval_uses_neighboring_motion(self) -> None:
-        times = [index / 30.0 for index in range(7)]
-        values = [Vector((float(index), 0.0, 0.0)) for index in range(7)]
-        values[2].y = 20.0
-        values[3].y = -20.0
-        values[4].y = 15.0
-        confidences = [1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0]
-        bridged = self.cleanup.bridge_low_confidence_vectors(values, times, confidences)
-        for index in (2, 3, 4):
-            self.assertAlmostEqual(bridged[index].y, 0.0, places=6)
-
     def test_finger_dropout_up_to_half_second_is_interpolated(self) -> None:
         retarget = load_addon().retarget
         timestamps = [index / 30.0 for index in range(8)]
         samples = [
-            retarget._BakedFrameSample(
+            retarget.samples._BakedFrameSample(
                 destination=float(index),
                 warning_sink=[],
                 timestamp_seconds=timestamp,
@@ -1109,7 +892,7 @@ class AnimationCleanupTests(unittest.TestCase):
         ]
         bone = object()
         for index, degrees in ((0, 0.0), (7, 35.0)):
-            samples[index].bones["finger"] = retarget._BakedBoneSample(
+            samples[index].bones["finger"] = retarget.samples._BakedBoneSample(
                 bone=bone,
                 location=Vector(),
                 rotation=Quaternion((0.0, 1.0, 0.0), math.radians(degrees)),
@@ -1119,7 +902,7 @@ class AnimationCleanupTests(unittest.TestCase):
                 confidence=0.9,
             )
 
-        retarget._fill_short_bone_gaps(samples, timestamps)
+        retarget.temporal._fill_short_bone_gaps(samples, timestamps)
 
         self.assertTrue(all("finger" in sample.bones for sample in samples))
         self.assertAlmostEqual(
@@ -1132,11 +915,11 @@ class AnimationCleanupTests(unittest.TestCase):
         retarget = load_addon().retarget
         timestamps = [0.0, 1.0 / 30.0, 2.0 / 30.0, 1.0, 1.0 + 1.0 / 30.0]
         self.assertEqual(
-            retarget._continuous_runs(list(range(5)), timestamps),
+            retarget.samples._continuous_runs(list(range(5)), timestamps),
             [[0, 1, 2], [3, 4]],
         )
         self.assertEqual(
-            retarget._continuous_runs([0, 1, 3, 4], timestamps),
+            retarget.samples._continuous_runs([0, 1, 3, 4], timestamps),
             [[0, 1], [3, 4]],
         )
 

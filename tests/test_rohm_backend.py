@@ -14,7 +14,7 @@ class RohmBackendTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         load_addon()
-        cls.backend = importlib.import_module(f"{PACKAGE_NAME}.rohm_backend")
+        cls.backend = importlib.import_module(f"{PACKAGE_NAME}.backends.rohm.backend")
 
     def tearDown(self) -> None:
         self.backend.unload_model()
@@ -79,8 +79,7 @@ class RohmBackendTests(unittest.TestCase):
             upstream_revision="57ba22cde1595285276ddb88c8c82b25bf0d9722",
         )
         session = SimpleNamespace(diagnostics=diagnostic)
-        with self.backend._STATE_LOCK:
-            self.backend._SESSION = session
+        self.backend.BACKEND.set_session(session)
         snapshot = self.backend.backend_snapshot("AUTO")
         self.assertEqual(snapshot.actual_ep, "WebGpuExecutionProvider")
         self.assertEqual(snapshot.precision, "fp32")

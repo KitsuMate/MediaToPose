@@ -13,15 +13,15 @@ import numpy as np
 from tests.blender_test_support import PACKAGE_NAME, load_addon
 
 load_addon()
-ort_runtime = importlib.import_module(f"{PACKAGE_NAME}.sam3d_ort_runtime")
-vith_runtime = importlib.import_module(f"{PACKAGE_NAME}.sam3d_vith_runtime")
+ort_runtime = importlib.import_module(f"{PACKAGE_NAME}.backends.sam3d.ort_runtime")
+vith_runtime = importlib.import_module(f"{PACKAGE_NAME}.backends.sam3d.vith")
 RuntimeDiagnostics = ort_runtime.RuntimeDiagnostics
 load_estimator = ort_runtime.load_estimator
 CropBatch = vith_runtime.CropBatch
 GraphExecutionError = vith_runtime.GraphExecutionError
 GraphSessions = vith_runtime.GraphSessions
 VithEstimator = vith_runtime.VithEstimator
-_fused_local_wrist = vith_runtime._fused_local_wrist
+_fused_local_wrist = vith_runtime.mhr_params._fused_local_wrist
 fix_wrist_euler = vith_runtime.fix_wrist_euler
 full_to_crop = vith_runtime.full_to_crop
 hand_boxes_from_tokens = vith_runtime.hand_boxes_from_tokens
@@ -60,7 +60,7 @@ class VithGeometryTests(unittest.TestCase):
             ),
         )
         with patch.object(
-            vith_runtime.importlib, "import_module", return_value=fake_cv2
+            vith_runtime.crops.importlib, "import_module", return_value=fake_cv2
         ):
             batch = prepare_crop_batch(
                 image,
