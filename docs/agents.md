@@ -172,8 +172,11 @@ gaze) has an input and an output range, editable in Rig Setup and through
   custom property's value, or degrees of gaze for the eyes.
 
 Defaults: shape keys 0 to 1 in and out; gaze 18 degrees; face bones a share
-of the eye distance for moving controls (the jaw opens 0.55 eye distances,
-lids close 0.34) or 25 degrees for rotating ones. `describe_rig` lists each
+of the eye distance for moving controls (the jaw opens 0.93 eye distances,
+lids close 0.34) or 25 degrees for rotating ones. Bone lids treat a
+detected blink of 0.75 as fully closed (`input_full` 0.75): with shape
+keys, squint and look-down keys close the eye further than the blink
+alone, and a bone lid has only the one control. `describe_rig` lists each
 control's `ranges`. In Rig Setup, **Set from Pose** takes the current pose
 of a face bone (or the current shape key value) as `output_full`;
 **Reset Ranges** restores the defaults. Mapping presets from 0.2.0 (gain,
@@ -205,7 +208,7 @@ face channels alone.
 
 | Symptom | Look at | Change |
 | --- | --- | --- |
-| Eyes do not close | `blink_recall`, the blink bars | Keep `preserve_blinks` on, lower `face_smoothing`; lower the blink mapping's `input_full` (e.g. 0.8: the detector rarely reports a full blink); for bones raise `output_full` of `FACE_LID_*` or pose the closed lid and use Set from Pose |
+| Eyes do not close | `blink_recall`, the blink bars | Keep `preserve_blinks` on, lower `face_smoothing`; lower the blink mapping's `input_full` (e.g. 0.8: the detector rarely reports a full blink); for bones (`FACE_LID_*`, closed from 0.75 by default) lower `input_full` further, or pose the closed lid and use Set from Pose |
 | Mouth or brows too weak | `expression_fit`, bar lengths | Lower that mapping's `input_full` or raise its `output_full` (above 1 needs the shape key's `slider_max`) |
 | Face twitches | `face_jitter` | Raise `face_smoothing` or `face_deadzone` |
 | Relaxed face looks surprised (raised brows) | the neutral frames' bars | Video: keep `neutral_calibration` on; stills: raise the brow mappings' `input_zero` (e.g. 0.4) |

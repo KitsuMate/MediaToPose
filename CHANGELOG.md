@@ -24,7 +24,9 @@ checked with numbers and face close-ups.
 - `api.fit_face_controls` / `fit-face`: fit face bone ranges to the rig's
   own ARKit keys by least squares over the mesh vertices. The Auto-Rig Pro
   defaults come from this fit (brows and mouth corners move less, the jaw
-  opens further, the negative sides are separate).
+  opens further, the negative sides are separate). Bone lids close fully
+  from a detected blink of 0.75, fitted on the face stills so they close as
+  far as the ARKit lids do.
 - Capture results carry a `face` block: the value sent to each mapped
   expression and the detected expressions with no target.
 - Face metrics in `evaluate`: `expression_fit`, `blink_recall`,

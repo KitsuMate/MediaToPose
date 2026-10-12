@@ -189,8 +189,9 @@ class FaceTransferTests(unittest.TestCase):
 
     def test_bone_lids_follow_the_gaze(self) -> None:
         scale = self.addon.rig.face_space.face_frame(self.rig, self.entries).scale
-        follow = self.face.LID_FOLLOW_GAZE
-        # Lids close 0.34 eye distances and open (the negative side) 0.107.
+        # The follow share goes through the lid's input range (full at 0.75);
+        # lids close 0.34 eye distances and open (the negative side) 0.107.
+        follow = self.face.LID_FOLLOW_GAZE / 0.75
         lower, lift = follow * 0.34 * scale, follow * 0.107 * scale
         self._apply({"eyeLookDownLeft": 1.0}, "BONES")
         down = self._world_offset("c_eyelid_top.l").z
@@ -233,6 +234,12 @@ class FaceTransferTests(unittest.TestCase):
     def test_bone_output_range_is_in_metres(self) -> None:
         entry = self._entry("FACE_LID_L")
         self.assertEqual(entry.ranges_version, 1)
+        # Bone lids close fully from a detected blink of 0.75.
+        self.assertAlmostEqual(entry.input_full, 0.75)
+        morph = self.addon.rig.mapping.mapping_by_id(self.rig.mtp_rig_config)[
+            "ARKIT_eyeBlinkLeft"
+        ]
+        self.assertAlmostEqual(morph.input_full, 1.0)
         entry.output_full = 0.012
         self._apply({"eyeBlinkLeft": 1.0}, "BONES")
         self.assertAlmostEqual(

@@ -35,6 +35,12 @@ FACE_CONTROL_TRAVEL = {
     "FACE_LIP_TOP": (0.05, -0.05),
     "FACE_LIP_BOTTOM": (0.05, -0.05),
 }
+# Detected value treated as full, where it is not 1. Bone lids close fully
+# from 0.75: in ARKit mode the squint and look-down keys add to the blink,
+# so the keys close the eye further than the blink alone. Fitted on the 12
+# usable face stills against the FaceFX ARKit lids (upper-lid edge height,
+# least squares over both eyes): the error drops from 2.1 mm to 0.9 mm.
+FACE_CONTROL_INPUT_FULL = {"FACE_LID_L": 0.75, "FACE_LID_R": 0.75}
 DEFAULT_FACE_CONTROL_TRAVEL = 0.12
 FACE_ROTATION_DEGREES = 25.0
 GAZE_DEGREES = 18.0
@@ -78,9 +84,12 @@ def _outputs(armature, entries, entry) -> tuple[float, float]:
 
 def default_ranges(armature, entries, entry) -> dict[str, float]:
     full, negative = _outputs(armature, entries, entry)
+    bone = entry.section == "FACE_RIG"
     return {
         "input_zero": 0.0,
-        "input_full": 1.0,
+        "input_full": FACE_CONTROL_INPUT_FULL.get(entry.semantic_id, 1.0)
+        if bone
+        else 1.0,
         "output_zero": 0.0,
         "output_full": full,
         "output_negative": negative,
@@ -125,6 +134,7 @@ def migrate_ranges(armature, entries, entry) -> None:
 
 __all__ = [
     "DEFAULT_FACE_CONTROL_TRAVEL",
+    "FACE_CONTROL_INPUT_FULL",
     "FACE_CONTROL_TRAVEL",
     "FACE_ROTATION_DEGREES",
     "GAZE_DEGREES",
