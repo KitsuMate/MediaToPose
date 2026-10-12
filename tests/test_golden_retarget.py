@@ -20,7 +20,12 @@ from types import SimpleNamespace
 import bpy
 from mathutils import Matrix, Quaternion
 
-from tests.blender_test_support import FIXTURES, fixture_path, register_addon
+from tests.blender_test_support import (
+    FIXTURES,
+    fixture_path,
+    register_addon,
+    scene_context,
+)
 
 GOLDEN = FIXTURES / "golden"
 SCHEMA_VERSION = 1
@@ -185,7 +190,9 @@ class GoldenRetargetTests(unittest.TestCase):
     def _still(self, fixture_id: str, name: str) -> None:
         frame, settings = self._recorded(fixture_id)
         self.addon.retarget.prepare_limb_ownership(self.armature)
-        self.addon.retarget.apply_frame(self.armature, frame, settings)
+        self.addon.retarget.apply_frame(
+            self.armature, frame, settings, scene_context=scene_context()
+        )
         self._check(name, self._pose_snapshot())
 
     def _sequence(self, name: str, *, root_motion_mode: str, all_cleanup: bool):
@@ -228,6 +235,7 @@ class GoldenRetargetTests(unittest.TestCase):
                 iter(_synthetic_sequence(source)),
                 settings,
                 1.0,
+                scene_context=scene_context(),
             )
             snapshot = self._action_snapshot(staging, result)
         finally:

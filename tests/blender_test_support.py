@@ -83,3 +83,10 @@ def verify_fixture(fixture_id: str) -> Path:
     if digest != entry["sha256"]:
         raise AssertionError(f"Fixture {fixture_id} hash mismatch: {digest}")
     return path
+
+
+def scene_context():
+    """The explicit scene context retargeting needs, from the active context."""
+    import bpy
+
+    return load_addon().core.scene.SceneContext.from_context(bpy.context)

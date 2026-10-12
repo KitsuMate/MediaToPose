@@ -149,6 +149,7 @@ def _retarget_and_assert(addon, provider_name: str, frame) -> dict:
         armature,
         frame,
         settings,
+        scene_context=addon.core.scene.SceneContext.from_context(bpy.context),
     )
     if changed_bones != 51 or changed_shapes != 0:
         raise AssertionError(

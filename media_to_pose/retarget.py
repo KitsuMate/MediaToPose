@@ -27,6 +27,7 @@ from .constants import (
 )
 from .core.cache.stream import FrameSpool
 from .core.errors import BackendError, InvalidRequest, MediaError
+from .core.scene import SceneContext
 from .models import CanonicalFrame, Landmark
 from .pose_translation_solver import PoseTranslationSolver
 from .post_processing import (
@@ -2910,25 +2911,28 @@ def _set_pose_translation_preserve_basis_rotation(
     *,
     attempts: int = 3,
     solver: PoseTranslationSolver | None = None,
+    scene_context: SceneContext,
 ) -> None:
     """Place a control in evaluated pose space while preserving rotation."""
-    (solver or PoseTranslationSolver()).solve(
+    (solver or PoseTranslationSolver(scene_context.update)).solve(
         bone,
         target_translation,
         attempts=attempts,
     )
 
 
-def _commit_ik_output(proposals: list[dict]) -> set[object]:
+def _commit_ik_output(
+    proposals: list[dict], *, scene_context: SceneContext
+) -> set[object]:
     changed = set()
-    translation_solver = PoseTranslationSolver()
+    translation_solver = PoseTranslationSolver(scene_context.update)
     for proposal in proposals:
         target = proposal["target"]
         if proposal.get("orientation_only"):
             oriented = proposal["target_matrix"].copy()
             oriented.translation = target.matrix.translation
             target.matrix = oriented
-            bpy.context.view_layer.update()
+            scene_context.update()
             changed.add(target)
             continue
         rotation_bend = proposal.get("rotation_bend")
@@ -2965,13 +2969,14 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
         position_matrix = target.matrix.copy()
         position_matrix.translation = proposal["target_matrix"].translation
         target.matrix = position_matrix
-        bpy.context.view_layer.update()
+        scene_context.update()
         pole = proposal["pole"]
         if rotation_bend is None:
             _set_pose_translation_preserve_basis_rotation(
                 pole,
                 proposal["pole_location"],
                 solver=translation_solver,
+                scene_context=scene_context,
             )
         lower = evaluated_semantic_bone(
             proposal["armature"],
@@ -2994,7 +2999,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                 corrected = target.matrix.copy()
                 corrected.translation += error
                 target.matrix = corrected
-                bpy.context.view_layer.update()
+                scene_context.update()
             if root and rotation_bend is not None:
                 # With pole_vector disabled, Rigify exposes only local Y on
                 # upper_arm_ik/thigh_ik.  That channel is the roll of the bend
@@ -3006,7 +3011,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                         corrected = target.matrix.copy()
                         corrected.translation += end_error
                         target.matrix = corrected
-                        bpy.context.view_layer.update()
+                        scene_context.update()
                     axis = proposal["desired_end"] - root.head
                     if axis.length < 1.0e-8:
                         break
@@ -3032,7 +3037,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                         rotation = rotation_bend.rotation_euler.copy()
                         rotation.y += angle
                         rotation_bend.rotation_euler = rotation
-                        bpy.context.view_layer.update()
+                        scene_context.update()
             if root and rotation_bend is None:
                 # Alternate absolute effector and pole placement using only
                 # detected/rest geometry. Rotating the current pole offset
@@ -3053,6 +3058,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                         pole,
                         pole_location,
                         solver=translation_solver,
+                        scene_context=scene_context,
                     )
                     error = proposal["desired_end"] - end_output.head
                     if error.length < 1.0e-5:
@@ -3060,14 +3066,14 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                     corrected = target.matrix.copy()
                     corrected.translation += error
                     target.matrix = corrected
-                    bpy.context.view_layer.update()
+                    scene_context.update()
             # Apply the available virtual hand/foot orientation only
             # after positional IK has converged, then repair any target-pivot
             # offset introduced by that orientation (common on foot rigs).
             oriented = proposal["target_matrix"].copy()
             oriented.translation = target.matrix.translation
             target.matrix = oriented
-            bpy.context.view_layer.update()
+            scene_context.update()
             # Auto-Rig Pro parents each pole to its IK effector. Rotating the
             # effector changes the pole constraint's local-to-world Jacobian.
             # Reusing the inverse built before that rotation can move the pole
@@ -3081,7 +3087,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                 corrected = target.matrix.copy()
                 corrected.translation += error
                 target.matrix = corrected
-                bpy.context.view_layer.update()
+                scene_context.update()
             if root and rotation_bend is None:
                 # Target orientation can shift controls whose pivot is not at
                 # the deform joint. Restore the same absolute bend plane once
@@ -3097,6 +3103,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                     pole,
                     pole_location,
                     solver=translation_solver,
+                    scene_context=scene_context,
                 )
                 for _attempt in range(2):
                     error = proposal["desired_end"] - end_output.head
@@ -3105,7 +3112,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
                     corrected = target.matrix.copy()
                     corrected.translation += error
                     target.matrix = corrected
-                    bpy.context.view_layer.update()
+                    scene_context.update()
         changed.add(target)
         if rotation_bend is None:
             changed.add(pole)
@@ -3114,7 +3121,7 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
         toe = proposal.get("toe")
         if toe is not None:
             toe.matrix = proposal["toe_matrix"]
-            bpy.context.view_layer.update()
+            scene_context.update()
             changed.add(toe)
     return changed
 
@@ -3122,6 +3129,8 @@ def _commit_ik_output(proposals: list[dict]) -> set[object]:
 def _iter_commit_target_pose(
     target_pose: TargetPose,
     ik_proposals: list[dict],
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[tuple[str, int, int]]:
     """Commit FK/body and IK channels as one cooperative transaction.
 
@@ -3168,7 +3177,7 @@ def _iter_commit_target_pose(
                 if name not in finger_channels
             }
             target_pose.invalidate()
-        pose_commit = target_pose.iter_commit()
+        pose_commit = target_pose.iter_commit(scene_context.update)
         while True:
             try:
                 current, total = next(pose_commit)
@@ -3177,14 +3186,16 @@ def _iter_commit_target_pose(
                 break
             yield "Rig channels", int(current), int(total)
         for index, proposal in enumerate(ik_proposals, 1):
-            changed_bones.update(_commit_ik_output([proposal]))
+            changed_bones.update(
+                _commit_ik_output([proposal], scene_context=scene_context)
+            )
             yield "IK controls", index, len(ik_proposals)
         if ik_proposals and finger_channels:
             original_shapes = target_pose.shapes
             target_pose.bones = finger_channels
             target_pose.shapes = {}
             target_pose.invalidate()
-            finger_commit = target_pose.iter_commit()
+            finger_commit = target_pose.iter_commit(scene_context.update)
             while True:
                 try:
                     current, total = next(finger_commit)
@@ -3213,15 +3224,19 @@ def _iter_commit_target_pose(
         for block, value in shape_values:
             block.value = value
         target_pose.armature.update_tag(refresh={"OBJECT"})
-        bpy.context.view_layer.update()
+        scene_context.update()
         raise
 
 
 def _commit_target_pose(
     target_pose: TargetPose,
     ik_proposals: list[dict],
+    *,
+    scene_context: SceneContext,
 ) -> tuple[set[object], list[tuple[object, object]]]:
-    iterator = _iter_commit_target_pose(target_pose, ik_proposals)
+    iterator = _iter_commit_target_pose(
+        target_pose, ik_proposals, scene_context=scene_context
+    )
     while True:
         try:
             next(iterator)
@@ -3230,8 +3245,11 @@ def _commit_target_pose(
 
 
 @contextmanager
-def keyframe_interpolation_defaults(interpolation: str):
-    preferences = bpy.context.preferences.edit
+def keyframe_interpolation_defaults(interpolation: str, *, scene_context: SceneContext):
+    if scene_context.preferences is None:
+        yield
+        return
+    preferences = scene_context.preferences.edit
     previous = preferences.keyframe_new_interpolation_type
     preferences.keyframe_new_interpolation_type = interpolation
     try:
@@ -3241,8 +3259,8 @@ def keyframe_interpolation_defaults(interpolation: str):
 
 
 @contextmanager
-def linear_keyframe_defaults():
-    with keyframe_interpolation_defaults("LINEAR"):
+def linear_keyframe_defaults(*, scene_context: SceneContext):
+    with keyframe_interpolation_defaults("LINEAR", scene_context=scene_context):
         yield
 
 
@@ -3349,6 +3367,7 @@ def iter_apply_frame(
     session: PostProcessingSession | None = None,
     module_filter: set[str] | None = None,
     postprocess_config=None,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     """Apply one frame cooperatively so Blender can redraw between stages."""
     config = armature.mtp_rig_config
@@ -3364,7 +3383,7 @@ def iter_apply_frame(
     yield SequenceApplyProgress("Solving target pose", 60, 100)
     if not bool(getattr(settings, "keep_original_root_position", False)):
         _root_kind, root_target = _sequence_root_target(armature, entries)
-        _reset_root_location(root_target)
+        _reset_root_location(root_target, scene_context=scene_context)
     target_pose = build_target_pose(
         armature,
         frame,
@@ -3399,7 +3418,9 @@ def iter_apply_frame(
     yield SequenceApplyProgress("Preparing rig controls", 88, 100)
     ik_proposals = _prepare_ik_output(target_pose)
     yield SequenceApplyProgress("Committing pose", 93, 100)
-    commit = _iter_commit_target_pose(target_pose, ik_proposals)
+    commit = _iter_commit_target_pose(
+        target_pose, ik_proposals, scene_context=scene_context
+    )
     while True:
         try:
             commit_stage, _commit_current, _commit_total = next(commit)
@@ -3417,7 +3438,7 @@ def iter_apply_frame(
             frame.warnings.append(warning)
 
     yield SequenceApplyProgress("Updating scene", 97, 100)
-    bpy.context.view_layer.update()
+    scene_context.update()
     if keyframe:
         yield SequenceApplyProgress("Writing keyframe", 98, 100)
         for bone in changed_bones:
@@ -3453,6 +3474,7 @@ def apply_frame(
     post_process: bool = True,
     session: PostProcessingSession | None = None,
     module_filter: set[str] | None = None,
+    scene_context: SceneContext,
 ) -> tuple[int, int]:
     iterator = iter_apply_frame(
         armature,
@@ -3463,6 +3485,7 @@ def apply_frame(
         post_process=post_process,
         session=session,
         module_filter=module_filter,
+        scene_context=scene_context,
     )
     while True:
         try:
@@ -3483,7 +3506,7 @@ def _shape_blocks_for_config(armature):
         yield from mapping.matching_shape_blocks(armature, entry)
 
 
-def _sequence_state(armature) -> dict:
+def _sequence_state(armature, *, scene_context: SceneContext) -> dict:
     properties = {}
     for bone in armature.pose.bones:
         properties[bone.name] = {
@@ -3493,8 +3516,8 @@ def _sequence_state(armature) -> dict:
         }
     return {
         "frame": (
-            int(bpy.context.scene.frame_current),
-            float(bpy.context.scene.frame_subframe),
+            int(scene_context.scene.frame_current),
+            float(scene_context.scene.frame_subframe),
         ),
         "world": armature.matrix_world.copy(),
         "bones": {bone.name: bone.matrix_basis.copy() for bone in armature.pose.bones},
@@ -3506,9 +3529,11 @@ def _sequence_state(armature) -> dict:
     }
 
 
-def _restore_sequence_state(armature, state: dict) -> None:
+def _restore_sequence_state(
+    armature, state: dict, *, scene_context: SceneContext
+) -> None:
     frame, subframe = state["frame"]
-    bpy.context.scene.frame_set(frame, subframe=subframe)
+    scene_context.scene.frame_set(frame, subframe=subframe)
     armature.matrix_world = state["world"]
     for name, basis in state["bones"].items():
         bone = armature.pose.bones.get(name)
@@ -3524,7 +3549,7 @@ def _restore_sequence_state(armature, state: dict) -> None:
     for block, value in state["shapes"].values():
         block.value = value
     armature.update_tag(refresh={"OBJECT"})
-    bpy.context.view_layer.update()
+    scene_context.update()
 
 
 def _sequence_root_target(armature, entries):
@@ -3532,11 +3557,11 @@ def _sequence_root_target(armature, entries):
     return ("BONE", root) if root is not None else ("OBJECT", armature)
 
 
-def _reset_root_location(root_target) -> None:
+def _reset_root_location(root_target, *, scene_context: SceneContext) -> None:
     """Reset the user-facing root location channels without changing rotation."""
     root_target.location = Vector()
     root_target.id_data.update_tag(refresh={"OBJECT"})
-    bpy.context.view_layer.update()
+    scene_context.update()
 
 
 def _source_body_height(frame: CanonicalFrame) -> float:
@@ -3706,6 +3731,8 @@ def _set_root_pose(
     delta: Vector,
     yaw: float,
     target_up: Vector,
+    *,
+    scene_context: SceneContext,
 ) -> None:
     location, rotation, scale = baseline.decompose()
     if target_kind == "BONE":
@@ -3718,7 +3745,7 @@ def _set_root_pose(
         world_delta = baseline.to_3x3() @ delta
         desired = Matrix.LocRotScale(location + world_delta, desired_rotation, scale)
         target.matrix_world = desired
-    bpy.context.view_layer.update()
+    scene_context.update()
 
 
 def _grounding_landmark(frame: CanonicalFrame, *names: str) -> Landmark | None:
@@ -4039,6 +4066,8 @@ def _iter_capture_baked_frame(
     rig_plan: rig_planning.RigSolvePlan,
     warning_sink: list[str],
     capture_rohm_input: bool,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[tuple[str, int, int]]:
     """Solve one frame in independently cancellable main-thread units."""
     frame_module_ids = {
@@ -4080,7 +4109,9 @@ def _iter_capture_baked_frame(
     ik_proposals = _prepare_ik_output(target_pose)
     completed += 1
     yield "Committing pose", completed, total_steps
-    commit = _iter_commit_target_pose(target_pose, ik_proposals)
+    commit = _iter_commit_target_pose(
+        target_pose, ik_proposals, scene_context=scene_context
+    )
     while True:
         try:
             commit_stage, _commit_current, _commit_total = next(commit)
@@ -4207,15 +4238,17 @@ def _continuous_property(name: str) -> bool:
 def _project_temporal_finger_hinges(
     armature,
     samples: list[_BakedFrameSample],
+    *,
+    scene_context: SceneContext,
 ) -> int:
     """Reapply anatomical finger limits after independent channel filtering."""
 
     corrected = 0
-    temporary = _sequence_state(armature)
+    temporary = _sequence_state(armature, scene_context=scene_context)
     try:
         for sample in samples:
-            _scene_set_float(bpy.context.scene, sample.destination)
-            _apply_baked_sample_pose(armature, sample)
+            _scene_set_float(scene_context.scene, sample.destination)
+            _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
             by_semantic = {
                 channel.semantic_id: channel
                 for channel in sample.bones.values()
@@ -4301,12 +4334,12 @@ def _project_temporal_finger_hinges(
                                 desired_rotation,
                                 bone.matrix.to_scale(),
                             )
-                            bpy.context.view_layer.update()
+                            scene_context.update()
                             _store_bone_basis(sample, bone)
                             corrected += 1
                         parent_delta = desired_delta
     finally:
-        _restore_sequence_state(armature, temporary)
+        _restore_sequence_state(armature, temporary, scene_context=scene_context)
     return corrected
 
 
@@ -4314,6 +4347,8 @@ def _iter_temporal_channels(
     armature,
     samples: list[_BakedFrameSample],
     settings,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     timestamps = _sequence_timestamps(samples)
     smooth_motion = bool(settings.smooth_motion)
@@ -4500,7 +4535,9 @@ def _iter_temporal_channels(
         completed += 1
 
     if stabilize_hands:
-        anatomical_count = _project_temporal_finger_hinges(armature, samples)
+        anatomical_count = _project_temporal_finger_hinges(
+            armature, samples, scene_context=scene_context
+        )
         repaired += anatomical_count
         if anatomical_count:
             yield SequenceApplyProgress(
@@ -4519,7 +4556,9 @@ def _iter_temporal_channels(
         )
 
 
-def _apply_baked_sample_pose(armature, sample: _BakedFrameSample) -> None:
+def _apply_baked_sample_pose(
+    armature, sample: _BakedFrameSample, *, scene_context: SceneContext
+) -> None:
     if sample.root_object is not None:
         location, rotation, scale = sample.root_object
         armature.matrix_basis = Matrix.LocRotScale(location, rotation, scale)
@@ -4532,7 +4571,7 @@ def _apply_baked_sample_pose(armature, sample: _BakedFrameSample) -> None:
         for name, value in channel.properties.items():
             channel.bone[name] = value
     armature.update_tag(refresh={"OBJECT"})
-    bpy.context.view_layer.update()
+    scene_context.update()
 
 
 def _store_bone_basis(sample: _BakedFrameSample, bone) -> None:
@@ -4625,6 +4664,8 @@ def _repair_fk_leg(
     desired_ankle: Vector,
     weight: float,
     target_up: Vector,
+    *,
+    scene_context: SceneContext,
 ) -> bool:
     hip = upper.head.copy()
     current_knee = lower.head.copy()
@@ -4651,7 +4692,7 @@ def _repair_fk_leg(
             matrix.to_scale(),
         )
         upper.matrix = matrix
-        bpy.context.view_layer.update()
+        scene_context.update()
     current_lower = lower.tail - lower.head
     desired_lower = desired - lower.head
     if current_lower.length > 1.0e-8 and desired_lower.length > 1.0e-8:
@@ -4663,7 +4704,7 @@ def _repair_fk_leg(
             matrix.to_scale(),
         )
         lower.matrix = matrix
-        bpy.context.view_layer.update()
+        scene_context.update()
     _store_bone_basis(sample, upper)
     _store_bone_basis(sample, lower)
     return unreachable
@@ -4686,6 +4727,8 @@ def _iter_ground_contacts(
     root_kind: str,
     root_target,
     target_up: Vector,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     timestamps = _sequence_timestamps(samples)
     for run in _continuous_runs(list(range(len(samples))), timestamps):
@@ -4698,6 +4741,7 @@ def _iter_ground_contacts(
             root_kind,
             root_target,
             target_up,
+            scene_context=scene_context,
         )
 
 
@@ -4710,6 +4754,8 @@ def _iter_ground_contacts_run(
     root_kind: str,
     root_target,
     target_up: Vector,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     ground_frames = [sample.grounding for sample in samples]
     if not ground_frames or any(frame is None for frame in ground_frames):
@@ -4767,24 +4813,24 @@ def _iter_ground_contacts_run(
         for iteration, roots in iterator:
             latest_roots = roots
             yield SequenceApplyProgress("Stabilizing root motion", iteration, 10)
-        temporary = _sequence_state(armature)
+        temporary = _sequence_state(armature, scene_context=scene_context)
         try:
             for index, (sample, desired_root) in enumerate(
                 zip(samples, latest_roots, strict=False), 1
             ):
-                _scene_set_float(bpy.context.scene, sample.destination)
-                _apply_baked_sample_pose(armature, sample)
+                _scene_set_float(scene_context.scene, sample.destination)
+                _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
                 if root_kind == "BONE":
                     matrix = root_target.matrix.copy()
                     matrix.translation = desired_root
                     root_target.matrix = matrix
-                    bpy.context.view_layer.update()
+                    scene_context.update()
                     _store_bone_basis(sample, root_target)
                 else:
                     matrix = root_target.matrix_world.copy()
                     matrix.translation = desired_root
                     root_target.matrix_world = matrix
-                    bpy.context.view_layer.update()
+                    scene_context.update()
                     location, rotation, scale = root_target.matrix_basis.decompose()
                     sample.root_object = (
                         location.copy(),
@@ -4795,19 +4841,19 @@ def _iter_ground_contacts_run(
                     "Applying stabilized root", index, len(samples)
                 )
         finally:
-            _restore_sequence_state(armature, temporary)
+            _restore_sequence_state(armature, temporary, scene_context=scene_context)
 
     targets = _contact_targets(result, [frame.timestamp for frame in ground_frames])
     ownership = limb_ownership(armature)
-    temporary = _sequence_state(armature)
+    temporary = _sequence_state(armature, scene_context=scene_context)
     unreachable_count = 0
     try:
         for index, (sample, frame_targets) in enumerate(
             zip(samples, targets, strict=False), 1
         ):
-            _scene_set_float(bpy.context.scene, sample.destination)
-            _apply_baked_sample_pose(armature, sample)
-            translation_solver = PoseTranslationSolver()
+            _scene_set_float(scene_context.scene, sample.destination)
+            _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
+            translation_solver = PoseTranslationSolver(scene_context.update)
             for side in ("L", "R"):
                 heel_target = frame_targets.get(f"{side}_HEEL")
                 toe_target = frame_targets.get(f"{side}_TOE")
@@ -4862,7 +4908,7 @@ def _iter_ground_contacts_run(
                         matrix = target.matrix.copy()
                         matrix.translation += error
                         target.matrix = matrix
-                        bpy.context.view_layer.update()
+                        scene_context.update()
                     pole = info.get("pole")
                     rotation_bend = info.get("rotation_bend")
                     proposal = sample.ik_legs.get(side, {})
@@ -4882,6 +4928,7 @@ def _iter_ground_contacts_run(
                             pole,
                             pole_location,
                             solver=translation_solver,
+                            scene_context=scene_context,
                         )
                         _store_bone_basis(sample, pole)
                     elif rotation_bend is not None and desired_joint is not None:
@@ -4908,7 +4955,7 @@ def _iter_ground_contacts_run(
                                 rotation = rotation_bend.rotation_euler.copy()
                                 rotation.y += angle
                                 rotation_bend.rotation_euler = rotation
-                                bpy.context.view_layer.update()
+                                scene_context.update()
                                 _store_bone_basis(sample, rotation_bend)
                     for _attempt in range(2):
                         error = desired_endpoint - foot.head
@@ -4917,11 +4964,18 @@ def _iter_ground_contacts_run(
                         matrix = target.matrix.copy()
                         matrix.translation += error
                         target.matrix = matrix
-                        bpy.context.view_layer.update()
+                        scene_context.update()
                     _store_bone_basis(sample, target)
                 else:
                     _repair_fk_leg(
-                        sample, upper, lower, foot, desired_ankle, weight, target_up
+                        sample,
+                        upper,
+                        lower,
+                        foot,
+                        desired_ankle,
+                        weight,
+                        target_up,
+                        scene_context=scene_context,
                     )
                     # Ground contact owns the planted position, not the foot's
                     # orientation. Counter-rotate the FK foot after moving its
@@ -4935,11 +4989,11 @@ def _iter_ground_contacts_run(
                         preserved_foot_rotation,
                         matrix.to_scale(),
                     )
-                    bpy.context.view_layer.update()
+                    scene_context.update()
                     _store_bone_basis(sample, foot)
             yield SequenceApplyProgress("Repairing planted feet", index, len(samples))
     finally:
-        _restore_sequence_state(armature, temporary)
+        _restore_sequence_state(armature, temporary, scene_context=scene_context)
     if unreachable_count:
         warning = f"Clamped {unreachable_count} unreachable planted-leg correction(s) without stretching"
         _append_bake_warning(samples, warning)
@@ -5002,6 +5056,8 @@ def _iter_camera_motion_correction(
     ui_settings,
     track_status: str,
     is_video: bool,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     inputs = [sample.camera_motion_input for sample in samples]
     usable_inputs = [item for item in inputs if item is not None]
@@ -5041,7 +5097,7 @@ def _iter_camera_motion_correction(
     if not result.corrected_frames:
         return
 
-    temporary = _sequence_state(armature)
+    temporary = _sequence_state(armature, scene_context=scene_context)
     try:
         for index, (sample, offset) in enumerate(
             zip(samples, result.offsets_x, strict=True), 1
@@ -5053,8 +5109,8 @@ def _iter_camera_motion_correction(
                     len(samples),
                 )
                 continue
-            _scene_set_float(bpy.context.scene, sample.destination)
-            _apply_baked_sample_pose(armature, sample)
+            _scene_set_float(scene_context.scene, sample.destination)
+            _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
             target_delta = target_lateral * (
                 float(offset) * float(source_to_target_scale)
             )
@@ -5068,7 +5124,7 @@ def _iter_camera_motion_correction(
                 matrix = root_target.matrix.copy()
                 matrix.translation += target_delta
                 root_target.matrix = matrix
-                bpy.context.view_layer.update()
+                scene_context.update()
                 _store_bone_basis(sample, root_target)
                 stored = sample.bones[root_target.name]
                 stored.rotation = original_rotation
@@ -5082,7 +5138,7 @@ def _iter_camera_motion_correction(
                 matrix = root_target.matrix_world.copy()
                 matrix.translation += applied_delta
                 root_target.matrix_world = matrix
-                bpy.context.view_layer.update()
+                scene_context.update()
                 location, _rotation, _scale = root_target.matrix_basis.decompose()
                 sample.root_object = (
                     location.copy(),
@@ -5096,7 +5152,7 @@ def _iter_camera_motion_correction(
                 len(samples),
             )
     finally:
-        _restore_sequence_state(armature, temporary)
+        _restore_sequence_state(armature, temporary, scene_context=scene_context)
     _append_bake_warning(
         samples,
         "Camera Motion Correction adjusted lateral root travel in "
@@ -5110,10 +5166,12 @@ def _iter_apply_rohm_root_deltas(
     root_deltas: Sequence[Sequence[float]],
     root_kind: str,
     root_target,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     if len(root_deltas) != len(samples):
         raise BackendError("RoHM root corrections do not match the baked sequence")
-    temporary = _sequence_state(armature)
+    temporary = _sequence_state(armature, scene_context=scene_context)
     try:
         for index, (sample, raw_delta) in enumerate(
             zip(samples, root_deltas, strict=True), 1
@@ -5124,8 +5182,8 @@ def _iter_apply_rohm_root_deltas(
                     "RoHM: applying corrected root", index, len(samples)
                 )
                 continue
-            _scene_set_float(bpy.context.scene, sample.destination)
-            _apply_baked_sample_pose(armature, sample)
+            _scene_set_float(scene_context.scene, sample.destination)
+            _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
             if root_kind == "BONE":
                 original = sample.bones.get(root_target.name)
                 if original is None:
@@ -5138,7 +5196,7 @@ def _iter_apply_rohm_root_deltas(
                 matrix = root_target.matrix.copy()
                 matrix.translation += delta
                 root_target.matrix = matrix
-                bpy.context.view_layer.update()
+                scene_context.update()
                 _store_bone_basis(sample, root_target)
                 stored = sample.bones[root_target.name]
                 stored.rotation = original_rotation
@@ -5154,7 +5212,7 @@ def _iter_apply_rohm_root_deltas(
                 matrix = root_target.matrix_world.copy()
                 matrix.translation += delta
                 root_target.matrix_world = matrix
-                bpy.context.view_layer.update()
+                scene_context.update()
                 location, _rotation, _scale = root_target.matrix_basis.decompose()
                 sample.root_object = (
                     location.copy(),
@@ -5166,7 +5224,7 @@ def _iter_apply_rohm_root_deltas(
                 "RoHM: applying corrected root", index, len(samples)
             )
     finally:
-        _restore_sequence_state(armature, temporary)
+        _restore_sequence_state(armature, temporary, scene_context=scene_context)
 
 
 def _merge_rohm_pose_into_sample(
@@ -5242,13 +5300,15 @@ def _iter_apply_rohm_pose(
     rig_plan: rig_planning.RigSolvePlan,
     samples: Sequence[_BakedFrameSample],
     pose_global_rotations: Sequence[dict[str, Quaternion]],
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     """Rest-align RoHM globals and resolve them through the control rig."""
     if len(pose_global_rotations) != len(samples):
         raise BackendError("RoHM pose corrections do not match the baked sequence")
     rest_basis = rig_plan.rest_basis.to_3x3()
     rest_inverse = rest_basis.inverted_safe()
-    temporary = _sequence_state(armature)
+    temporary = _sequence_state(armature, scene_context=scene_context)
     try:
         for index, (sample, corrected_globals) in enumerate(
             zip(samples, pose_global_rotations, strict=True), 1
@@ -5258,8 +5318,8 @@ def _iter_apply_rohm_pose(
                     "RoHM: preserving trusted pose", index, len(samples)
                 )
                 continue
-            _scene_set_float(bpy.context.scene, sample.destination)
-            _apply_baked_sample_pose(armature, sample)
+            _scene_set_float(scene_context.scene, sample.destination)
+            _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
             posed_root_basis = target_basis(
                 armature,
                 entries,
@@ -5299,7 +5359,7 @@ def _iter_apply_rohm_pose(
             if target_pose.bones:
                 ik_proposals = _prepare_ik_output(target_pose)
                 changed_bones, _changed_shapes = _commit_target_pose(
-                    target_pose, ik_proposals
+                    target_pose, ik_proposals, scene_context=scene_context
                 )
                 _merge_rohm_pose_into_sample(
                     sample,
@@ -5311,7 +5371,7 @@ def _iter_apply_rohm_pose(
                 "RoHM: retargeting corrected pose", index, len(samples)
             )
     finally:
-        _restore_sequence_state(armature, temporary)
+        _restore_sequence_state(armature, temporary, scene_context=scene_context)
 
 
 def _iter_rohm_correction(
@@ -5323,6 +5383,8 @@ def _iter_rohm_correction(
     effective_mode: str,
     root_kind: str,
     root_target,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     """Run the explicitly enabled verified RoHM correction backend."""
     from . import rohm_correction
@@ -5365,6 +5427,7 @@ def _iter_rohm_correction(
             rig_plan,
             samples,
             stats.pose_global_rotations,
+            scene_context=scene_context,
         )
         for progress in pose_iterator:
             yield SequenceApplyProgress(
@@ -5379,6 +5442,7 @@ def _iter_rohm_correction(
             stats.root_deltas,
             root_kind,
             root_target,
+            scene_context=scene_context,
         )
         for progress in root_iterator:
             yield SequenceApplyProgress(
@@ -5612,6 +5676,8 @@ def _iter_temporal_correction(
     root_kind: str,
     root_target,
     target_up: Vector,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     if settings.stabilize_hands:
         for sample in samples:
@@ -5628,7 +5694,9 @@ def _iter_temporal_correction(
                 ):
                     channel.bone.rotation_mode = "QUATERNION"
     if settings.smooth_motion or settings.stabilize_hands:
-        yield from _iter_temporal_channels(armature, samples, settings)
+        yield from _iter_temporal_channels(
+            armature, samples, settings, scene_context=scene_context
+        )
     if settings.ground_contacts and _has_groundable_body_channels(samples):
         yield from _iter_ground_contacts(
             armature,
@@ -5639,6 +5707,7 @@ def _iter_temporal_correction(
             root_kind,
             root_target,
             target_up,
+            scene_context=scene_context,
         )
 
 
@@ -5675,6 +5744,7 @@ def _iter_write_baked_sample(
     total_frames: int,
     *,
     phase: str,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     """Write one solved frame in bounded batches and release its caller."""
     state.attach()
@@ -5684,7 +5754,7 @@ def _iter_write_baked_sample(
     )
     batch_size = 8
     for offset in range(0, len(channels), batch_size):
-        with linear_keyframe_defaults():
+        with linear_keyframe_defaults(scene_context=scene_context):
             for channel in channels[offset : offset + batch_size]:
                 channel.bone.matrix_basis = Matrix.LocRotScale(
                     channel.location,
@@ -5718,13 +5788,13 @@ def _iter_write_baked_sample(
             rotation,
             scale,
         )
-        with linear_keyframe_defaults():
+        with linear_keyframe_defaults(scene_context=scene_context):
             _key_object_from_stream(state, sample.destination)
         state.total_bones += 1
 
     shapes = list(sample.shapes.values())
     for offset in range(0, len(shapes), batch_size):
-        with linear_keyframe_defaults():
+        with linear_keyframe_defaults(scene_context=scene_context):
             for shape in shapes[offset : offset + batch_size]:
                 shape.block.value = shape.value
                 _key_shape(
@@ -5744,11 +5814,13 @@ def _iter_write_baked_sample(
 def _finish_keyframe_stream(
     state: _KeyframeWriteState,
     final_frame: float,
+    *,
+    scene_context: SceneContext,
 ) -> tuple[int, int]:
     state.attach()
-    _scene_set_float(bpy.context.scene, final_frame)
+    _scene_set_float(scene_context.scene, final_frame)
     state.armature.update_tag(refresh={"OBJECT"})
-    bpy.context.view_layer.update()
+    scene_context.update()
     return state.total_bones, state.total_shapes
 
 
@@ -5758,6 +5830,8 @@ def _iter_commit_baked_samples(
     root_kind: str,
     root_target,
     root_enabled: bool,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     action = _ensure_action(armature)
     start_frame = samples[0].destination
@@ -5807,6 +5881,7 @@ def _iter_commit_baked_samples(
             index,
             total_frames,
             phase="Writing keyframes",
+            scene_context=scene_context,
         )
     for curve in _action_fcurves(action):
         if curve.data_path not in replacement_paths:
@@ -5826,7 +5901,9 @@ def _iter_commit_baked_samples(
                 if start_frame - 1.0e-5 <= float(point.co.x) <= end_frame + 1.0e-5:
                     point.interpolation = "LINEAR"
             curve.update()
-    return _finish_keyframe_stream(state, samples[-1].destination)
+    return _finish_keyframe_stream(
+        state, samples[-1].destination, scene_context=scene_context
+    )
 
 
 def _commit_baked_samples(
@@ -5835,10 +5912,17 @@ def _commit_baked_samples(
     root_kind: str,
     root_target,
     root_enabled: bool,
+    *,
+    scene_context: SceneContext,
 ) -> tuple[int, int]:
     return _drain(
         _iter_commit_baked_samples(
-            armature, samples, root_kind, root_target, root_enabled
+            armature,
+            samples,
+            root_kind,
+            root_target,
+            root_enabled,
+            scene_context=scene_context,
         )
     )
 
@@ -5917,6 +6001,8 @@ def iter_apply_sequence(
     frames: Iterable[CanonicalFrame],
     settings,
     start_frame: float,
+    *,
+    scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     """Cooperatively solve and key a sequence without long UI stalls.
 
@@ -5925,9 +6011,9 @@ def iter_apply_sequence(
     frames lets a modal operator return control to Blender regularly.
     """
     total_hint = len(frames) if isinstance(frames, Sequence) else 0
-    scene = bpy.context.scene
-    scene_fps = scene.render.fps / scene.render.fps_base
-    state = _sequence_state(armature)
+    scene = scene_context.scene
+    scene_fps = scene_context.fps
+    state = _sequence_state(armature, scene_context=scene_context)
     samples: list[_BakedFrameSample] = []
     warning_sink: list[str] = []
     config = armature.mtp_rig_config
@@ -6133,7 +6219,7 @@ def iter_apply_sequence(
                 if root_enabled and not bool(
                     getattr(settings, "keep_original_root_position", False)
                 ):
-                    _reset_root_location(root_target)
+                    _reset_root_location(root_target, scene_context=scene_context)
                 target_space = target_basis(armature, entries)
                 target_up = target_space @ Vector((0.0, 0.0, 1.0))
                 baseline = (
@@ -6204,6 +6290,7 @@ def iter_apply_sequence(
                     delta,
                     yaw,
                     target_up,
+                    scene_context=scene_context,
                 )
             frame_solver = _iter_capture_baked_frame(
                 armature,
@@ -6218,6 +6305,7 @@ def iter_apply_sequence(
                 rig_plan,
                 warning_sink,
                 capture_rohm_input,
+                scene_context=scene_context,
             )
             while True:
                 try:
@@ -6243,11 +6331,12 @@ def iter_apply_sequence(
                 index,
                 total_frames,
                 phase="Streaming keyframes",
+                scene_context=scene_context,
             )
         if not frame_count:
             raise MediaError("No detectable frames were produced")
     finally:
-        _restore_sequence_state(armature, state)
+        _restore_sequence_state(armature, state, scene_context=scene_context)
         if frame_spool is not None:
             frame_spool.close()
 
@@ -6270,6 +6359,7 @@ def iter_apply_sequence(
                 camera_motion_ui_settings,
                 camera_track_status,
                 str(getattr(settings, "media_kind", "")) == "VIDEO",
+                scene_context=scene_context,
             ),
             process_temporal=lambda module_settings: _iter_temporal_correction(
                 armature,
@@ -6280,6 +6370,7 @@ def iter_apply_sequence(
                 root_kind,
                 root_target,
                 target_up,
+                scene_context=scene_context,
             ),
             process_detection_filter=lambda module_settings: _iter_detection_filter(
                 samples,
@@ -6297,6 +6388,7 @@ def iter_apply_sequence(
                 effective_mode,
                 root_kind,
                 root_target,
+                scene_context=scene_context,
             ),
         )
         yield from iter_sequence_pipeline(context, postprocess_config)
@@ -6307,11 +6399,13 @@ def iter_apply_sequence(
             root_kind,
             root_target,
             root_enabled,
+            scene_context=scene_context,
         )
     else:
         total_bones, total_shapes = _finish_keyframe_stream(
             keyframe_state,
             last_destination,
+            scene_context=scene_context,
         )
     return frame_count, total_bones, total_shapes, tuple(warning_sink)
 
@@ -6321,6 +6415,12 @@ def apply_sequence(
     frames: Iterable[CanonicalFrame],
     settings,
     start_frame: float,
+    *,
+    scene_context: SceneContext,
 ) -> tuple[int, int, int, tuple[str, ...]]:
     """Synchronous API retained for scripts, tests, and single-shot callers."""
-    return _drain(iter_apply_sequence(armature, frames, settings, start_frame))
+    return _drain(
+        iter_apply_sequence(
+            armature, frames, settings, start_frame, scene_context=scene_context
+        )
+    )

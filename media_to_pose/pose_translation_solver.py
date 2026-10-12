@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-import bpy
 from mathutils import Matrix, Vector
 
 
@@ -20,8 +19,9 @@ class TranslationSolveResult:
 class PoseTranslationSolver:
     """Place several controls while reusing one Jacobian per control/frame."""
 
-    def __init__(self, update: Callable[[], None] | None = None):
-        self._update = update or bpy.context.view_layer.update
+    def __init__(self, update: Callable[[], None]):
+        """``update`` re-evaluates the view layer (``SceneContext.update``)."""
+        self._update = update
         self._jacobians: dict[int, Matrix] = {}
         self.dependency_updates = 0
         self.jacobian_builds = 0

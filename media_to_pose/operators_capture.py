@@ -23,6 +23,7 @@ from .capture_state import (
 from .core.cache.stream import FrameSpool
 from .core.errors import MtpError
 from .core.log import get_logger
+from .core.scene import SceneContext
 from .media_io import probe_media
 from .models import MediaInfo
 from .operation import (
@@ -1100,6 +1101,7 @@ class MTP_OT_apply_capture(Operator):
             armature,
             detected,
             self._request,
+            scene_context=SceneContext.from_context(context),
         )
         _set_status(
             scene.mtp_settings,
@@ -1235,6 +1237,7 @@ class MTP_OT_apply_capture(Operator):
             observed_frames(),
             self._request,
             self._start_frame,
+            scene_context=SceneContext.from_context(context),
         )
         self._sequence_phase = "Preparing detected frames"
         self._sequence_progress = self._job.progress_plan.range_for("loading")[0]

@@ -11,7 +11,7 @@ from unittest import mock
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
-from tests.blender_test_support import fixture_path, register_addon
+from tests.blender_test_support import fixture_path, register_addon, scene_context
 
 
 class VroidFixtureTests(unittest.TestCase):
@@ -126,6 +126,7 @@ class VroidFixtureTests(unittest.TestCase):
             self.armature,
             frame,
             settings,
+            scene_context=scene_context(),
         )
         self.assertEqual(changed_bones, 51)
         self.assertEqual(changed_shapes, 0)
@@ -171,6 +172,7 @@ class VroidFixtureTests(unittest.TestCase):
             self.armature,
             frame,
             settings,
+            scene_context=scene_context(),
         )
         self.assertLess(root.location.length, 1.0e-6)
 
@@ -181,6 +183,7 @@ class VroidFixtureTests(unittest.TestCase):
             self.armature,
             frame,
             settings,
+            scene_context=scene_context(),
         )
         self.assertLess((root.location - expected).length, 1.0e-6)
 
@@ -230,6 +233,7 @@ class VroidFixtureTests(unittest.TestCase):
                 [tuple(delta)],
                 "OBJECT",
                 self.armature,
+                scene_context=scene_context(),
             )
         )
 
@@ -291,14 +295,16 @@ class VroidFixtureTests(unittest.TestCase):
             self.assertNotEqual(frozen_entry.gain, live_entry.gain)
         finally:
             live_entry.gain = original_gain
-        first.commit()
+        first.commit(scene_context().update)
         self.assertEqual(first.commit_dependency_updates, 1)
 
     def test_unconstrained_translation_avoids_jacobian_probes(self) -> None:
         bone = self.armature.pose.bones["J_Bip_C_Hips"]
         original = bone.matrix_basis.copy()
         try:
-            solver = self.addon.pose_translation_solver.PoseTranslationSolver()
+            solver = self.addon.pose_translation_solver.PoseTranslationSolver(
+                scene_context().update
+            )
             result = solver.solve(
                 bone,
                 bone.matrix.translation + Vector((0.01, 0.0, 0.0)),
@@ -602,6 +608,7 @@ class VroidFixtureTests(unittest.TestCase):
                 frames(),
                 settings,
                 1.0,
+                scene_context=scene_context(),
             )
             first = next(iterator)
             self.assertEqual(first.phase, "Loading detections")
@@ -713,6 +720,7 @@ class VroidFixtureTests(unittest.TestCase):
                 iter(frames),
                 settings,
                 1.0,
+                scene_context=scene_context(),
             )
             self.assertEqual(result[:3], (2, 104, 0))
             self.assertTrue(any("baked in place" in warning for warning in result[3]))
@@ -892,6 +900,7 @@ class VroidFixtureTests(unittest.TestCase):
                     "BONE",
                     upper,
                     target_up,
+                    scene_context=scene_context(),
                 )
             )
         actual_rotation = sample.bones[ik_target.name].rotation.normalized()
@@ -972,6 +981,7 @@ class VroidFixtureTests(unittest.TestCase):
                 None,
                 "Ready",
                 True,
+                scene_context=scene_context(),
             )
         )
         for expected, sample in zip(rotations, samples, strict=True):

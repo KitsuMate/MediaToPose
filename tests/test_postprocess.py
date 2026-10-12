@@ -8,7 +8,7 @@ from unittest import mock
 
 from mathutils import Matrix, Quaternion, Vector
 
-from tests.blender_test_support import load_addon
+from tests.blender_test_support import load_addon, scene_context
 
 
 class _Collection(list):
@@ -747,7 +747,7 @@ class PostProcessCompilationTests(unittest.TestCase):
         class Solver:
             instances = []
 
-            def __init__(self):
+            def __init__(self, _update):
                 self.events = []
                 self.instances.append(self)
 
@@ -789,7 +789,7 @@ class PostProcessCompilationTests(unittest.TestCase):
                 side_effect=lambda _armature, _entries, role: outputs[role],
             ),
         ):
-            retarget._commit_ik_output([proposal])
+            retarget._commit_ik_output([proposal], scene_context=scene_context())
 
         events = Solver.instances[0].events
         invalidation = events.index(("invalidate", pole.name))

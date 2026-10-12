@@ -9,7 +9,7 @@ depending on any particular correction implementation.
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 
 from mathutils import Euler, Matrix, Quaternion, Vector
@@ -594,12 +594,14 @@ class TargetPose:
             return math.inf
         return unprojected_direction.angle(projected_direction)
 
-    def iter_commit(self):
-        """Commit channels in dependency-safe batches and yield after evaluation."""
-        import bpy
+    def iter_commit(self, update: Callable[[], None]):
+        """Commit channels in dependency-safe batches and yield after evaluation.
+
+        ``update`` re-evaluates the view layer (``SceneContext.update``).
+        """
 
         def update_scene() -> None:
-            bpy.context.view_layer.update()
+            update()
             self.commit_dependency_updates += 1
 
         self.resolve()
@@ -768,9 +770,11 @@ class TargetPose:
             changed_shapes.append((shape.obj, shape.block))
         return changed, changed_shapes
 
-    def commit(self) -> tuple[set[object], list[tuple[object, object]]]:
+    def commit(
+        self, update: Callable[[], None]
+    ) -> tuple[set[object], list[tuple[object, object]]]:
         """Commit the resolved channels to Blender pose and shape-key data."""
-        iterator = self.iter_commit()
+        iterator = self.iter_commit(update)
         while True:
             try:
                 next(iterator)
