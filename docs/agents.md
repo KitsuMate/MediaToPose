@@ -126,19 +126,57 @@ current action, so versions sit side by side. Keep the best one with
 
 ```python
 rig = api.describe_rig("Face")
-print(rig["completeness"]["arkit"], rig["shape_keys"], rig["face_bones"])
+print(rig["completeness"]["arkit"], rig["face"]["expressions"]["ARKIT"]["unmapped"])
 result = api.capture("face.mp4", "Face", parts={"face"}, face_output="ARKIT")
 print(result.face_output_warning, result.face["unmapped_expressions"])
+metrics = api.evaluate("Face", result=result)
+print(metrics.expression_fit, metrics.blink_recall, metrics.face_jitter)
 api.render_comparison("face.png", "Face", result=result, face=True)
 ```
 
-Use `face_output="ARKIT"` or `"FACS"` when the meshes have matching shape
-keys (`completeness.arkit` / `completeness.facs` close to 1.0), `"BONES"`
-for a bone-driven face rig. For VRoid and other VRM characters use
-`face_output="VRM"`: it drives the `Fcl_*` expression keys (per-eye
-blinks, the A/I/U/E/O mouth shapes, smiling, sad and angry mouth and brows,
-wide and smiling eyes) from the same ARKit coefficients.
-`face_output_warning` says what is missing.
+Pick the face output by rig type (`describe_rig` shows what the rig has:
+`shape_keys[mesh].keys_per_scheme`, `face.controls`, `face.eyes`):
+
+| Rig | `face_output` | Check first |
+| --- | --- | --- |
+| ARKit / Apple blendshapes (52 keys, any prefix such as `arkit_` or `facs_bs_`) | `"ARKIT"` | `completeness.arkit` close to 1.0 |
+| FACS action-unit keys (`AU12_L`, ...) | `"FACS"` | `completeness.facs` |
+| VRoid and other VRM characters (`Fcl_*` keys) | `"VRM"` | `completeness.vrm` |
+| Bone-driven face (Auto-Rig Pro face, Rigify face controls) | `"BONES"` | `face.unmapped_controls` empty, `face.eyes` mapped |
+
+`"VRM"` drives the `Fcl_*` expression keys (per-eye blinks, the A/I/U/E/O
+mouth shapes, smiling, sad and angry mouth and brows, wide and smiling eyes)
+from the same ARKit coefficients. Eye bones are driven by gaze for every
+face output; with look-at rigs (an eye bone aiming at a target) the target
+moves. Bone output moves face controls in face space by a share of the eye
+distance (`face.face_scale`), and the upper lids follow the gaze up and down.
+
+`render_comparison(..., face=True)` shows each frame as the detected face,
+the rig's face, and a chart of the strongest expressions: green is the
+detection after the mapping's gain and clamp, orange what the rig shows.
+Equal bars with a wrong-looking face mean the detector misread the photo;
+unequal bars point at the mapping or the shape keys.
+
+Video captures run **Face Expression Cleanup** (`FACE_CORRECTION`) before
+retargeting: it removes each expression's resting level (`neutral_calibration`),
+zeroes small values (`face_deadzone`), smooths without lag while keeping
+blinks (`smooth_face`, `face_smoothing`, `preserve_blinks`) and holds the
+face briefly when it is lost (`face_hold`). Temporal smoothing then leaves
+face channels alone.
+
+| Symptom | Look at | Change |
+| --- | --- | --- |
+| Eyes do not close | `blink_recall`, the blink bars | Keep `preserve_blinks` on, lower `face_smoothing`; raise the blink mapping's `gain`; for bones check `face.controls.FACE_LID_*` |
+| Mouth or brows too weak | `expression_fit`, bar lengths | Raise the mapping `gain` of that expression; check the shape key `slider_max` |
+| Face twitches | `face_jitter` | Raise `face_smoothing` or `face_deadzone` |
+| Relaxed face looks surprised (raised brows) | the neutral frames' bars | Video: keep `neutral_calibration` on; stills: lower the brow mappings' `gain` or set an `offset` |
+| Sides swapped | `asymmetry`, the sheet | Check `mirror`: mirroring flips the whole performance, so a left wink becomes a right one |
+| An expression never moves | `result.face["unmapped_expressions"]` | Map it in Rig Setup, or accept that the rig has no such key |
+
+Known limits: MediaPipe reports a resting brow raise of about 0.5 on many
+relaxed faces, which only video captures can calibrate away; a wink comes
+through as a one-sided squint rather than a one-sided blink; extreme
+close-ups where the face fills the frame can be misfitted.
 
 ### Run from the Blender MCP server
 
