@@ -6,7 +6,6 @@ import bpy
 from bpy.app.handlers import persistent
 
 from . import (
-    anycalib_backend,
     anycalib_ort_runtime,
     cache_preview,
     camera_calibration,
@@ -20,6 +19,7 @@ from . import (
     sam3d_backend,
     ui,
 )
+from .blender.operators import models as model_operators
 from .core.log import configure_logging, get_logger
 from .operation import COORDINATOR
 from .rig_planning import clear_rig_solve_plans
@@ -39,7 +39,7 @@ MODULES = (
     operators_mapping,
     sam3d_backend,
     rohm_backend,
-    anycalib_backend,
+    model_operators,
     operators_capture,
     ui,
 )

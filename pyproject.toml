@@ -31,7 +31,6 @@ ignore = [
 # and ci/, which import the package by its absolute name.
 "media_to_pose/**/*.py" = ["TID252"]
 # Temporary until the model backends move onto backends/lifecycle.py.
-"media_to_pose/anycalib_backend.py" = ["BLE001"]
 "media_to_pose/rohm_backend.py" = ["BLE001"]
 "media_to_pose/sam3d_backend.py" = ["BLE001"]
 

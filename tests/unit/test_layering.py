@@ -106,8 +106,6 @@ LEGACY_LAYERS: dict[str, str] = {
 
 # (module, rule, detail) tuples for known violations.
 ALLOWLIST: set[tuple[str, str, str]] = {
-    ("anycalib_backend", "imports-blender", "registration"),
-    ("anycalib_backend", "backend-bpy-api", "bpy.data"),
     ("cache_preview", "reads-bpy-context", "bpy.context"),
     ("camera_calibration_pipeline", "upward-import", "anycalib_backend"),
     ("detection_cache", "upward-import", "anycalib_backend"),

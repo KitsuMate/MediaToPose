@@ -834,6 +834,7 @@ class ModelBackend:
         args: tuple = (),
         *,
         label: str,
+        kwargs: dict[str, Any] | None = None,
         status: str = "",
         scene_name: str = "",
         scene_pointer: int = 0,
@@ -868,6 +869,7 @@ class ModelBackend:
         job.thread = threading.Thread(
             target=target,
             args=(job, *args),
+            kwargs=dict(kwargs or {}),
             daemon=True,
             name=f"MTP-{self.label.replace(' ', '')}-{kind.value}",
         )
