@@ -153,9 +153,31 @@ distance (`face.face_scale`), and the upper lids follow the gaze up and down.
 
 `render_comparison(..., face=True)` shows each frame as the detected face,
 the rig's face, and a chart of the strongest expressions: green is the
-detection after the mapping's gain and clamp, orange what the rig shows.
+detection through the mapping's input range, orange what the rig shows,
+both as a share of the mapping's range (0 to 1, -1 to 1 for signed controls).
 Equal bars with a wrong-looking face mean the detector misread the photo;
 unequal bars point at the mapping or the shape keys.
+
+Every face mapping (shape key, face bone control, custom property, eye
+gaze) has an input and an output range, editable in Rig Setup and through
+`set_config` (`mappings[].input_zero`, `input_full`, `output_zero`,
+`output_full`, `output_negative`):
+
+- the detection between `input_zero` (rest) and `input_full` is the
+  strength, clamped to 0..1 (-1..1 for signed controls: brows, mouth
+  corners, jaw side, lids, gaze);
+- the target goes from `output_zero` to `output_full` (`output_negative` on
+  the negative side), times `influence`, in its own units: shape key value,
+  metres along a bone control's face-space axis, degrees about it, the
+  custom property's value, or degrees of gaze for the eyes.
+
+Defaults: shape keys 0 to 1 in and out; gaze 18 degrees; face bones a share
+of the eye distance for moving controls (the jaw opens 0.55 eye distances,
+lids close 0.34) or 25 degrees for rotating ones. `describe_rig` lists each
+control's `ranges`. In Rig Setup, **Set from Pose** takes the current pose
+of a face bone (or the current shape key value) as `output_full`;
+**Reset Ranges** restores the defaults. Mapping presets from 0.2.0 (gain,
+offset, clamp, invert) are converted on import.
 
 Video captures run **Face Expression Cleanup** (`FACE_CORRECTION`) before
 retargeting: it removes each expression's resting level (`neutral_calibration`),
@@ -166,10 +188,10 @@ face channels alone.
 
 | Symptom | Look at | Change |
 | --- | --- | --- |
-| Eyes do not close | `blink_recall`, the blink bars | Keep `preserve_blinks` on, lower `face_smoothing`; raise the blink mapping's `gain`; for bones check `face.controls.FACE_LID_*` |
-| Mouth or brows too weak | `expression_fit`, bar lengths | Raise the mapping `gain` of that expression; check the shape key `slider_max` |
+| Eyes do not close | `blink_recall`, the blink bars | Keep `preserve_blinks` on, lower `face_smoothing`; lower the blink mapping's `input_full` (e.g. 0.8: the detector rarely reports a full blink); for bones raise `output_full` of `FACE_LID_*` or pose the closed lid and use Set from Pose |
+| Mouth or brows too weak | `expression_fit`, bar lengths | Lower that mapping's `input_full` or raise its `output_full` (above 1 needs the shape key's `slider_max`) |
 | Face twitches | `face_jitter` | Raise `face_smoothing` or `face_deadzone` |
-| Relaxed face looks surprised (raised brows) | the neutral frames' bars | Video: keep `neutral_calibration` on; stills: lower the brow mappings' `gain` or set an `offset` |
+| Relaxed face looks surprised (raised brows) | the neutral frames' bars | Video: keep `neutral_calibration` on; stills: raise the brow mappings' `input_zero` (e.g. 0.4) |
 | Sides swapped | `asymmetry`, the sheet | Check `mirror`: mirroring flips the whole performance, so a left wink becomes a right one |
 | An expression never moves | `result.face["unmapped_expressions"]` | Map it in Rig Setup, or accept that the rig has no such key |
 
@@ -206,7 +228,7 @@ path; `api.load_result(result)` returns the dict.
 | `cleanup_steps` | Each enabled clean-up module: `parameters` used and `statistics` (for example `rejected_observations`, `repaired_samples`, `contact_frames`, `root_drift_removed_mean`) |
 | `mapping_issues` | Rig mapping entries with warnings or errors |
 | `face_output_warning` | Why face output may be incomplete |
-| `face` | With face capture: `output`, `frames_with_face`, `expressions` (each mapped expression's `peak` and `mean` value sent to the rig, after the mapping's gain and clamp) and `unmapped_expressions` (detected at 0.1 or more but with no target). Names are the face output's: ARKit coefficients, FACS units such as `AU12_L`, VRM expressions such as `blinkLeft`, or `FACE_*` controls for `BONES`. For video, Face Expression Cleanup changes the values further before keying; `evaluate` measures what the rig shows |
+| `face` | With face capture: `output`, `frames_with_face`, `expressions` (each mapped expression's `peak` and `mean` strength sent to the rig: the detection through the mapping's input range, as a share of its output range) and `unmapped_expressions` (detected at 0.1 or more but with no target). Names are the face output's: ARKit coefficients, FACS units such as `AU12_L`, VRM expressions such as `blinkLeft`, or `FACE_*` controls for `BONES`. For video, Face Expression Cleanup changes the values further before keying; `evaluate` measures what the rig shows |
 | `warnings` | `{code, message}`; branch on `code` |
 
 Warning codes: `DETECTIONS_REJECTED`, `GAPS_FILLED`, `MANUAL_MASK`,
@@ -239,10 +261,10 @@ All but `face_jitter` need the result's retained detections.
 
 | Metric | Good | Investigate | What to change |
 | --- | --- | --- | --- |
-| `expression_fit`: mean difference between each mapped expression's detected value (after gain and clamp) and the value the rig shows | < 0.05 | > 0.15 | High for video with Face Expression Cleanup is expected (it calibrates and smooths); otherwise check the mapping's `gain`, `clamp_max` and shape key slider ranges, and `unmapped_expressions` |
-| `blink_recall`: share of detected blinks that close the rig's eye to at least 0.8 | 1.0 | < 0.8 | Keep `FACE_CORRECTION.preserve_blinks` on; lower `face_smoothing`; raise the blink mapping's `gain` |
+| `expression_fit`: mean difference between each mapped expression's strength (detection through the input range) and the strength the rig shows (its value through the output range) | < 0.05 | > 0.15 | High for video with Face Expression Cleanup is expected (it calibrates and smooths); otherwise check that `output_full` fits the shape key's slider range, and `unmapped_expressions` |
+| `blink_recall`: share of detected blinks that close the rig's eye to at least 0.8 | 1.0 | < 0.8 | Keep `FACE_CORRECTION.preserve_blinks` on; lower `face_smoothing`; lower the blink mapping's `input_full` |
 | `face_jitter`: RMS distance of face values from the midpoint of their neighbours in time | < 0.03 | > 0.08 | Enable `FACE_CORRECTION.smooth_face`, raise `face_smoothing` or `face_deadzone` |
-| `asymmetry`: mean left/right difference on the rig where the detection was symmetric | < 0.05 | > 0.1 | Check the left/right mapping and `mirror`; a rig whose left and right keys differ in strength needs per-side `gain` |
+| `asymmetry`: mean left/right difference on the rig where the detection was symmetric | < 0.05 | > 0.1 | Check the left/right mapping and `mirror`; a rig whose left and right keys differ in strength needs per-side `output_full` |
 
 `foot_contact_ratio`, `penetration_frames` and `max_root_speed_m_per_s` add
 context. `worst_frames` holds up to five timeline frames per problem.

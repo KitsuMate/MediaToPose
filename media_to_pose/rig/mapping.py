@@ -20,8 +20,14 @@ from ..core.constants import (
     SHAPE_SCHEMES,
     VRM_EXPRESSIONS,
 )
+from .face_defaults import (
+    GAZE_DEGREES,
+    RANGES_VERSION,
+    apply_default_ranges,
+    has_ranges,
+    migrate_ranges,
+)
 from .face_schemes import (
-    SIGNED_FACE_CONTROLS,
     _facs_aliases,
     associated_meshes,
     find_shape_targets,
@@ -67,8 +73,12 @@ def _add_entry(config, section: str, role: Sequence) -> None:
         entry.target_kind = "SHAPE_KEY" if section == "SHAPES" else "BONE"
         if section == "SHAPES":
             entry.shape_scheme = semantic_id.split("_", 1)[0]
-        elif section == "FACE_RIG" and semantic_id in SIGNED_FACE_CONTROLS:
-            entry.clamp_min = -1.0
+        # Shape keys and gaze have fixed defaults; face bone ranges depend on
+        # the channel and the face size, so they are filled in once the
+        # entry has a target (see ensure_face_ranges).
+        if semantic_id in {"EYE_L", "EYE_R"}:
+            entry.output_full, entry.output_negative = GAZE_DEGREES, -GAZE_DEGREES
+        entry.ranges_version = -1 if section == "FACE_RIG" else RANGES_VERSION
         entry.channel_mode = "VALUE" if section == "SHAPES" else "AUTO"
         entry.status = "MISSING" if required else "OPTIONAL"
         entry.source = "NONE"
@@ -109,9 +119,24 @@ def ensure_mapping_entries(armature: bpy.types.Object) -> None:
             entry.section = section
             entry.side = side_from_role(entry.semantic_id)
             entry.required = required
+    ensure_face_ranges(armature)
     from ..postprocess import ensure_module_configs
 
     ensure_module_configs(config)
+
+
+def ensure_face_ranges(armature: bpy.types.Object) -> None:
+    """Migrate 0.2.0 face mappings and fill in pending face bone ranges."""
+    config = armature.mtp_rig_config
+    entries = mapping_by_id(config)
+    with suppress_manual_locks():
+        for entry in config.mappings:
+            if not has_ranges(entry) or entry.ranges_version == RANGES_VERSION:
+                continue
+            if entry.ranges_version == 0:
+                migrate_ranges(armature, entries, entry)
+            elif entry.target_name:
+                apply_default_ranges(armature, entries, entry)
 
 
 def mapping_by_id(config) -> dict[str, object]:
@@ -439,6 +464,19 @@ def auto_map(
                 force=force_profile,
             )
 
+    # Mapped face controls and eyes get ranges for their channel and the
+    # face's size; mappings the user edited keep theirs.
+    entries = mapping_by_id(config)
+    with suppress_manual_locks():
+        for entry in config.mappings:
+            if (
+                has_ranges(entry)
+                and entry.section != "SHAPES"
+                and entry.target_name
+                and entry.source in {"PROFILE", "HEURISTIC"}
+                and not entry.manual_lock
+            ):
+                apply_default_ranges(armature, entries, entry)
     validate_mapping(armature, settings=settings)
     from ..postprocess import validate_modules
 
@@ -639,6 +677,12 @@ def validate_mapping(
                     "Shape-key datablock is linked or read-only: "
                     + ", ".join(read_only[:3])
                 )
+        if (
+            not control_warning
+            and has_ranges(entry)
+            and abs(entry.output_full - entry.output_zero) < 1.0e-9
+        ):
+            control_warning = "Output range is empty; the target will not move"
         if not entry.target_name:
             entry.status = "MISSING" if entry.required else "OPTIONAL"
             entry.message = (

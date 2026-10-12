@@ -97,7 +97,7 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_required_cleanup_modules_and_optional_rohm_are_configured(self) -> None:
         constants = importlib.import_module(f"{self.addon.__name__}.core.constants")
         identifiers = [item[0] for item in self.post.POST_PROCESSING_MODULES]
-        self.assertEqual(constants.SCHEMA_VERSION, 18)
+        self.assertEqual(constants.SCHEMA_VERSION, 19)
         self.assertIn("SPINE_CORRECTION", identifiers)
         self.assertNotIn("SPINE_RECONSTRUCTION", identifiers)
         self.assertFalse(self.post.POST_PROCESSING_DEFAULT_ENABLED["SPINE_CORRECTION"])

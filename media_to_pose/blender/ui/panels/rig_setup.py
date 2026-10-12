@@ -7,6 +7,7 @@ from bpy.types import Panel, UIList
 
 from ....core.constants import SHAPE_SCHEMES
 from ....core.coordinator import COORDINATOR
+from ....rig.face_defaults import EYES, is_signed
 from ....rig.profiles.common import PROFILE_LABELS, detect_profile, profile_label
 from ...operators.mapping import active_entry, active_mapping_section
 from ..widgets import (
@@ -264,6 +265,38 @@ def _draw_fk_switches(layout, armature):
             )
 
 
+def _face_units(entry) -> str:
+    if entry.channel_mode == "LOCATION":
+        return "metres along the axis"
+    if entry.channel_mode == "CUSTOM_PROPERTY":
+        return "property value"
+    return "degrees about the axis"
+
+
+def _draw_face_ranges(layout, entry, units: str) -> None:
+    """Input range (detected values) and output range (target units)."""
+    column = layout.column(align=True)
+    column.label(text="Detected")
+    row = column.row(align=True)
+    row.prop(entry, "input_zero", text="Rest")
+    row.prop(entry, "input_full", text="Full")
+    column.label(text=f"Output ({units})")
+    row = column.row(align=True)
+    row.prop(entry, "output_zero", text="Rest")
+    row.prop(entry, "output_full", text="Full")
+    if is_signed(entry.semantic_id):
+        column.prop(entry, "output_negative", text="Negative Full")
+    row = column.row(align=True)
+    if entry.semantic_id not in EYES:
+        row.operator("mtp.set_face_range_from_pose", icon="POSE_HLT").side = "FULL"
+        if is_signed(entry.semantic_id):
+            negative = row.operator(
+                "mtp.set_face_range_from_pose", text="Negative from Pose"
+            )
+            negative.side = "NEGATIVE"
+    row.operator("mtp.reset_face_ranges", icon="LOOP_BACK")
+
+
 def _draw_compact_mapping_editor(layout, armature, entry):
     box = layout.box()
     header = box.row(align=True)
@@ -290,9 +323,7 @@ def _draw_compact_mapping_editor(layout, armature, entry):
         row = box.row(align=True)
         row.operator("mtp.use_active_shape_key", icon="EYEDROPPER")
         row.operator("mtp.select_mapping_target", icon="RESTRICT_SELECT_OFF")
-        row = box.row(align=True)
-        row.prop(entry, "gain")
-        row.prop(entry, "offset")
+        _draw_face_ranges(box, entry, "key value")
         _draw_shape_overrides(box, entry)
     else:
         if entry.section == "FACE_RIG":
@@ -307,6 +338,9 @@ def _draw_compact_mapping_editor(layout, armature, entry):
             row.prop(entry, "axis")
             if entry.channel_mode == "CUSTOM_PROPERTY":
                 box.prop(entry, "property_name")
+            _draw_face_ranges(box, entry, _face_units(entry))
+        elif entry.semantic_id in EYES:
+            _draw_face_ranges(box, entry, "degrees of gaze")
         box.prop(entry, "influence")
     box.prop(entry, "correction_euler")
     details = box.row(align=True)

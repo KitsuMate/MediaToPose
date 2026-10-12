@@ -2,9 +2,12 @@
 
 ``expression_values`` names the values one face output drives: ARKit
 coefficients, FACS action units, VRM expressions, or the ``FACE_*`` controls
-for bone output. ``mapped_expressions`` applies the mapping's gain and clamp
-and lists the expressions with no target; ``FaceValueReader`` reads the
-same values back from the posed rig, so the two can be compared.
+for bone output. ``mapped_expressions`` gives how strongly each mapped
+target should show its expression, through the mapping's input range, and
+lists the expressions with no target; ``FaceValueReader`` reads the same
+strengths back from the posed rig through the output range, so the two can
+be compared whatever the targets' units. Strengths are shares of the
+mapped range: 0 to 1, or -1 to 1 for signed controls.
 """
 
 from __future__ import annotations
@@ -14,15 +17,14 @@ import math
 from mathutils import Vector
 
 from ...core.constants import SHAPE_SCHEMES
+from ...core.face_ranges import share_of_output, strength
 from ...core.requests import FaceOutput
+from ...rig.face_defaults import RANGE_FIELDS, is_signed
 from ...rig.face_schemes import matching_shape_blocks
 from ...rig.face_space import face_axis, face_frame, gaze_tracker
 from .common import _mapped_bone
 from .face import (
-    DEFAULT_FACE_CONTROL_TRAVEL,
-    FACE_CONTROL_TRAVEL,
     _axis,
-    _expression_value,
     _face_control_values,
     _finite_float,
     facs_values,
@@ -38,13 +40,12 @@ BLINK_EXPRESSIONS = {
 }
 # Detected values below this are not reported as unmapped.
 UNMAPPED_THRESHOLD = 0.1
-ROTATION_PER_UNIT = math.radians(25.0)
 
 
 def expression_values(
     blendshapes: dict[str, float], face_output: FaceOutput
 ) -> dict[str, float]:
-    """The values ``face_output`` drives, before the mapping's gain and clamp."""
+    """The values ``face_output`` drives, before the mapping's ranges."""
     if face_output == FaceOutput.FACS:
         return facs_values(blendshapes)
     if face_output == FaceOutput.VRM:
@@ -65,7 +66,7 @@ def _entry(entries, face_output: FaceOutput, name: str):
 def mapped_expressions(
     entries, blendshapes: dict[str, float], face_output: FaceOutput
 ) -> tuple[dict[str, float], list[str]]:
-    """Values sent to the mapped targets, and the expressions with no target.
+    """Strength of each mapped target, and the expressions with no target.
 
     An expression is unmapped only when it was detected (at least
     ``UNMAPPED_THRESHOLD``), so a rig without, say, a tongue key is not
@@ -79,7 +80,7 @@ def mapped_expressions(
             if abs(raw) >= UNMAPPED_THRESHOLD:
                 unmapped.append(name)
             continue
-        applied[name] = _expression_value(entry, raw)
+        applied[name] = strength(entry, raw, signed=is_signed(entry.semantic_id))
     return applied, sorted(unmapped)
 
 
@@ -105,25 +106,29 @@ def _scheme_entry_names(entries, face_output: FaceOutput) -> list[str]:
     )
 
 
-def _bone_value(bone, entry, space) -> float:
+def bone_output(bone, entry, space) -> float:
+    """What a face bone control shows now, in its output units.
+
+    Metres along the face-space axis, degrees about the mapped axis, or the
+    custom property's value: the inverse of what bone output applies.
+    """
     if entry.channel_mode == "CUSTOM_PROPERTY" and entry.property_name:
         return _finite_float(bone.get(entry.property_name, 0.0))
     if entry.channel_mode == "LOCATION":
         offset = bone.bone.matrix_local.to_3x3() @ Vector(bone.location)
-        travel = FACE_CONTROL_TRAVEL.get(entry.semantic_id, DEFAULT_FACE_CONTROL_TRAVEL)
-        return offset.dot(face_axis(space, entry.axis)) / (travel * space.scale)
+        return offset.dot(face_axis(space, entry.axis))
     rotation = bone.matrix_basis.to_quaternion()
     axis, angle = rotation.to_axis_angle()
-    return angle * Vector(axis).dot(_axis(entry.axis)) / ROTATION_PER_UNIT
+    return math.degrees(angle * Vector(axis).dot(_axis(entry.axis)))
 
 
 class FaceValueReader:
     """Read face values back from the rig as it is posed, frame after frame.
 
-    Shape keys give their value (the largest when several meshes carry the
-    key); face bones give their offset along the mapped axis as a share of
-    the control's travel, the inverse of what bone output applies. Targets
-    are looked up once.
+    Each target's value (a shape key's, the largest when several meshes
+    carry the key; a face bone's offset or angle along the mapped axis) is
+    turned into a strength through the mapping's output range. Targets are
+    looked up once.
     """
 
     def __init__(self, armature, entries, face_output: FaceOutput):
@@ -149,19 +154,24 @@ class FaceValueReader:
                     block for _obj, block in matching_shape_blocks(armature, entry)
                 ]
                 if blocks:
-                    self.blocks[name] = blocks
+                    self.blocks[name] = (blocks, entry)
 
     def read(self) -> dict[str, float]:
         values = {
-            name: float(max(block.value for block in blocks))
-            for name, blocks in self.blocks.items()
+            name: share_of_output(entry, max(block.value for block in blocks))
+            for name, (blocks, entry) in self.blocks.items()
         }
         for name, (bone, entry) in self.bones.items():
-            values[name] = float(_bone_value(bone, entry, self.space))
+            values[name] = share_of_output(entry, bone_output(bone, entry, self.space))
         return values
 
 
 MAPPED_STATUSES = {"VALID", "INFO", "WARNING"}
+
+
+def face_ranges(entry) -> dict[str, float]:
+    """A mapping's input and output ranges, rounded for JSON."""
+    return {name: round(float(getattr(entry, name)), 6) for name in RANGE_FIELDS}
 
 
 def _vector(value) -> list[float]:
@@ -208,6 +218,7 @@ def describe_face_rig(armature, config, entries) -> dict:
                 "bone": entry.target_name,
                 "channel": entry.channel_mode,
                 "axis": entry.axis,
+                "ranges": face_ranges(entry),
             }
         else:
             unmapped_controls.append(entry.semantic_id)
@@ -241,7 +252,9 @@ __all__ = [
     "BLINK_EXPRESSIONS",
     "UNMAPPED_THRESHOLD",
     "FaceValueReader",
+    "bone_output",
     "describe_face_rig",
+    "face_ranges",
     "expression_values",
     "face_value_names",
     "mapped_expressions",

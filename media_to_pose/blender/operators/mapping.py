@@ -13,6 +13,7 @@ from bpy_extras.io_utils import ExportHelper, ImportHelper
 from ...core.constants import SHAPE_SCHEMES
 from ...core.coordinator import COORDINATOR
 from ...rig import mapping
+from ...rig.face_defaults import RANGE_FIELDS
 from ...rig.face_schemes import (
     associated_meshes,
     matching_shape_blocks,
@@ -646,8 +647,9 @@ class MTP_OT_mirror_mapping(_IdleMutationMixin, Operator):
                 target.target_kind = source.target_kind
                 target.channel_mode = source.channel_mode
                 target.axis = source.axis
-                target.gain = source.gain
-                target.offset = source.offset
+                for name in RANGE_FIELDS:
+                    setattr(target, name, getattr(source, name))
+                target.ranges_version = source.ranges_version
                 correction = source.correction_euler
                 target.correction_euler = (
                     -correction[0],

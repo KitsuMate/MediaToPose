@@ -4,9 +4,10 @@
 (see ``retarget.solve.face_values``) and, given the detections, compares
 them with what the detector saw:
 
-- ``expression_fit``: mean absolute difference between the value each mapped
-  expression should have (detection after the mapping's gain and clamp) and
-  the value the rig shows;
+- ``expression_fit``: mean absolute difference between the strength each
+  mapped expression should have (the detection through the mapping's input
+  range) and the strength the rig shows (its value through the output
+  range);
 - ``blink_recall``: share of detected blinks that close the rig's eye to at
   least ``BLINK_CLOSED``;
 - ``face_jitter``: high-pass energy of the rig's face values, the distance

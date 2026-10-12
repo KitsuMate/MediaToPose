@@ -7,6 +7,8 @@ import math
 import bpy
 from mathutils import Quaternion, Vector
 
+from ...core.face_ranges import map_value
+from ...rig.face_defaults import is_signed
 from ...rig.face_schemes import matching_shape_blocks
 from ...rig.face_space import (
     face_axis,
@@ -27,11 +29,12 @@ def _finite_float(value, default: float = 0.0) -> float:
 
 
 def _expression_value(entry, raw_value: float) -> float:
-    value = (_finite_float(raw_value) - entry.offset) * entry.gain
-    if entry.invert:
-        value = entry.clamp_max - value
-    value *= entry.influence
-    return min(max(value, entry.clamp_min), entry.clamp_max)
+    """The target value for a detected value, through the mapping's ranges.
+
+    In the target's units: shape key value, metres, degrees or property
+    value (see ``core/face_ranges.py``).
+    """
+    return map_value(entry, raw_value, signed=is_signed(entry.semantic_id))
 
 
 def facs_values(blendshapes: dict[str, float]) -> dict[str, float]:
@@ -167,29 +170,6 @@ def _apply_shapes(armature, entries, frame, scheme: str, target_pose: TargetPose
     return changed
 
 
-# Travel of a location-driven face control at full strength, as a fraction
-# of the distance between the eyes. Measured on an Auto-Rig Pro face (lids
-# close fully, brows and mouth corners move clearly without breaking).
-FACE_CONTROL_TRAVEL = {
-    "FACE_JAW_OPEN": 0.55,
-    "FACE_JAW_SIDE": 0.20,
-    "FACE_LID_L": 0.34,
-    "FACE_LID_R": 0.34,
-    "FACE_BROW_INNER": 0.17,
-    "FACE_BROW_OUTER_L": 0.17,
-    "FACE_BROW_OUTER_R": 0.17,
-    "FACE_CHEEK_L": 0.10,
-    "FACE_CHEEK_R": 0.10,
-    "FACE_MOUTH_CORNER_L": 0.17,
-    "FACE_MOUTH_CORNER_R": 0.17,
-    "FACE_LIP_TOP": 0.05,
-    "FACE_LIP_BOTTOM": 0.05,
-}
-DEFAULT_FACE_CONTROL_TRAVEL = 0.12
-# Eye rotation for a gaze coefficient of 1.0.
-GAZE_ANGLE = math.radians(18.0)
-
-
 def _axis(axis_name: str) -> Vector:
     sign = -1.0 if axis_name.startswith("-") else 1.0
     return {
@@ -206,14 +186,6 @@ def _secondary_axis(primary: Vector, preferred: Vector) -> Vector:
         fallback = Vector((1.0, 0.0, 0.0))
         secondary = fallback - primary * fallback.dot(primary)
     return secondary.normalized()
-
-
-def _signed_face_value(entry, value: float) -> float:
-    """Apply mapping calibration without unsigned expression clamping."""
-    result = (_finite_float(value) - entry.offset) * entry.gain
-    if entry.invert:
-        result = -result
-    return result * entry.influence
 
 
 # Upper lids follow the eyes: they drop a little when looking down and lift
@@ -274,8 +246,8 @@ def _apply_eye_gaze(
 ) -> set[bpy.types.PoseBone]:
     """Point the eyes: rotate eye bones, or move look-at targets.
 
-    Directions are in face space, so the mapping's axis only matters for
-    its sign through gain and invert.
+    Directions are in face space; the mapping's output range is the gaze
+    angle in degrees at full.
     """
     changed = set()
     space = face_frame(armature, entries)
@@ -285,8 +257,9 @@ def _apply_eye_gaze(
         if not entry or not bone:
             continue
         horizontal, vertical = _eye_gaze(frame.blendshapes, side)
-        yaw = _signed_face_value(entry, horizontal) * GAZE_ANGLE
-        pitch = _signed_face_value(entry, vertical) * GAZE_ANGLE
+        # The ranges give the gaze angle in degrees.
+        yaw = math.radians(_expression_value(entry, horizontal))
+        pitch = math.radians(_expression_value(entry, vertical))
         if entry.channel_mode == "LOCATION":
             distance = gaze_pivot_distance(armature, bone, space)
             offset = (
@@ -341,7 +314,7 @@ def _apply_face_controls(
         rotation = Quaternion()
         correction = Vector((0.0, 0.0, 0.0))
         for entry, value in controls:
-            rotation @= Quaternion(_axis(entry.axis), value * math.radians(25.0))
+            rotation @= Quaternion(_axis(entry.axis), math.radians(value))
             correction += Vector(entry.correction_euler)
         target_pose.set_basis_rotation(
             controls[0][0].semantic_id,
@@ -355,10 +328,8 @@ def _apply_face_controls(
     for bone, controls in location_groups.items():
         offset = Vector((0.0, 0.0, 0.0))
         for entry, value in controls:
-            travel = FACE_CONTROL_TRAVEL.get(
-                entry.semantic_id, DEFAULT_FACE_CONTROL_TRAVEL
-            )
-            offset += face_axis(space, entry.axis) * (value * travel * space.scale)
+            # The ranges give metres along the face-space axis.
+            offset += face_axis(space, entry.axis) * value
         target_pose.set_location(
             controls[0][0].semantic_id,
             bone,

@@ -65,10 +65,11 @@ def part_confidence(frame: CanonicalFrame) -> dict[str, float]:
 
 
 class FaceSummary:
-    """Per capture: the value each mapped expression was sent, and what had
-    no target.
+    """Per capture: the strength each mapped expression was sent, and what
+    had no target.
 
-    Values are after the mapping's gain and clamp, from the detections; for
+    Strengths are the detections through the mapping's input range, as a
+    share of its output range (0 to 1, -1 to 1 for signed controls); for
     video, Face Expression Cleanup changes them further before they are
     keyed, and ``evaluate`` measures what the rig shows.
     """

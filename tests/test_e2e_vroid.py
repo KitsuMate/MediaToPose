@@ -290,13 +290,13 @@ class VroidFixtureTests(unittest.TestCase):
             "PELVIS"
         ]
         frozen_entry = first.rig_plan.entries["PELVIS"]
-        original_gain = live_entry.gain
-        live_entry.gain = original_gain + 0.25
+        original_value = live_entry.input_full
+        live_entry.input_full = original_value + 0.25
         try:
-            self.assertEqual(frozen_entry.gain, original_gain)
-            self.assertNotEqual(frozen_entry.gain, live_entry.gain)
+            self.assertEqual(frozen_entry.input_full, original_value)
+            self.assertNotEqual(frozen_entry.input_full, live_entry.input_full)
         finally:
-            live_entry.gain = original_gain
+            live_entry.input_full = original_value
         first.commit(scene_context().update)
         self.assertEqual(first.commit_dependency_updates, 1)
 

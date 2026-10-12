@@ -15,7 +15,7 @@ def extension_version() -> str:
         return str(tomllib.load(stream)["version"])
 
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 CAPTURE_CONFIDENCE = 0.35
 PROFILE_AUTO = "AUTO"
 PROFILE_ARP = "AUTO_RIG_PRO"

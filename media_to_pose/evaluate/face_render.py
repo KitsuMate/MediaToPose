@@ -2,7 +2,8 @@
 
 The source is cropped to the detected face, the camera looks the rig's face
 in the eye, and a bar chart compares the strongest expressions as detected
-(after the mapping's gain and clamp) with what the rig shows.
+(through the mapping's input range) with what the rig shows (through its
+output range), both as shares of the mapped range.
 """
 
 from __future__ import annotations

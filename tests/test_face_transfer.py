@@ -198,6 +198,110 @@ class FaceTransferTests(unittest.TestCase):
         self.assertAlmostEqual(down, -share, delta=0.3 * share)
         self.assertAlmostEqual(up, share, delta=0.3 * share)
 
+    def _entry(self, semantic_id: str):
+        entry = self.addon.rig.mapping.mapping_by_id(self.rig.mtp_rig_config)[
+            semantic_id
+        ]
+        saved = {
+            name: getattr(entry, name)
+            for name in (*self.addon.rig.face_defaults.RANGE_FIELDS, "ranges_version")
+        }
+        saved.update(source=entry.source, manual_lock=entry.manual_lock)
+
+        def restore() -> None:
+            with self.addon.rig.locks.suppress_manual_locks():
+                for name, value in saved.items():
+                    setattr(entry, name, value)
+
+        self.addCleanup(restore)
+        return entry
+
+    def test_shape_key_input_range_closes_a_weak_blink(self) -> None:
+        entry = self._entry("ARKIT_eyeBlinkLeft")
+        entry.input_full = 0.8
+        self._apply({"eyeBlinkLeft": 0.8}, "ARKIT")
+        block = bpy.data.objects["FaceFX"].data.shape_keys.key_blocks[entry.target_name]
+        self.assertAlmostEqual(block.value, 1.0, places=4)
+        # Editing a range is a manual edit: auto-mapping keeps it.
+        self.assertTrue(entry.manual_lock)
+        entry.output_full = 0.5
+        self._apply({"eyeBlinkLeft": 0.8}, "ARKIT")
+        self.assertAlmostEqual(block.value, 0.5, places=4)
+
+    def test_bone_output_range_is_in_metres(self) -> None:
+        entry = self._entry("FACE_LID_L")
+        self.assertEqual(entry.ranges_version, 1)
+        entry.output_full = 0.012
+        self._apply({"eyeBlinkLeft": 1.0}, "BONES")
+        self.assertAlmostEqual(
+            self._world_offset("c_eyelid_top.l").z, -0.012, delta=1e-4
+        )
+
+    def test_set_full_from_pose_reads_the_control(self) -> None:
+        entry = self._entry("FACE_JAW_OPEN")
+        config = self.rig.mtp_rig_config
+        index = next(
+            i
+            for i, item in enumerate(config.mappings)
+            if item.semantic_id == "FACE_JAW_OPEN"
+        )
+        saved_index = config.active_mapping_index
+        self.addCleanup(setattr, config, "active_mapping_index", saved_index)
+        config.active_mapping_index = index
+        bpy.context.scene.mtp_settings.target_armature = self.rig
+        jaw = self.rig.pose.bones["c_jawbone.x"]
+        space = self.addon.rig.face_space.face_frame(self.rig, self.entries)
+        jaw.location = self.addon.rig.face_space.to_bone(jaw, space.up * -0.02)
+        result = bpy.ops.mtp.set_face_range_from_pose(side="FULL")
+        self.assertEqual(result, {"FINISHED"})
+        # The ARP jaw axis is -Z in face space, so 2 cm down reads +0.02.
+        self.assertAlmostEqual(entry.output_full, 0.02, delta=1e-5)
+        self.assertTrue(entry.manual_lock)
+        bpy.ops.mtp.reset_face_ranges()
+        scale = space.scale
+        self.assertAlmostEqual(entry.output_full, 0.55 * scale, delta=1e-6)
+
+    def test_mappings_from_0_2_0_are_migrated(self) -> None:
+        entry = self._entry("ARKIT_mouthSmileLeft")
+        lid = self._entry("FACE_LID_L")
+        scale = self.addon.rig.face_space.face_frame(self.rig, self.entries).scale
+        with self.addon.rig.locks.suppress_manual_locks():
+            for item in (entry, lid):
+                item.ranges_version = 0
+            entry["gain"] = 2.0
+            entry["offset"] = 0.1
+            lid["clamp_max"] = 0.5
+        self.addCleanup(lambda: [entry.pop(k, None) for k in ("gain", "offset")])
+        self.addCleanup(lambda: lid.pop("clamp_max", None))
+        self.addon.rig.mapping.ensure_mapping_entries(self.rig)
+        self.assertEqual(entry.ranges_version, 1)
+        self.assertAlmostEqual(entry.input_zero, 0.1)
+        self.assertAlmostEqual(entry.input_full, 0.6)
+        self.assertAlmostEqual(lid.input_full, 0.5)
+        self.assertAlmostEqual(lid.output_full, 0.5 * 0.34 * scale, delta=1e-6)
+
+    def test_schema_18_presets_are_migrated(self) -> None:
+        presets = self.addon.rig.presets
+        payload = presets.serialize_config(self.rig)
+        self.assertEqual(payload["schema_version"], 19)
+        legacy = json.loads(json.dumps(payload))
+        legacy["schema_version"] = 18
+        for item in legacy["mappings"]:
+            for name in self.addon.rig.face_defaults.RANGE_FIELDS:
+                item.pop(name, None)
+            item.update(
+                gain=1.0, offset=0.0, clamp_min=0.0, clamp_max=1.0, invert=False
+            )
+            if item["semantic_id"] == "ARKIT_jawOpen":
+                item["gain"] = 4.0
+        entry = self._entry("ARKIT_jawOpen")
+        lid = self._entry("FACE_LID_L")
+        scale = self.addon.rig.face_space.face_frame(self.rig, self.entries).scale
+        self.addCleanup(presets.load_config, self.rig, payload)
+        presets.load_config(self.rig, legacy)
+        self.assertAlmostEqual(entry.input_full, 0.25)
+        self.assertAlmostEqual(lid.output_full, 0.34 * scale, delta=1e-6)
+
     def test_eye_gaze_also_drives_eye_bones_with_shape_keys(self) -> None:
         self._apply({"eyeLookOutLeft": 1.0, "eyeLookInRight": 1.0}, "ARKIT")
         target = self._world_offset("c_eye_target.l")
@@ -210,7 +314,9 @@ class FaceTransferTests(unittest.TestCase):
         distance = (
             self.rig.data.bones["c_eye_target.l"].head_local - tracker.bone.head_local
         ).length
-        expected = distance * math.tan(self.face.GAZE_ANGLE)
+        expected = distance * math.tan(
+            math.radians(self.addon.rig.face_defaults.GAZE_DEGREES)
+        )
         self.assertAlmostEqual(target.x, expected, delta=0.1 * expected)
 
 

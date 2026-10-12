@@ -107,7 +107,7 @@ class SolvePlanTests(unittest.TestCase):
         )
         self.assertIs(first, again)
         changed = dict(ENTRIES)
-        changed["HAND_L"] = _entry("Hand.L", gain=2.0)
+        changed["HAND_L"] = _entry("Hand.L", input_full=2.0)
         rebuilt = rig_planning.compile_rig_solve_plan(
             armature, changed, lambda: Matrix.Identity(3)
         )
