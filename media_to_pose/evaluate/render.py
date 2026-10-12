@@ -192,6 +192,8 @@ def render_comparison(
         "film_transparent": render.film_transparent,
     }
     saved_format = render.image_settings.file_format
+    shading = scene.display.shading
+    saved_color_type = shading.color_type
     saved_camera = scene.camera
     saved_frame = (scene.frame_current, scene.frame_subframe)
     camera = None
@@ -208,6 +210,8 @@ def render_comparison(
         render.resolution_percentage = 100
         render.film_transparent = False
         render.image_settings.file_format = "PNG"
+        # Textures show eyes, irises and mouth interiors.
+        shading.color_type = "TEXTURE"
         with tempfile.TemporaryDirectory(prefix="mtp-compare-") as temporary:
             for timeline_frame, source_frame, detected in rows:
                 source = _source_image(
@@ -247,6 +251,7 @@ def render_comparison(
         for name, value in saved.items():
             setattr(render, name, value)
         render.image_settings.file_format = saved_format
+        shading.color_type = saved_color_type
         scene.camera = saved_camera
         if camera is not None:
             data = camera.data

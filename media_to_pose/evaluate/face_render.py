@@ -18,6 +18,7 @@ from ..retarget.solve.common import _mapped_bone
 from ..retarget.solve.face import _eye_position, face_frame
 from ..retarget.solve.face_values import FaceValueReader, mapped_expressions
 from ..rig import mapping
+from ..rig.face_schemes import associated_meshes
 
 BAR_COUNT = 10
 # Space around the detected face box, as a share of its size.
@@ -53,33 +54,74 @@ def face_crop(image, frame: CanonicalFrame | None, cv2):
     return image[top:bottom, left:right].copy()
 
 
+def _face_points(armature, center: Vector, radius: float) -> list[Vector]:
+    """Rest vertices of the rig's meshes within ``radius`` of ``center``.
+
+    In armature space; a coarse sample is enough to frame the face.
+    """
+    to_armature = armature.matrix_world.inverted()
+    points = []
+    for mesh in associated_meshes(armature):
+        vertices = mesh.data.vertices
+        step = max(len(vertices) // 4000, 1)
+        transform = to_armature @ mesh.matrix_world
+        for index in range(0, len(vertices), step):
+            point = transform @ vertices[index].co
+            if (point - center).length <= radius:
+                points.append(point)
+    return points
+
+
 def face_camera(scene, armature):
-    """A temporary camera in front of the rig's face, framing the head."""
+    """A temporary camera in front of the rig's face, framing the head.
+
+    The shot is sized from the face mesh around the eyes when there is one
+    (eye bones can sit deep inside the head, close together), else from the
+    eye distance or the head bone.
+    """
     entries = mapping.mapping_by_id(armature.mtp_rig_config)
     space = face_frame(armature, entries)
     world = armature.matrix_world
     eye_left = _mapped_bone(armature, entries, "EYE_L")
     eye_right = _mapped_bone(armature, entries, "EYE_R")
     head = _mapped_bone(armature, entries, "HEAD")
+    head_length = head.bone.length if head is not None else 0.0
     if eye_left is not None and eye_right is not None:
         eyes = (
             _eye_position(armature, eye_left) + _eye_position(armature, eye_right)
         ) * 0.5
-        # The face spans about four eye distances; its middle is below the eyes.
-        center = eyes - space.up * (space.scale * 0.5)
-        size = space.scale * 4.0
     elif head is not None:
-        center = (head.head + head.tail) * 0.5
-        size = max(head.length * 2.0, 0.1)
+        eyes = (head.bone.head_local + head.bone.tail_local) * 0.5
     else:
-        center = Vector()
-        size = 0.3
+        eyes = Vector()
+    reach = max(space.scale * 2.0, head_length * 1.3, 0.05)
+    points = _face_points(armature, eyes, reach * 1.25)
+    if len(points) >= 8:
+        # Extents along the face's own axes.
+        across = [point.dot(space.lateral) for point in points]
+        along = [point.dot(space.up) for point in points]
+        depth = [point.dot(space.forward) for point in points]
+        # The middle of the region's back plane, seen along the face's forward.
+        middle = (
+            space.lateral * (max(across) + min(across)) * 0.5
+            + space.up * (max(along) + min(along)) * 0.5
+            + space.forward * min(depth)
+        )
+        size = max(max(across) - min(across), max(along) - min(along)) * 1.15
+        front = max(depth) - min(depth)
+        center = middle
+    else:
+        center = eyes - space.up * (space.scale * 0.5)
+        size = reach * 2.0
+        front = space.scale
     data = bpy.data.cameras.new("MediaToPose_FaceComparison")
     data.lens = 50.0
     camera = bpy.data.objects.new("MediaToPose_FaceComparison", data)
     scene.collection.objects.link(camera)
     half_angle = math.atan(data.sensor_width / (2.0 * data.lens))
-    distance = (size / 2.0) / math.tan(half_angle)
+    # From the back of the framed region: the face's front sits ``front``
+    # closer, so the whole face width fits at the front plane.
+    distance = (size / 2.0) / math.tan(half_angle) + front
     world_center = world @ center
     forward = (world.to_3x3() @ space.forward).normalized()
     camera.location = world_center + forward * distance * world.median_scale
@@ -118,7 +160,7 @@ class ExpressionBars:
         )[:BAR_COUNT]
         row = (size - 40) / max(len(names), 1)
         label_width = int(size * 0.45)
-        bar_width = size - label_width - 12
+        bar_width = size - label_width - 44
         font = cv2.FONT_HERSHEY_SIMPLEX
         cv2.putText(
             panel,
@@ -137,7 +179,7 @@ class ExpressionBars:
             top = int(30 + index * row)
             cv2.putText(
                 panel,
-                name[:22],
+                name.removeprefix("FACE_")[:20],
                 (6, top + int(row * 0.6)),
                 font,
                 0.4,
@@ -151,12 +193,23 @@ class ExpressionBars:
             ):
                 y = top + int(row * offset)
                 length = int(min(abs(value), 1.0) * bar_width)
+                # Negative values (brows down, mouth corners down) are hollow.
                 cv2.rectangle(
                     panel,
                     (label_width, y),
                     (label_width + max(length, 1), y + max(int(row * 0.3), 2)),
                     color,
-                    -1,
+                    -1 if value >= 0.0 else 1,
+                )
+                cv2.putText(
+                    panel,
+                    f"{value:+.2f}",
+                    (label_width + bar_width + 4, y + max(int(row * 0.3), 2)),
+                    font,
+                    0.33,
+                    color,
+                    1,
+                    cv2.LINE_AA,
                 )
         return panel
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import bpy
+from mathutils import Vector
 
 from tests.blender_test_support import fixture_path, register_addon, scene_context
 
@@ -238,6 +239,38 @@ class VroidExpressionTests(unittest.TestCase):
         self.addon.retarget.apply_frame(
             self.rig, frame, settings, post_process=False, scene_context=scene_context()
         )
+
+    def test_face_camera_frames_the_whole_face_from_outside(self) -> None:
+        from bpy_extras.object_utils import world_to_camera_view
+
+        scene = bpy.context.scene
+        camera = self.addon.evaluate.face_render.face_camera(scene, self.rig)
+        try:
+            bpy.context.view_layer.update()
+            face = bpy.data.objects["Face"]
+            corners = [face.matrix_world @ Vector(c) for c in face.bound_box]
+            view = [world_to_camera_view(scene, camera, c) for c in corners]
+            # VRoid eye bones sit deep in the head; the camera must still be
+            # in front of the face and see all of it.
+            self.assertTrue(all(v.z > 0.0 for v in view))
+            self.assertTrue(all(-0.05 <= v.x <= 1.05 for v in view), view)
+            # Top to bottom: the eyes and the chin (the bounding box also
+            # holds the scalp, which may be cut).
+            chin = min(
+                (face.matrix_world @ vertex.co for vertex in face.data.vertices),
+                key=lambda point: point.z,
+            )
+            eyes = [
+                self.rig.matrix_world @ self.rig.pose.bones[name].head
+                for name in ("J_Adj_L_FaceEye", "J_Adj_R_FaceEye")
+            ]
+            for point in [chin, *eyes]:
+                coordinate = world_to_camera_view(scene, camera, point)
+                self.assertTrue(0.0 <= coordinate.y <= 1.0, (point, coordinate))
+        finally:
+            data = camera.data
+            bpy.data.objects.remove(camera)
+            bpy.data.cameras.remove(data)
 
     def test_every_vrm_expression_is_mapped(self) -> None:
         described = self.addon.api.describe_rig(self.rig.name)
