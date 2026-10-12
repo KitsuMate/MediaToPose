@@ -10,7 +10,7 @@ extend-exclude = [
 [tool.ruff.lint]
 select = [
   "E4", "E7", "E9", "F", "I", "B", "SIM", "PERF", "N",
-  "UP", "RET", "PIE", "PTH", "BLE", "TID252",
+  "UP", "RET", "PIE", "PTH", "BLE", "TID252", "T20",
 ]
 ignore = [
   # Blender's RNA registration convention intentionally uses these names.
@@ -21,6 +21,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["N802", "N806"]
+# Release and integration scripts report to the CI log on stdout.
+"ci/**/*.py" = ["T20"]
 "**/__init__.py" = ["N999"]
 # The error names are part of the public API and read better without a suffix.
 "media_to_pose/core/errors.py" = ["N818"]

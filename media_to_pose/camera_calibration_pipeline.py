@@ -6,7 +6,10 @@ from collections.abc import Mapping
 
 from . import anycalib_backend, camera_calibration
 from .core.errors import Cancelled, MediaError
+from .core.log import get_logger
 from .dependency_bootstrap import import_runtime_dependencies
+
+LOGGER = get_logger(__name__)
 
 
 def _crop_back(value, left: int, top: int, width: int, height: int):
@@ -140,5 +143,5 @@ def resolve(
     except InterruptedError:
         raise
     except Exception as exc:
-        print(f"[Media to Pose] AnyCalib fallback: {type(exc).__name__}: {exc}")
+        LOGGER.warning("AnyCalib fallback: %s: %s", type(exc).__name__, exc)
         return camera_calibration.fallback(width, height)

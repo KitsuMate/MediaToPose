@@ -23,6 +23,7 @@ from .capture_state import (
     face_output_warning,
     mapping_scope_issues,
 )
+from .core.log import get_logger
 from .media_io import probe_media
 from .models import MediaInfo
 from .operation import (
@@ -42,6 +43,8 @@ from .retarget import (
     prepare_limb_ownership,
     validate_limb_switch_interval,
 )
+
+LOGGER = get_logger(__name__)
 
 _CAPTURE_JOBS = {}
 
@@ -478,9 +481,10 @@ class _CaptureTransaction:
             armature.update_tag(refresh={"OBJECT"})
             bpy.context.view_layer.update()
         except (AttributeError, ReferenceError, RuntimeError) as exc:
-            print(
-                "[Media to Pose] Capture rollback could not restore every "
-                f"UI state element: {type(exc).__name__}: {exc}"
+            LOGGER.warning(
+                "Capture rollback could not restore every UI state element: %s: %s",
+                type(exc).__name__,
+                exc,
             )
 
 
@@ -579,9 +583,8 @@ def _remove_worker_temp_file(job) -> None:
     try:
         Path(job.temp_path).unlink()
     except OSError as exc:
-        print(
-            "[Media to Pose] Could not remove temporary capture file "
-            f"{job.temp_path}: {exc}"
+        LOGGER.warning(
+            "Could not remove temporary capture file %s: %s", job.temp_path, exc
         )
     else:
         job.temp_path = ""
@@ -726,17 +729,13 @@ def _worker(
         if writer is not None:
             try:
                 writer.discard()
-            except Exception as cleanup_error:
-                print(
-                    f"[Media to Pose] Detection-cache cleanup failed: {cleanup_error}"
-                )
+            except Exception:
+                LOGGER.exception("Detection-cache cleanup failed")
         if provider is not None:
             try:
                 provider.close()
-            except Exception as cleanup_error:
-                print(
-                    f"[Media to Pose] Capture-provider cleanup failed: {cleanup_error}"
-                )
+            except Exception:
+                LOGGER.exception("Capture-provider cleanup failed")
 
 
 def _read_cache(path):
@@ -1189,7 +1188,7 @@ class MTP_OT_apply_capture(Operator):
             return self._finish(context, cancelled=False)
         except Exception as exc:
             self._pose_iterator = None
-            traceback.print_exc()
+            LOGGER.exception("Capture failed")
             self.report({"ERROR"}, str(exc))
             _set_status(settings, str(exc), "ERROR")
             return self._finish(context, cancelled=True)
@@ -1328,7 +1327,7 @@ class MTP_OT_apply_capture(Operator):
                 return self._finish(context, cancelled=False)
             except Exception as exc:
                 self._sequence_iterator = None
-                traceback.print_exc()
+                LOGGER.exception("Capture failed")
                 self.report({"ERROR"}, str(exc))
                 _set_status(settings, str(exc), "ERROR")
                 return self._finish(context, cancelled=True)
@@ -1409,7 +1408,7 @@ class MTP_OT_apply_capture(Operator):
 
         if kind == "ERROR":
             message, details = payload
-            print(details)
+            LOGGER.error("Capture worker failed: %s\n%s", message, details)
             self.report({"ERROR"}, message)
             _set_status(settings, message, "ERROR")
             return self._finish(context, cancelled=True)
@@ -1483,7 +1482,7 @@ class MTP_OT_apply_capture(Operator):
                 return {"RUNNING_MODAL"}
             raise RuntimeError(f"Unexpected worker result: {kind}")
         except Exception as exc:
-            traceback.print_exc()
+            LOGGER.exception("Capture failed")
             self.report({"ERROR"}, str(exc))
             _set_status(settings, str(exc), "ERROR")
             return self._finish(context, cancelled=True)
@@ -1545,9 +1544,7 @@ class MTP_OT_apply_capture(Operator):
                 else:
                     Path(path).unlink()
             except (OSError, ValueError):
-                print(
-                    f"[Media to Pose] Could not remove temporary capture data: {path}"
-                )
+                LOGGER.warning("Could not remove temporary capture data: %s", path)
         return {"CANCELLED"} if cancelled else {"FINISHED"}
 
     def cancel(self, context):

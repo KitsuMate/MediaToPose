@@ -20,8 +20,11 @@ from . import (
     sam3d_backend,
     ui,
 )
+from .core.log import configure_logging, get_logger
 from .operation import COORDINATOR
 from .rig_planning import clear_rig_solve_plans
+
+LOGGER = get_logger(__name__)
 
 __all__ = [
     "anycalib_ort_runtime",
@@ -90,7 +93,7 @@ def _state_watch_timer():
         if _scene_state_pending:
             _reset_scene_state()
     except (AttributeError, ReferenceError, RuntimeError) as exc:
-        print(f"[Media to Pose] State refresh deferred: {exc}")
+        LOGGER.debug("State refresh deferred: %s", exc)
     return 0.75
 
 
@@ -120,6 +123,7 @@ def _cleanup_previous_registration() -> None:
 
 def register() -> None:
     global _scene_state_pending
+    configure_logging()
     _scene_state_pending = True
     _cleanup_previous_registration()
     registered_modules = []

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import platform
 import queue
@@ -32,6 +33,7 @@ from bpy.types import Operator
 
 from . import sam3d_ort_runtime
 from .constants import CAPTURE_CONFIDENCE, extension_version
+from .core.log import get_logger
 from .operation import (
     COORDINATOR,
     OperationKind,
@@ -41,6 +43,15 @@ from .operation import (
 )
 from .registration import register_classes, unregister_classes
 from .sam3d_state import SAM_JOBS, SamJobSlot
+
+LOGGER = get_logger(__name__)
+_LOG_LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "WARN": logging.WARNING,
+    "ERROR": logging.ERROR,
+}
 
 RUNTIME_MANIFEST_VERSION = 4
 BACKEND_VERSION = RUNTIME_MANIFEST_VERSION
@@ -161,10 +172,7 @@ class BackgroundJob:
             self.log_path = str(path)
         except OSError as exc:
             self.log_path = ""
-            print(
-                "[Media to Pose] Could not initialize install log: "
-                f"{_safe_metadata(exc)}"
-            )
+            LOGGER.warning("Could not initialize install log: %s", _safe_metadata(exc))
 
     def log(self, level: str, message: object) -> None:
         cleaned = re.sub(
@@ -182,15 +190,14 @@ class BackgroundJob:
             if len(self.logs) > 200:
                 del self.logs[:-200]
             log_path = self.log_path
-        print(f"[Media to Pose] {entry}")
+        LOGGER.log(_LOG_LEVELS.get(level.upper(), logging.INFO), "%s", cleaned)
         if log_path:
             try:
                 with Path(log_path).open("a", encoding="utf8") as handle:
                     handle.write(entry + "\n")
             except OSError as exc:
-                print(
-                    "[Media to Pose] Could not append SAM installation log: "
-                    f"{_safe_metadata(exc)}"
+                LOGGER.warning(
+                    "Could not append SAM installation log: %s", _safe_metadata(exc)
                 )
 
     def update(
@@ -1064,18 +1071,16 @@ def _activate_install(job: BackgroundJob, layout: _InstallLayout) -> None:
             {"storage_parent": str(layout.storage_parent.resolve(strict=False))},
         )
     except OSError as exc:
-        print(
-            "[Media to Pose] Model storage preference was not saved: "
-            f"{_safe_metadata(exc)}"
+        LOGGER.warning(
+            "Model storage preference was not saved: %s", _safe_metadata(exc)
         )
     previous = layout.previous_storage_root
     if previous and previous.resolve() != layout.storage_root.resolve():
         try:
             shutil.rmtree(_verified_model_storage_root(previous))
         except OSError as exc:
-            print(
-                "[Media to Pose] Previous model storage was retained: "
-                f"{_safe_metadata(exc)}"
+            LOGGER.warning(
+                "Previous model storage was retained: %s", _safe_metadata(exc)
             )
     job.update(
         1.0,

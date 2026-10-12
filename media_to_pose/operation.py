@@ -17,6 +17,9 @@ from types import MappingProxyType
 from typing import Any
 
 from .core.errors import OperationBusy
+from .core.log import get_logger
+
+LOGGER = get_logger(__name__)
 
 PROCESS_TERMINATE_GRACE_SECONDS = 2.0
 
@@ -348,7 +351,7 @@ class OperationCoordinator:
                 try:
                     getattr(process, "kill", lambda: None)()
                 except OSError as exc:
-                    print(f"[Media to Pose] Could not kill cancelled subprocess: {exc}")
+                    LOGGER.warning("Could not kill cancelled subprocess: %s", exc)
 
         threading.Thread(
             target=escalate,
@@ -514,10 +517,7 @@ class OperationCoordinator:
                 try:
                     process.kill()
                 except OSError as exc:
-                    print(
-                        "[Media to Pose] Could not kill subprocess during "
-                        f"shutdown: {exc}"
-                    )
+                    LOGGER.warning("Could not kill subprocess during shutdown: %s", exc)
         self.finish(token, OperationState.CANCELLED, "Cancelled during shutdown")
         return self.release(token)
 

@@ -25,6 +25,7 @@ import bpy
 
 from .constants import CAPTURE_CONFIDENCE
 from .core.errors import InvalidRequest, MediaError
+from .core.log import get_logger
 from .models import (
     CameraIntrinsicsObservation,
     CanonicalFrame,
@@ -33,6 +34,8 @@ from .models import (
     MediaInfo,
     RootMotionObservation,
 )
+
+LOGGER = get_logger(__name__)
 
 CACHE_SCHEMA_VERSION = 7
 CHUNK_SIZE = 120
@@ -485,7 +488,7 @@ def _model_identity(model_directory: str) -> tuple[tuple[str, int, int], ...]:
                 stat = path.stat()
                 result.append((path.name, stat.st_size, stat.st_mtime_ns))
     except OSError as exc:
-        print(f"[Media to Pose] Could not fingerprint bundled model files: {exc}")
+        LOGGER.warning("Could not fingerprint bundled model files: %s", exc)
     return tuple(result)
 
 
