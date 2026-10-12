@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import numpy as np
+
 from media_to_pose import media_io
 
 

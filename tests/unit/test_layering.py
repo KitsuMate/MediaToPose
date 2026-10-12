@@ -28,12 +28,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE_ROOT = (
-    ROOT / "media_to_pose"
-    if (ROOT / "media_to_pose" / "__init__.py").exists()
-    else ROOT
-)
-NOT_PACKAGE = {"wheels", "assets", "tests", "ci", "docs", "dist", ".workspace"}
+PACKAGE_ROOT = ROOT / "media_to_pose"
+NOT_PACKAGE = {"wheels", "assets"}
 
 LEVELS = {
     "core": 0,

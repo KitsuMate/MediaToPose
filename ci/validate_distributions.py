@@ -20,6 +20,7 @@ from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "media_to_pose"
 BASELINE_PATH = ROOT / "tests" / "fixtures" / "benchmarks" / "distribution_0_1_0.json"
 ARCHIVE_TARGET_BYTES = 300 * 1024 * 1024
 ARCHIVE_HARD_MAX_BYTES = int(1.9 * 1024**3)
@@ -420,7 +421,7 @@ def validate_archive(path: Path, platform: str, source_manifest: dict) -> dict:
                 raise AssertionError(
                     f"{path.name}: incompatible wheel for {platform}: {filename}"
                 )
-            source_wheel = ROOT / "wheels" / filename
+            source_wheel = SOURCE / "wheels" / filename
             if _sha256(archive.read(member)) != _sha256(source_wheel.read_bytes()):
                 raise AssertionError(f"{path.name}: wheel changed during packaging")
         dependencies = _validate_dependency_closure(
@@ -435,7 +436,7 @@ def validate_archive(path: Path, platform: str, source_manifest: dict) -> dict:
             if name != "blender_manifest.toml" and not name.startswith("wheels/")
         }
         for name, archived_hash in source_hashes.items():
-            source = ROOT / PurePosixPath(name)
+            source = SOURCE / PurePosixPath(name)
             if not source.is_file():
                 raise AssertionError(
                     f"{path.name}: release source no longer exists: {name}"
@@ -504,7 +505,7 @@ def main() -> None:
         help="Validate only this platform (repeatable)",
     )
     arguments = parser.parse_args()
-    with (ROOT / "blender_manifest.toml").open("rb") as stream:
+    with (SOURCE / "blender_manifest.toml").open("rb") as stream:
         manifest = tomllib.load(stream)
     version = str(manifest["version"])
     reports = []

@@ -12,8 +12,9 @@ from pathlib import Path
 from types import ModuleType
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "media_to_pose"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-SOURCE_PACKAGE_NAME = "media_to_pose_test"
+SOURCE_PACKAGE_NAME = "media_to_pose"
 INSTALLED_PACKAGE_NAME = "bl_ext.user_default.media_to_pose"
 PACKAGE_NAME = (
     INSTALLED_PACKAGE_NAME
@@ -36,8 +37,8 @@ def load_addon() -> ModuleType:
         return importlib.import_module(package_name)
     spec = importlib.util.spec_from_file_location(
         package_name,
-        ROOT / "__init__.py",
-        submodule_search_locations=[str(ROOT)],
+        SOURCE / "__init__.py",
+        submodule_search_locations=[str(SOURCE)],
     )
     if spec is None or spec.loader is None:
         raise RuntimeError("Unable to construct the Media to Pose test package")

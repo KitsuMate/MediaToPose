@@ -4,6 +4,7 @@ import tempfile
 import unittest
 
 import numpy as np
+
 from media_to_pose import sam3d_mhr_runtime as runtime
 
 MhrCameraOutput = runtime.MhrCameraOutput
