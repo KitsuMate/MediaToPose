@@ -12,3 +12,4 @@ htmlcov/
 # The only release-output directory. Release archives are rebuilt artifacts.
 /dist/
 *.zip
+*.blend1

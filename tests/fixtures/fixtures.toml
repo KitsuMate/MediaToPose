@@ -66,14 +66,15 @@ sha256 = "de01aa707fd0bd3c4cc5f5f5f4ec2378e88759d8554daa33d2ec432c197471fb"
 [[fixture]]
 id = "facefx_face_rig"
 path = "rigs/facefx_face.blend"
-purpose = "Face shape keys (prefixed ARKit names) and Auto-Rig Pro face bones"
+purpose = "Face, eyes, brows, lashes, teeth and tongue with prefixed ARKit shape keys on an Auto-Rig Pro face rig"
 media_type = "application/x-blender"
 blender_version = "5.2.0"
-sha256 = "cc0612fd98f3d8b8384456768b55c9dd039ea09b12ec8598a68030880f7680be"
+sha256 = "98c712dfa0e280a93f8af0b19005375f368fd82b84b5545abdf7beda94bc6f87"
 armature_object = "FaceFX.Rig"
 mesh_object = "FaceFX"
-bone_count = 229
-shape_key_count = 202
+mesh_count = 7
+bone_count = 454
+shape_key_count = 639
 source = "Nyx.FaceFX from the maintainer's character scene, rebuilt by rigs/build_facefx_fixture.py"
 
 [[fixture]]
