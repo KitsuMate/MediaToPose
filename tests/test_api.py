@@ -310,6 +310,40 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(code, 0, output)
         self.assertEqual(json.loads(output)["frames"], 10)
 
+    def test_remaining_commands(self) -> None:
+        # Runs after test_capture_command_writes_the_result (alphabetical),
+        # whose capture left detections and a result file behind.
+        result = ROOT / "cli_result.json"
+        detections = ROOT / "cli_detections"
+        sheet = ROOT / "cli_sheet.png"
+        for argv in (
+            ("providers", "--json"),
+            ("models", "--json"),
+            ("auto-map", "--armature", self.armature.name, "--json"),
+            ("export-detections", str(detections), "--json"),
+            ("import-detections", str(detections), "--json"),
+            (
+                "render",
+                "--armature",
+                self.armature.name,
+                "--result",
+                str(result),
+                "--out",
+                str(sheet),
+                "--count",
+                "2",
+                "--size",
+                "96",
+                "--no-meshes",
+                "--json",
+            ),
+        ):
+            with self.subTest(command=argv[0]):
+                code, output = self._run(*argv)
+                self.assertEqual(code, 0, output)
+                self.assertTrue(json.loads(output))
+        self.assertTrue(sheet.is_file())
+
     def test_command_is_registered(self) -> None:
         registration = self.addon.blender.registration
         self.assertIn(registration._CLI_KEY, bpy.app.driver_namespace)
