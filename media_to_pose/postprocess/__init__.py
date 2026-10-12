@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from .base import CorrectionModule, PostProcessingSession, SequenceProcessingContext
 from .config import (
+    apply_module_overrides,
     compile_postprocess_config,
     ensure_module_configs,
     load_module_configs,
     module_config,
+    normalize_module_payload,
     ordered_module_configs,
     reset_module_defaults,
     serialize_module_configs,
@@ -33,12 +35,14 @@ __all__ = [
     "POST_PROCESSING_MODULES",
     "PostProcessingSession",
     "SequenceProcessingContext",
+    "apply_module_overrides",
     "compile_postprocess_config",
     "ensure_module_configs",
     "iter_pipeline",
     "iter_sequence_pipeline",
     "load_module_configs",
     "module_config",
+    "normalize_module_payload",
     "ordered_module_configs",
     "reset_module_defaults",
     "run_pipeline",

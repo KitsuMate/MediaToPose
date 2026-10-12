@@ -9,6 +9,7 @@ from mathutils import Matrix, Vector
 from ..core.cache import media_source as cache_media
 from ..core.cache import store as cache_store
 from ..core.camera import motion_correction as camera_motion_correction
+from ..core.report import record_step
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
 from .samples import (
@@ -25,6 +26,15 @@ from .samples import (
 
 
 def _publish_camera_motion_diagnostics(item, result, track_status: str) -> None:
+    record_step(
+        "CAMERA_MOTION_CORRECTION",
+        track_status=str(track_status),
+        tracked_frames=int(result.tracked_frames),
+        rejected_frames=int(result.rejected_frames),
+        median_inliers=float(result.median_inliers),
+        corrected_intervals=int(result.corrected_intervals),
+        corrected_frames=int(result.corrected_frames),
+    )
     if item is None:
         return
     try:

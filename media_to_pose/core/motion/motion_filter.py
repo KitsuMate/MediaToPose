@@ -129,6 +129,15 @@ def parse_source_frame_ranges(value: str, frame_count: int) -> frozenset[int]:
     return frozenset(selected)
 
 
+def frames_missing_evidence(samples: Sequence[object]) -> frozenset[int]:
+    """Sample indices where any body joint has no usable observation."""
+    return frozenset(
+        index
+        for index, sample in enumerate(samples)
+        if any(_confidence(sample, semantic) <= 0.0 for semantic in SMPLX_SEMANTICS)
+    )
+
+
 def format_source_frame_ranges(indices: Iterable[int]) -> str:
     """Format zero-based source-frame indices as compact 1-based ranges."""
     values = sorted({int(index) + 1 for index in indices if int(index) >= 0})

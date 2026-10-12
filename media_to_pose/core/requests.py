@@ -169,9 +169,16 @@ class CaptureRequest:
     cache_media_info: Any = None
     cache_key: str = ""
     cache_identity: Mapping[str, Any] = field(default_factory=dict)
+    output_mode: OutputMode = OutputMode.NEW_ACTION
+    # Source frames ``[first, end)`` to apply, 0-based; ``None`` applies all.
+    frame_range: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "mode", CaptureMode(self.mode))
+        object.__setattr__(self, "output_mode", OutputMode(self.output_mode))
+        if self.frame_range is not None:
+            first, end = (int(value) for value in self.frame_range)
+            object.__setattr__(self, "frame_range", (first, end))
         object.__setattr__(self, "media_kind", MediaKind(self.media_kind))
         object.__setattr__(self, "face_output", FaceOutput(self.face_output))
         object.__setattr__(

@@ -8,6 +8,7 @@ from mathutils import Quaternion, Vector
 
 from ..core.errors import BackendError
 from ..core.motion import motion_filter
+from ..core.report import record_step
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
 from ..rig import planning as rig_planning
@@ -334,6 +335,13 @@ def _iter_rohm_correction(
             )
             if enabled
         ),
+    )
+    record_step(
+        "ROHM_CORRECTION",
+        corrected_source_frames=stats.corrected_source_frames,
+        pose_repair=bool(correct_pose),
+        root_correction=bool(correct_root),
+        low_rate=bool(stats.low_rate_warning),
     )
     if stats.low_rate_warning:
         _append_bake_warning(

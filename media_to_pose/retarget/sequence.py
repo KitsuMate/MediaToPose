@@ -100,6 +100,8 @@ class _SequenceRun:
         self.frames = frames
         self.settings = settings
         self.start_frame = float(start_frame)
+        frame_range = getattr(settings, "frame_range", None)
+        self.source_frame_offset = int(frame_range[0]) if frame_range else 0
         self.scene_context = scene_context
         self.total_hint = len(frames) if isinstance(frames, Sequence) else 0
         self.state = _sequence_state(armature, scene_context=scene_context)
@@ -436,6 +438,7 @@ class _SequenceRun:
                 rohm_settings=self.rohm_settings,
                 effective_mode=self.effective_mode,
                 ui_settings=self.detection_filter_ui_settings,
+                source_frame_offset=self.source_frame_offset,
             ),
             process_rohm=lambda module_settings: _iter_rohm_correction(
                 self.armature,

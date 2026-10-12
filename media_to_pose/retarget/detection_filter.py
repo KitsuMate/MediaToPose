@@ -7,6 +7,7 @@ from contextlib import suppress
 
 from ..core.errors import InvalidRequest
 from ..core.motion import motion_filter
+from ..core.report import record_frames, record_step
 from .rohm import _rohm_requested_work
 from .root_motion import _root_transform, _set_root_transform
 from .samples import (
@@ -67,8 +68,13 @@ def _iter_detection_filter(
     rohm_settings=None,
     effective_mode: str = "OFF",
     ui_settings=None,
+    source_frame_offset: int = 0,
 ) -> Iterator[SequenceApplyProgress]:
-    """Reject unreliable evidence before RoHM or deterministic local repair."""
+    """Reject unreliable evidence before RoHM or deterministic local repair.
+
+    ``source_frame_offset`` is the source frame of the first sample, so
+    manual bad frames keep their source-frame numbers in partial re-runs.
+    """
     timestamps = _sequence_timestamps(samples)
     yield SequenceApplyProgress("Filtering unreliable detections", 0, 2)
     stats = motion_filter.filter_motion_observations(
@@ -78,24 +84,48 @@ def _iter_detection_filter(
         reject_unusable_frames=bool(settings.reject_unusable_frames),
         maximum_rejected_fraction=float(settings.maximum_motion_rejected) / 100.0,
     )
+    offset = max(int(source_frame_offset), 0)
     try:
-        manual_frames = motion_filter.parse_source_frame_ranges(
-            str(getattr(settings, "manual_bad_frames", "")), len(samples)
+        manual_source_frames = motion_filter.parse_source_frame_ranges(
+            str(getattr(settings, "manual_bad_frames", "")), offset + len(samples)
         )
     except ValueError as exc:
         raise InvalidRequest(f"Additional Bad Source Frames: {exc}") from exc
+    manual_frames = frozenset(
+        index - offset for index in manual_source_frames if index >= offset
+    )
     manual_rejected = motion_filter.apply_manual_motion_rejections(
         samples,
         manual_frames,
         str(getattr(settings, "manual_bad_scope", "BODY")),
     )
+    missing_frames = motion_filter.frames_missing_evidence(samples)
     repaired = motion_filter.repair_body_gaps(samples, timestamps)
     _pose_ai, root_ai = _rohm_requested_work(samples, rohm_settings, effective_mode)
     if not root_ai:
         repaired += _repair_root_gaps_without_ai(samples, timestamps)
     automatic_frames = {frame_index for frame_index, _semantic in stats.rejected}
-    automatic_summary = motion_filter.format_source_frame_ranges(automatic_frames)
-    manual_summary = motion_filter.format_source_frame_ranges(manual_frames)
+    automatic_summary = motion_filter.format_source_frame_ranges(
+        index + offset for index in automatic_frames
+    )
+    manual_summary = motion_filter.format_source_frame_ranges(
+        index + offset for index in manual_frames
+    )
+    record_frames("rejected", automatic_frames | manual_frames)
+    if repaired:
+        record_frames("filled", missing_frames)
+    record_step(
+        "DETECTION_FILTER",
+        total_observations=stats.total_observations,
+        missing_observations=stats.native_missing_observations,
+        rejected_observations=stats.rejected_observations,
+        rejected_limb_events=stats.rejected_limbs,
+        rejected_frames=stats.rejected_frames,
+        manual_frames=len(manual_frames),
+        manual_rejected_observations=len(manual_rejected),
+        repaired_samples=repaired,
+        observed_fraction=stats.observed_fraction,
+    )
     frame_summary = f"Automatic: {automatic_summary} · Manual: {manual_summary}"
     if len(frame_summary) > 240:
         frame_summary = frame_summary[:237].rstrip() + "..."

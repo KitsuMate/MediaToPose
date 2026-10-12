@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import replace
+from typing import Any
 
+from ..core.errors import InvalidRequest
 from ..core.requests import PostProcessConfig, PostProcessModuleConfig
 from .settings_schema import (
     MODULE_SETTING_FIELDS,
+    MODULES_BY_ID,
     POST_PROCESSING_DEFAULT_ENABLED,
     POST_PROCESSING_MODULES,
+    validate_settings,
 )
 
 
@@ -142,3 +147,76 @@ def reset_module_defaults(config, module_id: str) -> bool:
     item.last_warning = ""
     item.status = "VALID"
     return True
+
+
+def normalize_module_payload(payload: Any) -> list[dict[str, Any]]:
+    """Validate module settings in any accepted shape and list them.
+
+    ``payload`` is the ``post_processing`` list of a saved config, or a
+    mapping ``{module_id: {"enabled": bool, "settings": {...}}}``, or a
+    mapping ``{module_id: {setting: value}}``. Every module id and setting
+    is checked against the settings schema; values are coerced to their
+    declared types. Returns ``[{"module_id", "enabled"?, "settings"}]``.
+    """
+    if isinstance(payload, Mapping):
+        items = []
+        for module_id, value in payload.items():
+            if not isinstance(value, Mapping):
+                raise InvalidRequest(
+                    f"Settings for {module_id} must be an object",
+                    parameter=str(module_id),
+                )
+            if "settings" in value or "enabled" in value:
+                items.append({"module_id": module_id, **value})
+            else:
+                items.append({"module_id": module_id, "settings": dict(value)})
+    elif isinstance(payload, Iterable) and not isinstance(payload, (str, bytes)):
+        items = [dict(item) for item in payload]
+    else:
+        raise InvalidRequest("Post-processing settings must be a list or an object")
+    result = []
+    for item in items:
+        module_id = str(item.get("module_id", ""))
+        if module_id not in MODULES_BY_ID:
+            raise InvalidRequest(
+                f"Unknown post-processing module {module_id or '<missing>'}",
+                parameter="module_id",
+            )
+        normalized: dict[str, Any] = {
+            "module_id": module_id,
+            "settings": validate_settings(module_id, dict(item.get("settings", {}))),
+        }
+        if "enabled" in item:
+            if not isinstance(item["enabled"], bool):
+                raise InvalidRequest(
+                    f"{module_id}.enabled must be true or false",
+                    parameter="enabled",
+                )
+            normalized["enabled"] = item["enabled"]
+        result.append(normalized)
+    return result
+
+
+def apply_module_overrides(
+    config: PostProcessConfig, payload: Any
+) -> PostProcessConfig:
+    """Return ``config`` with validated module settings from ``payload``.
+
+    Nothing is written to Blender data; see ``normalize_module_payload`` for
+    the accepted shapes.
+    """
+    overrides = {item["module_id"]: item for item in normalize_module_payload(payload)}
+    modules = []
+    for module in config.modules:
+        override = overrides.get(module.module_id)
+        if override is None:
+            modules.append(module)
+            continue
+        modules.append(
+            replace(
+                module,
+                enabled=override.get("enabled", module.enabled),
+                values={**module.values, **override["settings"]},
+            )
+        )
+    return replace(config, modules=tuple(modules))

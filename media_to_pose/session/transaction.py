@@ -5,6 +5,7 @@ from __future__ import annotations
 import bpy
 
 from ..core.log import get_logger
+from ..core.requests import OutputMode
 from ..core.scene import SceneContext
 
 LOGGER = get_logger(__name__)
@@ -24,9 +25,22 @@ class CaptureTransaction:
     and the value of every shape key driven by the armature. With
     ``animation`` it also swaps in staging actions so a failed bake never
     touches the user's actions.
+
+    ``output_mode`` decides what ``commit`` does with the staged animation:
+    ``NEW_ACTION`` keeps it as a new action (a copy of the current one with
+    the capture keyed in), ``REPLACE`` puts it in place of the current
+    action under its name, and ``NLA_STRIP`` pushes only the captured keys
+    to a new NLA track and restores the current action.
     """
 
-    def __init__(self, scene_context: SceneContext, armature, *, animation: bool):
+    def __init__(
+        self,
+        scene_context: SceneContext,
+        armature,
+        *,
+        animation: bool,
+        output_mode: OutputMode = OutputMode.NEW_ACTION,
+    ):
         scene = scene_context.scene
         view_layer = scene_context.view_layer
         self.scene_context = scene_context
@@ -34,6 +48,7 @@ class CaptureTransaction:
         self.scene_pointer = scene.as_pointer()
         self.armature = armature
         self.animation = bool(animation)
+        self.output_mode = OutputMode(output_mode)
         self.committed = False
         self.frame = (int(scene.frame_current), float(scene.frame_subframe))
         active = view_layer.objects.active
@@ -65,13 +80,18 @@ class CaptureTransaction:
         if self.animation:
             self._stage_actions()
 
+    def _staging_copy(self, original, name: str):
+        # An NLA strip holds only the captured keys; the other modes start
+        # from the current action so unrelated channels are kept.
+        if original is not None and self.output_mode != OutputMode.NLA_STRIP:
+            return original.copy()
+        return bpy.data.actions.new(name)
+
     def _stage_actions(self) -> None:
         armature = self.armature
         animation_data = armature.animation_data_create()
-        self.temporary_action = (
-            self.original_action.copy()
-            if self.original_action is not None
-            else bpy.data.actions.new(f"{armature.name}_MediaToPose_Staging")
+        self.temporary_action = self._staging_copy(
+            self.original_action, f"{armature.name}_MediaToPose_Staging"
         )
         self.temporary_action.name = f"{armature.name}_MediaToPose_Staging"
         animation_data.action = self.temporary_action
@@ -83,21 +103,49 @@ class CaptureTransaction:
             seen_shape_keys.add(pointer)
             shape_animation = keys.animation_data_create()
             original = shape_animation.action
-            temporary = (
-                original.copy()
-                if original is not None
-                else bpy.data.actions.new(f"{keys.name}_MediaToPose_Staging")
-            )
+            temporary = self._staging_copy(original, f"{keys.name}_MediaToPose_Staging")
             temporary.name = f"{keys.name}_MediaToPose_Staging"
             shape_animation.action = temporary
             self.shape_action_transactions.append((keys, original, temporary))
 
     def commit(self) -> None:
         if self.temporary_action is not None:
-            self.temporary_action.name = f"{self.armature.name}_MediaToPose"
-        for keys, _original, temporary in self.shape_action_transactions:
-            temporary.name = f"{keys.name}_MediaToPose"
+            self._commit_action(
+                self.armature,
+                self.original_action,
+                self.temporary_action,
+                f"{self.armature.name}_MediaToPose",
+            )
+        for keys, original, temporary in self.shape_action_transactions:
+            self._commit_action(keys, original, temporary, f"{keys.name}_MediaToPose")
         self.committed = True
+
+    def _commit_action(self, owner, original, temporary, name: str) -> None:
+        mode = self.output_mode
+        if mode == OutputMode.REPLACE and original is not None:
+            original_name = original.name
+            # Every user of the old action, NLA strips included, now uses
+            # the captured one.
+            original.user_remap(temporary)
+            temporary.use_fake_user = original.use_fake_user
+            original.use_fake_user = False
+            if original.users == 0:
+                bpy.data.actions.remove(original)
+            temporary.name = original_name
+            return
+        temporary.name = name
+        if mode != OutputMode.NLA_STRIP:
+            return
+        animation_data = owner.animation_data_create()
+        start = int(round(temporary.frame_range[0]))
+        track = animation_data.nla_tracks.new()
+        track.name = "Media to Pose"
+        track.strips.new(name, start, temporary)
+        animation_data.action = original
+
+    @property
+    def nla_track_name(self) -> str:
+        return "Media to Pose" if self.output_mode == OutputMode.NLA_STRIP else ""
 
     def _restore_pose(self) -> None:
         armature = self.armature

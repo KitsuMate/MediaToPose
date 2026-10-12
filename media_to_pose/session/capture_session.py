@@ -10,6 +10,7 @@ the synchronous API and the command line all drive the same session.
 
 from __future__ import annotations
 
+import itertools
 import queue
 import threading
 import time
@@ -32,11 +33,14 @@ from ..core.errors import (
 )
 from ..core.log import get_logger
 from ..core.media_io import probe_media
+from ..core.report import CaptureReport
 from ..core.requests import (
     CaptureMode,
     CaptureRequest,
     CaptureSettings,
     MediaKind,
+    OutputMode,
+    PostProcessConfig,
     RootMotionMode,
 )
 from ..core.scene import SceneContext
@@ -193,6 +197,10 @@ class CaptureSession:
         self.request = request
         self.notices = notices
         self.outcome = CaptureOutcome()
+        frame_range = request.frame_range
+        self.report = CaptureReport(
+            source_frame_offset=frame_range[0] if frame_range else 0
+        )
         self.state = SessionState.PREPARED
         self.status = ""
         self.status_kind = "PROGRESS"
@@ -234,12 +242,33 @@ class CaptureSession:
         mode: CaptureMode,
         *,
         force_analysis: bool = False,
+        output_mode: OutputMode = OutputMode.NEW_ACTION,
+        frame_range: tuple[int, int] | None = None,
+        start_frame: float | None = None,
+        postprocess_config: PostProcessConfig | None = None,
+        require_cache: bool = False,
     ) -> CaptureSession:
         """Validate everything before any Blender data changes.
+
+        The keyword arguments serve scripted captures: ``output_mode`` picks
+        where the animation goes, ``frame_range`` applies only source frames
+        ``[first, end)``, ``start_frame`` replaces the scene's current frame,
+        ``postprocess_config`` replaces the rig's clean-up settings for this
+        capture only, and ``require_cache`` fails instead of running
+        detection when no retained detections match.
 
         Raises an ``MtpError`` subclass with the message the user should see.
         """
         mode = CaptureMode(mode)
+        output_mode = OutputMode(output_mode)
+        if frame_range is not None:
+            first, end = (int(value) for value in frame_range)
+            if first < 0 or end <= first:
+                raise InvalidRequest(
+                    "frame_range must be (first, end) with 0 <= first < end",
+                    parameter="frame_range",
+                )
+            frame_range = (first, end)
         analysis_only = mode == CaptureMode.ANALYZE
         if COORDINATOR.is_busy():
             raise OperationBusy(
@@ -294,9 +323,11 @@ class CaptureSession:
                 f"Frame must be between 1 and {media_info.frame_count}",
                 show_status=False,
             )
+        if start_frame is None:
+            start_frame = float(scene_context.scene.frame_current)
         if mode == CaptureMode.KEYFRAMES and media_info.kind == MediaKind.VIDEO:
             _check_rohm(armature, settings)
-            start = float(scene_context.scene.frame_current)
+            start = float(start_frame)
             issue = validate_limb_switch_interval(
                 armature,
                 start,
@@ -321,6 +352,10 @@ class CaptureSession:
             source_identity=source.source_media,
             cache_key=cache_key,
             cache_identity=cache_identity,
+            start_frame=float(start_frame),
+            output_mode=output_mode,
+            frame_range=frame_range,
+            postprocess_config=postprocess_config,
         )
         common = {"notices": tuple(notices)}
         if settings.keep_detection_cache:
@@ -367,6 +402,12 @@ class CaptureSession:
                         immediate_status="Using cached analysis",
                         **common,
                     )
+        if require_cache:
+            raise InvalidRequest(
+                "No retained detections match this media and capture settings; "
+                "run a capture with the detection cache enabled first",
+                parameter="media",
+            )
         if not source.analysis_path:
             raise MediaError(
                 "The retained detections do not contain the requested frame; "
@@ -410,6 +451,10 @@ class CaptureSession:
         source_identity,
         cache_key: str,
         cache_identity: dict,
+        start_frame: float,
+        output_mode: OutputMode = OutputMode.NEW_ACTION,
+        frame_range: tuple[int, int] | None = None,
+        postprocess_config: PostProcessConfig | None = None,
     ) -> CaptureRequest:
         scene = scene_context.scene
         action = (
@@ -438,7 +483,7 @@ class CaptureSession:
             keep_original_root_position=bool(settings.keep_original_root_position),
             keep_detection_cache=bool(settings.keep_detection_cache),
             cache_limit_bytes=int(settings.cache_limit_mb) * 1024 * 1024,
-            start_frame=float(scene.frame_current),
+            start_frame=float(start_frame),
             scene_name=scene.name,
             scene_pointer=scene.as_pointer(),
             source_frame_count=max(0, int(media_info.frame_count)),
@@ -456,12 +501,18 @@ class CaptureSession:
             options=options,
             mapping_entries=mapping_entries,
             postprocess_config=(
-                compile_postprocess_config(config) if config is not None else None
+                postprocess_config
+                if postprocess_config is not None
+                else compile_postprocess_config(config)
+                if config is not None
+                else None
             ),
             media_info=media_info,
             cache_media_info=cache_media_info,
             cache_key=cache_key,
             cache_identity=cache_identity,
+            output_mode=output_mode,
+            frame_range=frame_range,
         )
 
     # ------------------------------------------------------------------
@@ -691,7 +742,8 @@ class CaptureSession:
             self._set_status(CANCELLED_RESTORED, "INFO")
             return self._finish(cancelled=True)
         try:
-            progress = next(self._pose_iterator)
+            with self.report.active():
+                progress = next(self._pose_iterator)
         except StopIteration as stopped:
             self._pose_iterator = None
             bones, shapes = stopped.value
@@ -730,9 +782,15 @@ class CaptureSession:
             raise InvalidRequest("Originating scene was removed")
         if self.transaction is None:
             self.transaction = CaptureTransaction(
-                self.scene_context, armature, animation=True
+                self.scene_context,
+                armature,
+                animation=True,
+                output_mode=self.request.output_mode,
             )
         self._sequence_warnings = set()
+        if self.request.frame_range is not None:
+            first, end = self.request.frame_range
+            frames = itertools.islice(frames, first, end)
 
         def observed_frames():
             for detected in frames:
@@ -775,7 +833,8 @@ class CaptureSession:
         deadline = time.perf_counter() + max(float(budget_seconds), 0.0)
         while True:
             try:
-                progress = next(self._sequence_iterator)
+                with self.report.active():
+                    progress = next(self._sequence_iterator)
             except StopIteration as stopped:
                 self._sequence_iterator = None
                 return self._complete_sequence(*stopped.value)

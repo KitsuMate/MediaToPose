@@ -81,6 +81,53 @@ class SettingsSchemaTests(unittest.TestCase):
                 "DETECTION_FILTER", {"manual_bad_scope": "TAIL"}
             )
 
+    def test_overrides_accept_saved_and_short_shapes(self) -> None:
+        config = importlib.import_module(f"{self.addon.__name__}.postprocess.config")
+        saved = config.normalize_module_payload(
+            [
+                {
+                    "module_id": "TEMPORAL_CORRECTION",
+                    "enabled": False,
+                    "settings": {"smoothing_strength": 1},
+                }
+            ]
+        )
+        short = config.normalize_module_payload(
+            {"TEMPORAL_CORRECTION": {"smoothing_strength": 1}}
+        )
+        self.assertEqual(saved[0]["settings"], {"smoothing_strength": 1.0})
+        self.assertFalse(saved[0]["enabled"])
+        self.assertNotIn("enabled", short[0])
+        errors = self.addon.core.errors
+        with self.assertRaises(errors.InvalidRequest):
+            config.normalize_module_payload({"NOT_A_MODULE": {}})
+        with self.assertRaises(errors.InvalidRequest):
+            config.normalize_module_payload({"TEMPORAL_CORRECTION": {"enabled": "yes"}})
+
+    def test_overrides_leave_other_modules_and_values(self) -> None:
+        requests = self.addon.core.requests
+        config = importlib.import_module(f"{self.addon.__name__}.postprocess.config")
+        base = requests.PostProcessConfig(
+            detected_profile="GENERIC",
+            modules=(
+                requests.PostProcessModuleConfig(
+                    "TEMPORAL_CORRECTION",
+                    "Temporal",
+                    True,
+                    {"smoothing_strength": 0.5, "smooth_motion": True},
+                ),
+                requests.PostProcessModuleConfig("DETECTION_FILTER", "Filter", True),
+            ),
+        )
+        result = config.apply_module_overrides(
+            base, {"TEMPORAL_CORRECTION": {"smoothing_strength": 0.9}}
+        )
+        temporal = result.module("TEMPORAL_CORRECTION")
+        self.assertEqual(temporal.smoothing_strength, 0.9)
+        self.assertTrue(temporal.smooth_motion)
+        self.assertIs(result.module("DETECTION_FILTER"), base.modules[1])
+        self.assertEqual(base.module("TEMPORAL_CORRECTION").smoothing_strength, 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

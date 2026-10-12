@@ -8,6 +8,7 @@ from collections.abc import Iterator, Sequence
 from mathutils import Matrix, Vector
 
 from ..core.motion import animation_cleanup, grounded_cleanup
+from ..core.report import record_frames, record_step
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
 from ..core.types import CanonicalFrame, Landmark
@@ -344,6 +345,18 @@ def _iter_ground_contacts_run(
         _append_bake_warning(samples, warning)
     for warning in result.warnings:
         _append_bake_warning(samples, warning)
+    contact_frames = [
+        index
+        for index in range(len(samples))
+        if any(weights[index] > 0.5 for weights in result.contacts.values())
+    ]
+    record_frames("contact", contact_frames)
+    record_step(
+        "TEMPORAL_CORRECTION",
+        contact_frames=len(contact_frames),
+        contact_segments=len(result.segments),
+        contact_repairs=contact_repairs,
+    )
     for index in range(len(samples)):
         yield SequenceApplyProgress("Detecting foot contacts", index + 1, len(samples))
 
@@ -360,6 +373,16 @@ def _iter_ground_contacts_run(
         for iteration, roots in iterator:
             latest_roots = roots
             yield SequenceApplyProgress("Stabilizing root motion", iteration, 10)
+        corrections = [
+            (desired - frame.root).length
+            for frame, desired in zip(ground_frames, latest_roots, strict=False)
+        ]
+        if corrections:
+            record_step(
+                "TEMPORAL_CORRECTION",
+                root_drift_removed_mean=sum(corrections) / len(corrections),
+                root_drift_removed_max=max(corrections),
+            )
         temporary = _sequence_state(armature, scene_context=scene_context)
         try:
             for index, (sample, desired_root) in enumerate(
