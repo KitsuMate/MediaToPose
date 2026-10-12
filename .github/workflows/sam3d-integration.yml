@@ -25,7 +25,7 @@ jobs:
       - name: Read manifest version
         shell: bash
         run: |
-          python -c "import tomllib; print('MTP_VERSION=' + tomllib.load(open('blender_manifest.toml', 'rb'))['version'])" >> "$GITHUB_ENV"
+          python -c "import tomllib; print('MTP_VERSION=' + tomllib.load(open('media_to_pose/blender_manifest.toml', 'rb'))['version'])" >> "$GITHUB_ENV"
 
       - name: Verify protected runner configuration
         shell: bash
@@ -60,9 +60,9 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           "$BLENDER_PATH" --background --factory-startup \
-            --command extension validate .
+            --command extension validate media_to_pose
           "$BLENDER_PATH" --background --factory-startup \
-            --command extension build --source-dir . \
+            --command extension build --source-dir media_to_pose \
             --output-dir dist --split-platforms --verbose
           python ci/validate_distributions.py \
             --dist dist --platform linux_x64

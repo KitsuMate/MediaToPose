@@ -60,18 +60,6 @@ network = "Download optional immutable SAM, RoHM, and AnyCalib models"
 [build]
 paths_exclude_pattern = [
   "__pycache__/",
-  "/.git*",
-  "/.workspace/",
-  "/.ruff_cache/",
-  "/.pytest_cache/",
-  "/dist/",
-  "/docs/",
-  "/tests/",
-  "/ci/",
-  "/.github/",
-  "/assets/branding/",
-  "/pyproject.toml",
-  "/AGENTS.md",
   "*.pyc",
   "/*.zip",
 ]

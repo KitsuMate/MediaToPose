@@ -85,9 +85,9 @@ jobs:
         run: |
           set -euo pipefail
           "$BLENDER_BIN" --background --factory-startup \
-            --command extension validate .
+            --command extension validate media_to_pose
           "$BLENDER_BIN" --background --factory-startup \
-            --command extension build --source-dir . \
+            --command extension build --source-dir media_to_pose \
             --output-dir dist --split-platforms
           archive=$(find dist -maxdepth 1 -type f \
             -name 'media_to_pose-*-linux_x64.zip' -print -quit)
@@ -109,5 +109,5 @@ jobs:
 
       - name: Validate all release archives
         env:
-          PYTHONPATH: ${{ github.workspace }}/wheels/packaging-26.2-py3-none-any.whl
+          PYTHONPATH: ${{ github.workspace }}/media_to_pose/wheels/packaging-26.2-py3-none-any.whl
         run: python3 ci/validate_distributions.py --dist dist

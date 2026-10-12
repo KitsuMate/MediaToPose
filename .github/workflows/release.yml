@@ -39,9 +39,9 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           "$BLENDER_BIN" --background --factory-startup \
-            --command extension validate .
+            --command extension validate media_to_pose
           "$BLENDER_BIN" --background --factory-startup \
-            --command extension build --source-dir . \
+            --command extension build --source-dir media_to_pose \
             --output-dir dist --split-platforms
           archive=$(find dist -maxdepth 1 -type f \
             -name 'media_to_pose-*-linux_x64.zip' -print -quit)
@@ -50,7 +50,7 @@ jobs:
 
       - name: Validate dependency closure and size budgets
         env:
-          PYTHONPATH: ${{ github.workspace }}/wheels/packaging-26.2-py3-none-any.whl
+          PYTHONPATH: ${{ github.workspace }}/media_to_pose/wheels/packaging-26.2-py3-none-any.whl
         run: python3 ci/validate_distributions.py --dist dist
 
       - name: Smoke Linux install lifecycle and CPU fallback
@@ -93,7 +93,7 @@ jobs:
           path: dist
       - name: Require tag to match manifest version
         run: |
-          version=$(python -c 'import tomllib; print(tomllib.load(open("blender_manifest.toml", "rb"))["version"])')
+          version=$(python -c 'import tomllib; print(tomllib.load(open("media_to_pose/blender_manifest.toml", "rb"))["version"])')
           test "$GITHUB_REF_NAME" = "v$version"
       - name: Publish GitHub release
         run: |
@@ -176,7 +176,7 @@ jobs:
             printf '%s\n' 'Missing repository secret: BLENDER_EXTENSIONS_TOKEN' >&2
             exit 1
           }
-          extension_id=$(python -c 'import tomllib; print(tomllib.load(open("blender_manifest.toml", "rb"))["id"])')
+          extension_id=$(python -c 'import tomllib; print(tomllib.load(open("media_to_pose/blender_manifest.toml", "rb"))["id"])')
           mapfile -t archives < <(
             find dist -maxdepth 1 -type f \
               -name "${extension_id}-*.zip" -print | LC_ALL=C sort
