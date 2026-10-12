@@ -104,7 +104,7 @@ Set up a local Python 3.13 environment once (numpy must match Blender's):
 
 ```
 uv venv --python 3.13 .workspace/venv
-uv pip install --python .workspace/venv numpy==2.3.4 pytest ruff==0.12.12 pyright==1.1.406
+uv pip install --python .workspace/venv numpy==2.3.4 pytest==9.1.1 ruff==0.12.12 pyright==1.1.406
 ```
 
 Checks, run before every commit:
