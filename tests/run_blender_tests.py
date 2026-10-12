@@ -28,6 +28,7 @@ TEST_MODULES = (
     "tests.test_capture_operations",
     "tests.test_registration",
     "tests.test_anycalib_backend",
+    "tests.test_model_backends",
     "tests.test_sam3d_backend",
     "tests.test_sam3d_split_bundle",
     "tests.test_sam3d_vith_runtime",

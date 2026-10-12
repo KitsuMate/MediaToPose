@@ -692,7 +692,7 @@ class SamBackendContractTests(unittest.TestCase):
                 return real_replace(source, destination)
 
             with (
-                mock.patch.object(self.sam.os, "replace", side_effect=replace),
+                mock.patch("os.replace", side_effect=replace),
                 self.assertRaisesRegex(OSError, "injected"),
             ):
                 self.sam._activate_staged_install(
@@ -748,7 +748,7 @@ class SamBackendContractTests(unittest.TestCase):
                 return real_replace(source, destination)
 
             with (
-                mock.patch.object(self.sam.os, "replace", side_effect=replace),
+                mock.patch("os.replace", side_effect=replace),
                 self.assertRaises(PermissionError),
             ):
                 self.sam._activate_staged_install(

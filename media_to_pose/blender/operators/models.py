@@ -8,11 +8,15 @@ modal timer runs, and report outcomes. All lifecycle logic lives in
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 import bpy
 from bpy.props import StringProperty
 from bpy.types import Operator
 
-from ... import anycalib_backend, rohm_backend
+from ... import anycalib_backend, rohm_backend, sam3d_backend
 from ...backends.lifecycle import BackgroundJob, JobKind, ModelBackend
 from ...core.errors import MtpError, OperationBusy
 from ...core.log import get_logger
@@ -365,7 +369,230 @@ class MTP_OT_rohm_uninstall(Operator):
         return _run_exclusive(self, rohm_backend.uninstall)
 
 
+# --------------------------------------------------------------------------
+# SAM 3D Body
+
+
+class MTP_OT_sam3d_setup(Operator):
+    bl_idname = "mtp.sam3d_setup"
+    bl_label = "SAM 3D Body Setup"
+    bl_description = "Install the public SAM 3D Body ONNX model bundle"
+
+    def invoke(self, _context, _event):
+        return bpy.ops.mtp.sam3d_install("INVOKE_DEFAULT")
+
+    def execute(self, _context):
+        return bpy.ops.mtp.sam3d_install("INVOKE_DEFAULT")
+
+
+class MTP_OT_sam3d_install(ModelJobModal, Operator):
+    bl_idname = "mtp.sam3d_install"
+    bl_label = "Install SAM 3D Body"
+    bl_description = "Download and install the optional SAM 3D Body backend"
+
+    backend = sam3d_backend.BACKEND
+    cancel_status = "Cancelling installation safely"
+    stopped_message = "SAM 3D Body installation stopped"
+
+    model_storage_directory: StringProperty(
+        name="Model Storage Location",
+        description=(
+            "Parent directory where Media to Pose stores the downloaded "
+            "SAM 3D Body ONNX graph bundle"
+        ),
+        subtype="DIR_PATH",
+        options={"SKIP_SAVE"},
+    )
+
+    def invoke(self, context, _event):
+        if COORDINATOR.is_busy():
+            self.report({"INFO"}, "Media to Pose is already busy")
+            return {"CANCELLED"}
+        self.model_storage_directory = str(
+            sam3d_backend.preferred_model_storage_parent()
+        )
+        present = sam3d_backend.backend_present()
+        return context.window_manager.invoke_props_dialog(
+            self,
+            width=620,
+            title="Repair SAM 3D Body" if present else "Install SAM 3D Body",
+            confirm_text="Repair" if present else "Install",
+        )
+
+    def draw(self, context):
+        layout = self.layout
+        settings = context.scene.mtp_settings
+        spec = sam3d_backend.model_spec(settings.sam3d_model_variant)
+        size = int(spec.get("download_bytes") or 0)
+        label = f"Download {spec['label']} ONNX graph bundle"
+        if size:
+            label += f" ({size / (1024**3):.1f} GiB)"
+        layout.label(text=label, icon="IMPORT")
+        layout.label(
+            text=f"Source: {spec['repo']} @ {spec.get('revision') or 'not published'}",
+            icon="PACKAGE",
+        )
+        layout.prop(self, "model_storage_directory")
+        try:
+            managed = sam3d_backend.model_storage_root(self.model_storage_directory)
+            layout.label(text=f"Managed folder: {managed}", icon="FILE_FOLDER")
+        except (MtpError, OSError, RuntimeError, ValueError):
+            layout.label(
+                text="Choose an accessible model storage location",
+                icon="ERROR",
+            )
+        layout.label(
+            text="ONNX Runtime is shipped with the extension; setup installs models only.",
+            icon="INFO",
+        )
+
+    def execute(self, context):
+        if COORDINATOR.is_busy():
+            return {"CANCELLED"}
+        settings = context.scene.mtp_settings
+        try:
+            job = sam3d_backend.start_install(
+                str(settings.sam3d_model_variant),
+                str(settings.sam3d_device),
+                self.model_storage_directory,
+                scene_name=context.scene.name,
+                scene_pointer=context.scene.as_pointer(),
+            )
+        except OperationBusy:
+            self.report({"ERROR"}, "Media to Pose is already busy")
+            return {"CANCELLED"}
+        except (MtpError, OSError) as exc:
+            self.report({"ERROR"}, sam3d_backend._safe_metadata(exc))
+            return {"CANCELLED"}
+        return self._watch(context, job, "Starting SAM 3D Body installation")
+
+
+class MTP_OT_sam3d_cancel_install(Operator):
+    bl_idname = "mtp.sam3d_cancel_install"
+    bl_label = "Cancel SAM 3D Body Installation"
+
+    def execute(self, _context):
+        return {"FINISHED"} if sam3d_backend.cancel_install() else {"CANCELLED"}
+
+
+class MTP_OT_sam3d_copy_install_diagnostics(Operator):
+    bl_idname = "mtp.sam3d_copy_install_diagnostics"
+    bl_label = "Copy SAM Installation Diagnostics"
+    bl_description = "Copy redacted SAM installation details and recent logs"
+
+    def execute(self, context):
+        context.window_manager.clipboard = sam3d_backend.install_diagnostics_text()
+        self.report({"INFO"}, "Redacted installation diagnostics copied")
+        return {"FINISHED"}
+
+
+class MTP_OT_sam3d_open_install_log(Operator):
+    bl_idname = "mtp.sam3d_open_install_log"
+    bl_label = "Open SAM Installation Log"
+    bl_description = "Open the retained SAM installation log"
+
+    def execute(self, _context):
+        path = sam3d_backend.install_log_file()
+        if not path.is_file():
+            self.report({"WARNING"}, "No SAM installation log is available")
+            return {"CANCELLED"}
+        try:
+            bpy.ops.wm.path_open(filepath=str(path))
+        except RuntimeError:
+            try:
+                if os.name == "nt":
+                    os.startfile(str(path))
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", str(path)])
+                else:
+                    subprocess.Popen(["xdg-open", str(path)])
+            except OSError as exc:
+                self.report(
+                    {"ERROR"},
+                    f"Could not open install log: {sam3d_backend._safe_metadata(exc)}",
+                )
+                return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class MTP_OT_sam3d_dismiss_install_result(Operator):
+    bl_idname = "mtp.sam3d_dismiss_install_result"
+    bl_label = "Dismiss SAM Installation Result"
+
+    def execute(self, context):
+        if not sam3d_backend.dismiss_install_result():
+            return {"CANCELLED"}
+        settings = context.scene.mtp_settings
+        settings.progress = 0.0
+        settings.status = "Ready"
+        settings.status_kind = "READY"
+        return {"FINISHED"}
+
+
+class MTP_OT_sam3d_load(ModelJobModal, Operator):
+    bl_idname = "mtp.sam3d_load"
+    bl_label = "Load SAM 3D Body Model"
+    bl_description = "Load the installed model into RAM or VRAM for capture"
+
+    backend = sam3d_backend.BACKEND
+    job_kind = JobKind.MODEL
+    cancel_status = "Cancelling"
+    stopped_message = "SAM 3D Body model loading stopped"
+
+    def execute(self, context):
+        settings = context.scene.mtp_settings
+        if COORDINATOR.is_busy():
+            self.report({"WARNING"}, "Media to Pose is already busy")
+            return {"CANCELLED"}
+        if sam3d_backend.is_model_loaded():
+            self.report({"INFO"}, "SAM 3D Body model is already loaded")
+            return {"FINISHED"}
+        try:
+            job = sam3d_backend.start_load(
+                str(settings.sam3d_model_variant),
+                str(settings.sam3d_device),
+                scene_name=context.scene.name,
+                scene_pointer=context.scene.as_pointer(),
+            )
+        except OperationBusy:
+            self.report({"WARNING"}, "Media to Pose is already busy")
+            return {"CANCELLED"}
+        except (MtpError, OSError) as exc:
+            self.report({"ERROR"}, str(exc))
+            return {"CANCELLED"}
+        return self._watch(context, job, "Loading SAM 3D Body model")
+
+
+class MTP_OT_sam3d_unload(Operator):
+    bl_idname = "mtp.sam3d_unload"
+    bl_label = "Unload SAM 3D Body"
+    bl_description = "Release the loaded SAM 3D Body model and GPU memory"
+
+    def execute(self, _context):
+        return _run_exclusive(self, sam3d_backend.unload)
+
+
+class MTP_OT_sam3d_uninstall(Operator):
+    bl_idname = "mtp.sam3d_uninstall"
+    bl_label = "Uninstall SAM 3D Body"
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, _context):
+        return _run_exclusive(self, sam3d_backend.uninstall)
+
+
 CLASSES = (
+    MTP_OT_sam3d_setup,
+    MTP_OT_sam3d_install,
+    MTP_OT_sam3d_cancel_install,
+    MTP_OT_sam3d_copy_install_diagnostics,
+    MTP_OT_sam3d_open_install_log,
+    MTP_OT_sam3d_dismiss_install_result,
+    MTP_OT_sam3d_load,
+    MTP_OT_sam3d_unload,
+    MTP_OT_sam3d_uninstall,
     MTP_OT_anycalib_install,
     MTP_OT_anycalib_cancel_install,
     MTP_OT_anycalib_load,
@@ -381,12 +608,14 @@ CLASSES = (
 
 
 def register() -> None:
+    sam3d_backend.invalidate_backend_snapshot()
     anycalib_backend.invalidate_backend_snapshot()
     rohm_backend.invalidate_backend_snapshot()
     register_classes(CLASSES)
 
 
 def unregister() -> None:
+    sam3d_backend.shutdown()
     anycalib_backend.shutdown()
     rohm_backend.shutdown()
     unregister_classes(CLASSES)

@@ -98,7 +98,6 @@ LEGACY_LAYERS: dict[str, str] = {
     "sam3d_backend": "backends",
     "sam3d_mhr_runtime": "backends",
     "sam3d_ort_runtime": "backends",
-    "sam3d_state": "providers",
     "sam3d_vith_runtime": "backends",
     "target_pose": "retarget",
     "ui": "blender",
@@ -118,9 +117,6 @@ ALLOWLIST: set[tuple[str, str, str]] = {
     ("pose_translation_solver", "reads-bpy-context", "bpy.context"),
     ("retarget", "reads-bpy-context", "bpy.context"),
     ("rohm_correction", "upward-import", "rohm_ort_runtime"),
-    ("sam3d_backend", "imports-blender", "registration"),
-    ("sam3d_backend", "backend-bpy-api", "bpy.data"),
-    ("sam3d_backend", "backend-bpy-api", "bpy.ops"),
     ("target_pose", "reads-bpy-context", "bpy.context"),
     ("ui", "reads-bpy-context", "bpy.context"),
 }

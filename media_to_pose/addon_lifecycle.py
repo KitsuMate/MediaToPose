@@ -15,7 +15,6 @@ from . import (
     properties,
     rohm_correction,
     rohm_ort_runtime,
-    sam3d_backend,
     ui,
 )
 from .blender.operators import models as model_operators
@@ -36,7 +35,6 @@ __all__ = [
 MODULES = (
     properties,
     operators_mapping,
-    sam3d_backend,
     model_operators,
     operators_capture,
     ui,

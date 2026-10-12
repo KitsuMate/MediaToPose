@@ -2,70 +2,52 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import logging
-import os
 import platform
-import queue
 import re
 import shutil
-import subprocess
 import sys
-import threading
 import time
-import traceback
 import urllib.error
-import urllib.parse
-import urllib.request
 import uuid
 from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace
-from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
-import bpy
-from bpy.props import StringProperty
-from bpy.types import Operator
-
 from . import sam3d_ort_runtime
-from .constants import CAPTURE_CONFIDENCE, extension_version
-from .core.fs import atomic_json
-from .core.log import get_logger
-from .operation import (
-    COORDINATOR,
-    OperationKind,
-    OperationState,
-    OperationToken,
-    SamSetupRequest,
+from .backends import lifecycle
+from .backends.lifecycle import (
+    BackgroundJob,
+    InstallationLock,
+    JobKind,
+    JobSnapshot,
+    ManagedStorage,
+    ModelBackend,
 )
-from .registration import register_classes, unregister_classes
-from .sam3d_state import SAM_JOBS, SamJobSlot
+from .constants import CAPTURE_CONFIDENCE, extension_version
+from .core.errors import BackendError, Cancelled, InvalidRequest, ModelMissing
+from .core.fs import atomic_json, read_json, remove_tree
+from .core.log import get_logger
+from .operation import OperationKind, SamSetupRequest
 
 LOGGER = get_logger(__name__)
-
-
-def _private_json(path: Path, value: dict) -> None:
-    atomic_json(path, value, private=True)
-
-
-_LOG_LEVELS = {
-    "DEBUG": logging.DEBUG,
-    "INFO": logging.INFO,
-    "WARNING": logging.WARNING,
-    "WARN": logging.WARNING,
-    "ERROR": logging.ERROR,
-}
 
 RUNTIME_MANIFEST_VERSION = 4
 BACKEND_VERSION = RUNTIME_MANIFEST_VERSION
 ADAPTER_VERSION = "2.0.0"
-HF_ENDPOINT = "https://huggingface.co"
+HF_ENDPOINT = lifecycle.HF_ENDPOINT
 MIN_RUNTIME_FREE_BYTES = 256 * 1024 * 1024
 MODEL_DOWNLOAD_HEADROOM_BYTES = 512 * 1024 * 1024
 MODEL_STORAGE_FOLDER = "media_to_pose_sam3d"
-MODEL_STORAGE_MARKER = ".media_to_pose_storage.json"
+MODEL_STORAGE_MARKER = lifecycle.STORAGE_MARKER
+STALE_INSTALL_LOCK_SECONDS = 24 * 60 * 60
+STORAGE = ManagedStorage(
+    MODEL_STORAGE_FOLDER,
+    "sam3d_models",
+    "SAM 3D Body",
+    marker_version=1,
+    private=True,
+)
 
 MODEL_VARIANTS = {
     "VITH": {
@@ -113,16 +95,7 @@ class BackendSnapshot:
     hardware_device_id: int = 0
 
 
-@dataclass(frozen=True)
-class InstallStatusSnapshot:
-    running: bool = False
-    progress: float = 0.0
-    phase: str = ""
-    status: str = ""
-    outcome: str = ""
-    error: str = ""
-    logs: tuple[str, ...] = ()
-    log_path: str = ""
+InstallStatusSnapshot = JobSnapshot
 
 
 @dataclass(frozen=True)
@@ -139,167 +112,39 @@ class _InstallLayout:
     storage_config: Path | None = None
 
 
-class BackgroundJob:
-    def __init__(
-        self,
-        label: str,
-        *,
-        token: OperationToken | None = None,
-        request: SamSetupRequest | None = None,
-    ):
-        self.label = label
-        self.token = token
-        self.request = request
-        self.cancel = token.cancel_event if token else threading.Event()
-        self.messages = queue.Queue()
-        self.progress = 0.0
-        self.status = label
-        self.phase = ""
-        self.outcome = ""
-        self.error = ""
-        self.logs = []
-        self.log_path = ""
-        self.thread = None
-        self.process = None
-        self.started = False
-        self.terminal = False
-        self._lock = threading.RLock()
+class SamBackend(ModelBackend):
+    label = "SAM 3D Body"
+    install_operation = OperationKind.SAM3D_INSTALL
+    load_operation = OperationKind.SAM3D_MODEL_LOAD
+    unload_operation = OperationKind.SAM3D_MODEL_UNLOAD
+    uninstall_operation = OperationKind.SAM3D_UNINSTALL
 
-    def configure_log(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        previous = path.with_name("install.previous.log")
-        try:
-            if previous.exists():
-                previous.unlink()
-            if path.exists():
-                Path(path).replace(previous)
-            path.write_text("", encoding="utf8")
-            self.log_path = str(path)
-        except OSError as exc:
-            self.log_path = ""
-            LOGGER.warning("Could not initialize install log: %s", _safe_metadata(exc))
-
-    def log(self, level: str, message: object) -> None:
-        cleaned = re.sub(
-            r"[\x00-\x1f\x7f]+",
-            " ",
-            _redact(message),
-        ).strip()
-        if not cleaned:
-            return
-        cleaned = cleaned[:2000]
-        timestamp = time.strftime("%H:%M:%S")
-        entry = f"{timestamp} [{level.upper()}] {cleaned}"
-        with self._lock:
-            self.logs.append(entry)
-            if len(self.logs) > 200:
-                del self.logs[:-200]
-            log_path = self.log_path
-        LOGGER.log(_LOG_LEVELS.get(level.upper(), logging.INFO), "%s", cleaned)
-        if log_path:
-            try:
-                with Path(log_path).open("a", encoding="utf8") as handle:
-                    handle.write(entry + "\n")
-            except OSError as exc:
-                LOGGER.warning(
-                    "Could not append SAM installation log: %s", _safe_metadata(exc)
-                )
-
-    def update(
-        self,
-        progress: float,
-        status: str,
-        *,
-        phase: str = "",
-        log_change: bool = True,
-    ) -> None:
-        if self.token is not None and not COORDINATOR.update(
-            self.token,
-            status=status,
-            phase=phase or None,
-            progress=progress,
-        ):
-            return
-        with self._lock:
-            changed = status != self.status or (phase and phase != self.phase)
-            self.progress = min(max(float(progress), 0.0), 1.0)
-            self.status = status
-            if phase:
-                self.phase = phase
-        if changed and log_change:
-            prefix = f"{self.phase}: " if self.phase else ""
-            self.log("INFO", f"{prefix}{status}")
-
-    def finish(self, outcome: str, message: str) -> None:
-        safe_message = _redact(message)
-        with self._lock:
-            self.outcome = outcome
-            self.error = safe_message if outcome == "ERROR" else ""
-            self.status = safe_message
-            self.terminal = True
-        level = "ERROR" if outcome == "ERROR" else "INFO"
-        self.log(level, safe_message)
-        if self.token is not None:
-            state = (
-                OperationState.SUCCEEDED
-                if outcome in {"DONE", "SUCCESS"}
-                else OperationState.CANCELLED
-                if outcome == "CANCELLED"
-                else OperationState.FAILED
-            )
-            COORDINATOR.finish(self.token, state, safe_message)
-
-    def snapshot(self) -> InstallStatusSnapshot:
-        with self._lock:
-            return InstallStatusSnapshot(
-                running=bool(
-                    self.thread and self.thread.is_alive() and not self.terminal
-                ),
-                progress=self.progress,
-                phase=self.phase,
-                status=self.status,
-                outcome=self.outcome,
-                error=self.error,
-                logs=tuple(self.logs),
-                log_path=self.log_path,
-            )
+    def is_model_loaded(self) -> bool:
+        # The ONNX estimator lives in the provider module, not in the
+        # generic session slot.
+        return is_model_loaded()
 
 
-def _redact(value: object) -> str:
-    return re.sub(
-        r"(?i)\b(?:hf|api_org)_[A-Za-z0-9._-]{6,}\b",
-        "[redacted]",
-        str(value or ""),
-    )
+BACKEND = SamBackend()
 
-
-def _safe_metadata(value: object, *, limit: int = 160) -> str:
-    text = re.sub(r"[\x00-\x1f\x7f]+", " ", _redact(value))
-    return text.strip()[:limit]
+_redact = lifecycle.redact
+_safe_metadata = lifecycle.safe_metadata
 
 
 def backend_root(*, create: bool = True) -> Path:
-    value = bpy.utils.user_resource(
-        "SCRIPTS",
-        path="media_to_pose/backends/sam3d",
-        create=create,
-    )
-    if not value:
-        scripts = bpy.utils.user_resource("SCRIPTS", create=create)
-        if not scripts:
-            raise RuntimeError("Blender user scripts directory is unavailable")
-        value = str(Path(scripts) / "media_to_pose" / "backends" / "sam3d")
-    return Path(value)
+    return lifecycle.backend_root("sam3d", create=create)
 
 
 def _verified_backend_root() -> Path:
+    import bpy  # pyright: ignore[reportMissingImports]
+
     root = backend_root(create=False).resolve()
     scripts_value = bpy.utils.user_resource("SCRIPTS", create=False)
     if not scripts_value:
-        raise RuntimeError("Blender user scripts directory is unavailable")
+        raise BackendError("Blender user scripts directory is unavailable")
     scripts = Path(scripts_value).resolve()
     if scripts not in root.parents or root.name != "sam3d":
-        raise RuntimeError("Refusing to remove an unexpected backend path")
+        raise BackendError("Refusing to remove an unexpected backend path")
     return root
 
 
@@ -323,15 +168,12 @@ def model_spec(variant: str) -> dict:
     try:
         return MODEL_VARIANTS[str(variant)]
     except KeyError as exc:
-        raise ValueError(f"Unknown SAM 3D Body model variant: {variant!r}") from exc
+        raise InvalidRequest(f"Unknown SAM 3D Body model variant: {variant!r}") from exc
 
 
 def _read_json(path: Path) -> dict | None:
-    try:
-        value = json.loads(path.read_text(encoding="utf8"))
-        return value if isinstance(value, dict) else None
-    except (OSError, ValueError, TypeError):
-        return None
+    value = read_json(path)
+    return value if isinstance(value, dict) else None
 
 
 def model_storage_config_path(*, create_root: bool = True) -> Path:
@@ -339,15 +181,12 @@ def model_storage_config_path(*, create_root: bool = True) -> Path:
 
 
 def _normalize_storage_parent(value: str = "") -> Path:
-    if value:
-        expanded = os.path.expandvars(str(Path(value.strip()).expanduser()))
-        selected = Path(bpy.path.abspath(expanded))
-    else:
-        selected = backend_root(create=True)
-    selected = selected.resolve(strict=False)
-    if selected.name.casefold() == MODEL_STORAGE_FOLDER.casefold():
-        selected = selected.parent
-    return selected
+    selected = (
+        lifecycle.resolve_user_path(value)
+        if value
+        else backend_root(create=True).resolve(strict=False)
+    )
+    return STORAGE.root(selected).parent
 
 
 def configured_model_storage_parent() -> Path:
@@ -375,51 +214,6 @@ def model_storage_root(selection: str = "") -> Path:
     return parent / MODEL_STORAGE_FOLDER
 
 
-def _storage_marker_path(root: Path) -> Path:
-    return root / MODEL_STORAGE_MARKER
-
-
-def _ensure_model_storage(root: Path) -> None:
-    marker = _storage_marker_path(root)
-    if root.exists() and not marker.is_file():
-        try:
-            has_contents = next(root.iterdir(), None) is not None
-        except OSError as exc:
-            raise OSError(f"Cannot inspect model storage directory: {root}") from exc
-        if has_contents:
-            raise OSError(
-                "The selected model location already contains an unmanaged "
-                f"{MODEL_STORAGE_FOLDER} directory"
-            )
-    root.mkdir(parents=True, exist_ok=True)
-    existing = _read_json(marker)
-    if existing and (
-        existing.get("owner") != "media_to_pose"
-        or existing.get("kind") != "sam3d_models"
-    ):
-        raise OSError("The selected model location is owned by another application")
-    _private_json(
-        marker,
-        {
-            "owner": "media_to_pose",
-            "kind": "sam3d_models",
-            "version": 1,
-        },
-    )
-
-
-def _verified_model_storage_root(root: Path) -> Path:
-    resolved = root.resolve(strict=False)
-    marker = _read_json(_storage_marker_path(resolved)) or {}
-    if (
-        resolved.name.casefold() != MODEL_STORAGE_FOLDER.casefold()
-        or marker.get("owner") != "media_to_pose"
-        or marker.get("kind") != "sam3d_models"
-    ):
-        raise OSError("Refusing to remove an unrecognized model directory")
-    return resolved
-
-
 def installed_model_directory(manifest: dict | None = None) -> Path:
     manifest = manifest if manifest is not None else (_read_json(manifest_path()) or {})
     configured = str(manifest.get("model_directory") or "")
@@ -433,11 +227,7 @@ def installed_model_storage_root(
 ) -> Path | None:
     model = installed_model_directory(manifest)
     parent = model.parent
-    if (
-        model.name == "active"
-        and parent.name.casefold() == MODEL_STORAGE_FOLDER.casefold()
-        and _storage_marker_path(parent).is_file()
-    ):
+    if model.name == "active" and STORAGE.owns(parent):
         return parent
     return None
 
@@ -447,32 +237,25 @@ def _closest_existing_directory(path: Path) -> Path:
     while not candidate.exists() and candidate != candidate.parent:
         candidate = candidate.parent
     if not candidate.exists():
-        raise OSError(f"No accessible parent directory exists for {path}")
+        raise BackendError(f"No accessible parent directory exists for {path}")
     return candidate
 
 
 def install_running() -> bool:
-    job = SAM_JOBS.current(SamJobSlot.INSTALL)
-    return bool(job and job.thread and job.thread.is_alive())
+    job = BACKEND.job(JobKind.INSTALL)
+    return bool(job and job.alive())
 
 
-def install_status_snapshot() -> InstallStatusSnapshot:
-    job = SAM_JOBS.current(SamJobSlot.INSTALL)
-    if not job:
-        return InstallStatusSnapshot()
-    return job.snapshot()
+def install_status_snapshot() -> JobSnapshot:
+    return BACKEND.install_status_snapshot()
 
 
 def model_load_running() -> bool:
-    job = SAM_JOBS.current(SamJobSlot.MODEL)
-    return bool(job and job.thread and job.thread.is_alive() and not job.terminal)
+    return BACKEND.job_running(JobKind.MODEL)
 
 
-def model_load_status_snapshot() -> InstallStatusSnapshot:
-    job = SAM_JOBS.current(SamJobSlot.MODEL)
-    if not job:
-        return InstallStatusSnapshot()
-    return job.snapshot()
+def model_load_status_snapshot() -> JobSnapshot:
+    return BACKEND.model_load_status_snapshot()
 
 
 def sam_backend_ready(settings) -> bool:
@@ -488,9 +271,14 @@ def sam3d_device_enum_items() -> tuple[tuple[str, str, str], ...]:
     return _DEVICE_ENUM_ITEMS
 
 
-@lru_cache(maxsize=12)
 def backend_snapshot(variant: str, device: str) -> BackendSnapshot:
     """Return cached readiness so Blender panel redraws never rescan ONNX files."""
+    return BACKEND.cached_snapshot(
+        (str(variant), str(device)), lambda: _build_snapshot(variant, device)
+    )
+
+
+def _build_snapshot(variant: str, device: str) -> BackendSnapshot:
     requested_mode = sam3d_ort_runtime.normalize_mode(device)
     manifest = _read_json(manifest_path())
     if not manifest:
@@ -538,7 +326,7 @@ def backend_snapshot(variant: str, device: str) -> BackendSnapshot:
             and _bundle_destination(bundle.root, item.path).stat().st_size == item.bytes
             for item in bundle.files
         )
-    except (OSError, sam3d_ort_runtime.OrtRuntimeError) as exc:
+    except (OSError, BackendError) as exc:
         graph_complete = False
         bundle_error = str(exc)
     else:
@@ -643,7 +431,7 @@ def backend_snapshot(variant: str, device: str) -> BackendSnapshot:
 
 def invalidate_backend_snapshot() -> None:
     """Discard readiness cached before an install-state mutation."""
-    backend_snapshot.cache_clear()
+    BACKEND.invalidate()
 
 
 def runtime_paths() -> dict[str, str]:
@@ -670,9 +458,9 @@ def resolve_device_name(requested: str) -> str:
             mode,
             available,
         )
-        return device
     except sam3d_ort_runtime.OrtRuntimeError:
         return "cpu" if mode == "CPU" else "gpu"
+    return device
 
 
 def provider_options_from_settings(settings) -> dict:
@@ -714,14 +502,6 @@ def runtime_diagnostics(variant: str, device: str) -> dict:
     }
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _download_file(
     url: str,
     destination: Path,
@@ -735,131 +515,27 @@ def _download_file(
     expected_bytes: int = 0,
     maximum_bytes: int = 0,
 ) -> None:
-    job.update(start, label, phase=phase)
-    headers = {"User-Agent": f"Media-to-Pose/{extension_version()}"}
-    request = urllib.request.Request(
+    job.update(start, label, phase)
+    lifecycle.download_file(
         url,
-        headers=headers,
+        destination,
+        cancel=job.cancel,
+        label=label,
+        progress=job.download_progress(start, end, label, phase),
+        expected_bytes=expected_bytes,
+        expected_sha256=expected_sha256,
+        maximum_bytes=maximum_bytes,
+        user_agent=f"Media-to-Pose/{extension_version()}",
+        cancel_message="Installation cancelled",
     )
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    partial = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.part")
-    digest = hashlib.sha256()
-    try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            total = int(response.headers.get("Content-Length") or 0)
-            if expected_bytes and total and total != expected_bytes:
-                raise RuntimeError(f"{label} has an unexpected download size")
-            if maximum_bytes and total and total > maximum_bytes:
-                raise RuntimeError(f"{label} exceeds the safe download limit")
-            received = 0
-            with partial.open("xb") as handle:
-                while True:
-                    if job.cancel.is_set():
-                        raise InterruptedError("Installation cancelled")
-                    chunk = response.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    handle.write(chunk)
-                    digest.update(chunk)
-                    received += len(chunk)
-                    if expected_bytes and received > expected_bytes:
-                        raise RuntimeError(f"{label} exceeds its declared size")
-                    if maximum_bytes and received > maximum_bytes:
-                        raise RuntimeError(f"{label} exceeds the safe download limit")
-                    ratio = received / total if total else 0.0
-                    size = f"{received / (1024**2):.0f} MiB"
-                    if total:
-                        size += f" / {total / (1024**2):.0f} MiB"
-                    job.update(
-                        start + (end - start) * ratio,
-                        f"{label} · {size}",
-                        phase=phase,
-                        log_change=False,
-                    )
-        if expected_bytes and received != expected_bytes:
-            raise RuntimeError(f"{label} has an unexpected download size")
-        if (
-            expected_sha256
-            and digest.hexdigest().casefold() != expected_sha256.casefold()
-        ):
-            raise RuntimeError(f"{label} failed SHA-256 verification")
-        Path(partial).replace(destination)
-    except Exception:
-        with suppress(OSError):
-            partial.unlink()
-        raise
 
 
-def _pid_running(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
-
-
-class _InstallationLock:
-    """Small cross-process lock that survives Blender reloads safely."""
-
-    def __init__(self, root: Path):
-        self.path = root / ".install.lock"
-        self.identifier = uuid.uuid4().hex
-        self.acquired = False
-
-    def acquire(self) -> None:
-        payload = json.dumps(
-            {
-                "pid": os.getpid(),
-                "created_at": int(time.time()),
-                "identifier": self.identifier,
-            }
-        ).encode("utf8")
-        for _attempt in range(2):
-            try:
-                descriptor = os.open(
-                    self.path,
-                    os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                )
-            except FileExistsError:
-                existing = _read_json(self.path) or {}
-                pid = int(existing.get("pid") or 0)
-                created_at = int(existing.get("created_at") or 0)
-                stale = not _pid_running(pid) or (
-                    created_at and time.time() - created_at > 24 * 60 * 60
-                )
-                if not stale:
-                    raise RuntimeError(
-                        "Another Blender process is installing SAM 3D Body"
-                    ) from None
-                try:
-                    self.path.unlink()
-                except OSError as exc:
-                    raise RuntimeError(
-                        "A stale SAM installation lock could not be removed"
-                    ) from exc
-                continue
-            try:
-                os.write(descriptor, payload)
-            finally:
-                os.close(descriptor)
-            self.acquired = True
-            return
-        raise RuntimeError("Could not acquire the SAM installation lock")
-
-    def release(self) -> None:
-        if not self.acquired:
-            return
-        current = _read_json(self.path) or {}
-        if current.get("identifier") == self.identifier:
-            with suppress(FileNotFoundError):
-                self.path.unlink()
-        self.acquired = False
+def _InstallationLock(root: Path) -> InstallationLock:  # noqa: N802 - kept name
+    return InstallationLock(
+        Path(root) / ".install.lock",
+        "SAM 3D Body",
+        max_age_seconds=STALE_INSTALL_LOCK_SECONDS,
+    )
 
 
 def _cleanup_abandoned_staging(parent: Path) -> None:
@@ -875,7 +551,7 @@ def _cleanup_abandoned_staging(parent: Path) -> None:
         ):
             continue
         if resolved.is_dir():
-            shutil.rmtree(resolved, ignore_errors=True)
+            remove_tree(resolved)
         elif resolved.exists():
             with suppress(OSError):
                 resolved.unlink()
@@ -894,12 +570,12 @@ def _activate_staged_install(
         path.parent.resolve() != runtime_parent
         for path in (runtime_current, runtime_backup)
     ):
-        raise OSError("Unexpected runtime activation path")
+        raise BackendError("Unexpected runtime activation path")
     model_parent = model_staging.parent.resolve()
     if any(
         path.parent.resolve() != model_parent for path in (model_current, model_backup)
     ):
-        raise OSError("Unexpected model activation path")
+        raise BackendError("Unexpected model activation path")
 
     for backup in (runtime_backup, model_backup):
         if backup.is_dir():
@@ -907,7 +583,7 @@ def _activate_staged_install(
         elif backup.exists():
             backup.unlink()
         if backup.exists():
-            raise OSError(f"Could not clear activation backup {backup}")
+            raise BackendError(f"Could not clear activation backup {backup}")
 
     runtime_had_current = runtime_current.exists()
     model_had_current = model_current.exists()
@@ -929,13 +605,13 @@ def _activate_staged_install(
         # verified download cache in model_staging for the next retry.
         Path(model_staging).replace(model_current)
         model_activated = True
-    except Exception as activation_error:
+    except OSError as activation_error:
         rollback_errors = []
 
         def rollback(action, label: str) -> None:
             try:
                 action()
-            except Exception as exc:
+            except OSError as exc:
                 rollback_errors.append(f"{label}: {_safe_metadata(exc)}")
 
         if runtime_activated and runtime_current.exists():
@@ -959,16 +635,16 @@ def _activate_staged_install(
                 "restore previous model",
             )
         if rollback_errors:
-            raise RuntimeError(
+            raise BackendError(
                 "Activation failed and rollback was incomplete: "
                 + "; ".join(rollback_errors)
             ) from activation_error
         raise
-    shutil.rmtree(runtime_backup, ignore_errors=True)
-    shutil.rmtree(model_backup, ignore_errors=True)
+    remove_tree(runtime_backup)
+    remove_tree(model_backup)
 
 
-def _friendly_install_error(exc: Exception, phase: str) -> str:
+def _friendly_install_error(exc: BaseException, phase: str) -> str:
     detail = _redact(exc)
     missing = re.search(r"No module named ['\"]([^'\"]+)", detail)
     if missing:
@@ -991,13 +667,12 @@ def _friendly_install_error(exc: Exception, phase: str) -> str:
 
 
 def _check_install_cancel(job: BackgroundJob) -> None:
-    if job.cancel.is_set():
-        raise InterruptedError("Installation cancelled")
+    job.check_cancelled("Installation cancelled")
 
 
 def _new_install_layout(model_storage_selection: str) -> _InstallLayout:
     root = backend_root(create=True)
-    install_id = f"{os.getpid()}-{uuid.uuid4().hex}"
+    install_id = f"{uuid.uuid4().hex}"
     storage_parent = _normalize_storage_parent(model_storage_selection)
     storage_root = storage_parent / MODEL_STORAGE_FOLDER
     previous_manifest = _read_json(manifest_path()) or {}
@@ -1023,18 +698,14 @@ def _validate_install_platform() -> None:
         or (sys.platform == "darwin" and machine in {"arm64", "aarch64"})
     )
     if not supported:
-        raise OSError(f"SAM 3D Body is unsupported on {sys.platform}/{machine}")
+        raise BackendError(f"SAM 3D Body is unsupported on {sys.platform}/{machine}")
     if sys.version_info[:2] != (3, 13):
-        raise OSError("SAM 3D Body requires Blender's CPython 3.13 runtime")
+        raise BackendError("SAM 3D Body requires Blender's CPython 3.13 runtime")
 
 
-def _activate_install(job: BackgroundJob, layout: _InstallLayout) -> None:
+def _activate_install(job: BackgroundJob, layout: _InstallLayout) -> str:
     _check_install_cancel(job)
-    job.update(
-        0.98,
-        "Activating validated model bundle",
-        phase="5/5 Activation",
-    )
+    job.update(0.98, "Activating validated model bundle", "5/5 Activation")
     invalidate_backend_snapshot()
     try:
         _activate_staged_install(
@@ -1048,9 +719,10 @@ def _activate_install(job: BackgroundJob, layout: _InstallLayout) -> None:
     finally:
         invalidate_backend_snapshot()
     try:
-        _private_json(
+        lifecycle.write_storage_parent(
             layout.storage_config or (layout.root / "model_storage.json"),
-            {"storage_parent": str(layout.storage_parent.resolve(strict=False))},
+            layout.storage_parent,
+            private=True,
         )
     except OSError as exc:
         LOGGER.warning(
@@ -1059,58 +731,23 @@ def _activate_install(job: BackgroundJob, layout: _InstallLayout) -> None:
     previous = layout.previous_storage_root
     if previous and previous.resolve() != layout.storage_root.resolve():
         try:
-            shutil.rmtree(_verified_model_storage_root(previous))
-        except OSError as exc:
+            STORAGE.remove(previous)
+        except (OSError, BackendError) as exc:
             LOGGER.warning(
                 "Previous model storage was retained: %s", _safe_metadata(exc)
             )
-    job.update(
-        1.0,
-        "SAM 3D Body installed and ready",
-        phase="5/5 Activation",
-    )
-    job.finish("DONE", "SAM 3D Body installed and ready")
-    job.messages.put(("DONE", "SAM 3D Body installed"))
+    job.update(1.0, "SAM 3D Body installed and ready", "5/5 Activation")
+    return "SAM 3D Body installed and ready"
 
 
 def _hf_bundle_url(repository: str, revision: str, path: str) -> str:
-    raw = str(path)
-    relative = PurePosixPath(raw)
-    if (
-        relative.is_absolute()
-        or ".." in relative.parts
-        or not relative.parts
-        or "\\" in raw
-        or "\x00" in raw
-        or any(":" in part for part in relative.parts)
-    ):
-        raise RuntimeError(f"Unsafe Hugging Face bundle path: {path!r}")
-    encoded_repository = "/".join(
-        urllib.parse.quote(part, safe="") for part in repository.split("/")
+    return lifecycle.hf_resolve_url(
+        repository, revision, path, label="Hugging Face bundle"
     )
-    encoded_path = "/".join(
-        urllib.parse.quote(part, safe="") for part in relative.parts
-    )
-    return f"{HF_ENDPOINT}/{encoded_repository}/resolve/{revision}/{encoded_path}"
 
 
 def _bundle_destination(root: Path, relative: str) -> Path:
-    raw = str(relative)
-    parts = PurePosixPath(raw)
-    if (
-        parts.is_absolute()
-        or ".." in parts.parts
-        or not parts.parts
-        or "\\" in raw
-        or "\x00" in raw
-        or any(":" in part for part in parts.parts)
-    ):
-        raise RuntimeError(f"Unsafe ONNX bundle path: {relative!r}")
-    destination = root.joinpath(*parts.parts).resolve(strict=False)
-    resolved_root = root.resolve(strict=False)
-    if destination != resolved_root and resolved_root not in destination.parents:
-        raise RuntimeError(f"ONNX bundle path escapes staging: {relative!r}")
-    return destination
+    return lifecycle.contained_path(root, relative, label="ONNX bundle")
 
 
 def _prepare_ort_staging(layout: _InstallLayout) -> None:
@@ -1144,7 +781,7 @@ def _check_bundle_storage(
     else:
         enough = runtime_free >= MIN_RUNTIME_FREE_BYTES and model_free >= model_required
     if not enough:
-        raise OSError("Insufficient free space for the SAM 3D Body ONNX bundle")
+        raise BackendError("Insufficient free space for the SAM 3D Body ONNX bundle")
 
 
 def _download_ort_bundle(
@@ -1199,7 +836,8 @@ def _download_ort_bundle(
         if (
             destination.is_file()
             and destination.stat().st_size == bundle_file.bytes
-            and _sha256(destination).casefold() == bundle_file.sha256.casefold()
+            and lifecycle.sha256_file(destination).casefold()
+            == bundle_file.sha256.casefold()
         ):
             cached_paths.add(bundle_file.path)
         elif destination.is_dir():
@@ -1219,7 +857,7 @@ def _download_ort_bundle(
             job.update(
                 end,
                 f"Using verified cached model file {index}/{len(bundle.files)}",
-                phase="2/5 Model Bundle",
+                "2/5 Model Bundle",
             )
             continue
         remote_member = str(manifest_parent / bundle_file.path)
@@ -1242,8 +880,9 @@ def _download_ort_bundle(
 
 
 def _self_test_ort_bundle(job: BackgroundJob, bundle, requested_device: str):
-    job.update(0.82, "Creating ONNX Runtime session", phase="3/5 Self-Test")
+    job.update(0.82, "Creating ONNX Runtime session", "3/5 Self-Test")
     requested_mode = sam3d_ort_runtime.normalize_mode(requested_device)
+    import numpy as np
 
     def run(mode: str, *, verify_accelerator: bool):
         estimator = sam3d_ort_runtime.create_estimator(
@@ -1262,14 +901,12 @@ def _self_test_ort_bundle(job: BackgroundJob, bundle, requested_device: str):
             if len(output) != 1 or any(
                 key not in output[0] for key in sam3d_ort_runtime.REQUIRED_OUTPUT_KEYS
             ):
-                raise RuntimeError("ONNX bundle self-test returned an invalid contract")
+                raise BackendError("ONNX bundle self-test returned an invalid contract")
             return estimator.diagnostics
         finally:
             estimator.close()
 
     try:
-        import numpy as np
-
         return run(
             requested_mode,
             verify_accelerator=requested_mode != "CPU",
@@ -1295,7 +932,7 @@ def _write_ort_install_manifest(
     specification: dict,
     diagnostics,
 ) -> None:
-    _private_json(
+    atomic_json(
         layout.staging / "manifest.json",
         {
             "runtime_manifest_version": RUNTIME_MANIFEST_VERSION,
@@ -1325,15 +962,16 @@ def _write_ort_install_manifest(
             "model_directory": str(layout.model_current.resolve(strict=False)),
             "model_storage_parent": str(layout.storage_parent),
         },
+        private=True,
     )
 
 
-def _install_worker(
+def _install(
     job: BackgroundJob,
     variant: str,
     requested_device: str,
     layout: _InstallLayout,
-) -> None:
+) -> str:
     """Install model files only; ORT itself must be shipped by the extension."""
     install_lock = _InstallationLock(layout.root)
     try:
@@ -1342,7 +980,7 @@ def _install_worker(
         layout.storage_root.mkdir(parents=True, exist_ok=True)
         _cleanup_abandoned_staging(layout.storage_root)
         specification = dict(model_spec(variant))
-        job.update(0.01, "Checking model publication", phase="1/5 Preflight")
+        job.update(0.01, "Checking model publication", "1/5 Preflight")
         _validate_install_platform()
         runtime = sam3d_ort_runtime.probe_runtime(requested_device)
         job.log(
@@ -1350,48 +988,77 @@ def _install_worker(
             f"ORT requested={runtime.requested_mode}; selected={runtime.actual_ep}; "
             f"fallback={runtime.fallback}",
         )
-        _ensure_model_storage(layout.storage_root)
+        STORAGE.ensure(layout.storage_root)
         _prepare_ort_staging(layout)
-        bundle = _download_ort_bundle(
-            job,
-            layout,
-            variant,
-            specification,
-        )
+        bundle = _download_ort_bundle(job, layout, variant, specification)
         diagnostics = _self_test_ort_bundle(job, bundle, requested_device)
         _check_install_cancel(job)
-        job.update(0.94, "Writing validated backend manifest", phase="4/5 Manifest")
-        _write_ort_install_manifest(
-            layout,
-            variant,
-            specification,
-            diagnostics,
-        )
-        job.update(0.97, "Activating graph bundle", phase="5/5 Activation")
-        _activate_install(job, layout)
-    except InterruptedError:
-        message = f"{job.phase or 'Installation'} cancelled"
-        job.finish("CANCELLED", message)
-        job.messages.put(("CANCELLED", message))
-    except Exception as exc:
-        job.log(
-            "ERROR",
-            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
-        )
-        message = _friendly_install_error(exc, job.phase)
-        job.finish("ERROR", message)
-        job.messages.put(("ERROR", message))
+        job.update(0.94, "Writing validated backend manifest", "4/5 Manifest")
+        _write_ort_install_manifest(layout, variant, specification, diagnostics)
+        job.update(0.97, "Activating graph bundle", "5/5 Activation")
+        return _activate_install(job, layout)
+    except Cancelled as exc:
+        raise Cancelled(f"{job.phase or 'Installation'} cancelled") from exc
     finally:
-        job.process = None
-        if layout.staging.exists():
-            shutil.rmtree(layout.staging, ignore_errors=True)
+        remove_tree(layout.staging)
         if layout.model_staging.exists():
-            job.log(
-                "DETAIL",
-                "Completed model downloads retained for the next retry",
-            )
+            job.log("DETAIL", "Completed model downloads retained for the next retry")
         job.log("DETAIL", "Temporary runtime staging cleaned")
         install_lock.release()
+
+
+def start_install(
+    variant: str,
+    device: str,
+    storage_selection: str = "",
+    *,
+    scene_name: str = "",
+    scene_pointer: int = 0,
+) -> BackgroundJob:
+    """Start installing ``variant`` into the selected storage parent."""
+    if is_model_loaded():
+        raise InvalidRequest("Unload SAM 3D Body before repairing it")
+    storage_parent = _normalize_storage_parent(storage_selection)
+    layout = _new_install_layout(str(storage_parent))
+
+    def prepare(job: BackgroundJob) -> None:
+        job.log(
+            "INFO",
+            f"Starting SAM 3D Body installation (model={variant}, device={device})",
+        )
+        job.log("INFO", f"Selected model storage: {storage_parent}")
+
+    return BACKEND.start_job(
+        JobKind.INSTALL,
+        OperationKind.SAM3D_INSTALL,
+        "sam3d-install",
+        lifecycle.run_job,
+        (lambda job: _install(job, str(variant), str(device), layout),),
+        label="Installing SAM 3D Body",
+        status="Starting SAM 3D Body installation",
+        scene_name=scene_name,
+        scene_pointer=scene_pointer,
+        request=SamSetupRequest(
+            operation="install",
+            model_variant=str(variant),
+            device=str(device),
+            model_storage_directory=str(storage_parent),
+        ),
+        log_path=install_log_path(create_root=True),
+        prepare=prepare,
+        kwargs={"describe_error": _friendly_install_error},
+    )
+
+
+def cancel_install() -> bool:
+    return BACKEND.cancel_job(JobKind.INSTALL, "Cancelling installation safely")
+
+
+def dismiss_install_result() -> bool:
+    if install_running():
+        return False
+    BACKEND.clear_job(JobKind.INSTALL)
+    return True
 
 
 def is_model_loaded() -> bool:
@@ -1403,52 +1070,58 @@ def is_model_loaded() -> bool:
         return False
 
 
-def _model_load_worker(
+def _load(
     job: BackgroundJob,
     variant: str,
     requested_device: str,
     resolved_runtime_paths: Mapping[str, str],
-) -> None:
-    try:
-        job.update(
-            0.05,
-            "Opening ONNX Runtime graph bundle",
-            phase="Model Load",
-        )
-        from .providers.sam3d_body_provider import load_model_cache
+) -> str:
+    job.update(0.05, "Opening ONNX Runtime graph bundle", "Model Load")
+    from .providers.sam3d_body_provider import load_model_cache
 
-        job.update(
-            0.20,
-            "Creating the requested execution-provider session",
-            phase="Model Load",
-        )
+    job.update(0.20, "Creating the requested execution-provider session", "Model Load")
+    try:
         device = load_model_cache(
-            variant,
-            requested_device,
-            dict(resolved_runtime_paths),
+            variant, requested_device, dict(resolved_runtime_paths)
         )
         if job.cancel.is_set():
             unload_model()
-            raise InterruptedError("Model loading cancelled")
-        job.update(
-            1.0,
-            f"Model loaded on {device.upper()}",
-            phase="Model Load",
-        )
-        job.finish("DONE", f"SAM 3D Body model loaded on {device.upper()}")
-        job.messages.put(("DONE", f"SAM 3D Body model loaded on {device.upper()}"))
-    except InterruptedError:
-        message = "SAM 3D Body model loading cancelled"
-        job.finish("CANCELLED", message)
-        job.messages.put(("CANCELLED", message))
-    except Exception as exc:
-        job.log(
-            "ERROR",
-            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
-        )
-        message = _friendly_install_error(exc, "Model Load")
-        job.finish("ERROR", message)
-        job.messages.put(("ERROR", message))
+            raise Cancelled("Model loading cancelled")
+    except Cancelled as exc:
+        raise Cancelled("SAM 3D Body model loading cancelled") from exc
+    job.update(1.0, f"Model loaded on {device.upper()}", "Model Load")
+    return f"SAM 3D Body model loaded on {device.upper()}"
+
+
+def start_load(
+    variant: str,
+    device: str,
+    *,
+    scene_name: str = "",
+    scene_pointer: int = 0,
+) -> BackgroundJob:
+    snapshot = backend_snapshot(str(variant), str(device))
+    if not snapshot.installed:
+        raise ModelMissing("Repair the SAM 3D Body backend first")
+    resolved_runtime_paths = runtime_paths()
+    return BACKEND.start_job(
+        JobKind.MODEL,
+        OperationKind.SAM3D_MODEL_LOAD,
+        "sam3d-model-load",
+        lifecycle.run_job,
+        (lambda job: _load(job, str(variant), str(device), resolved_runtime_paths),),
+        label="Loading SAM 3D Body model",
+        scene_name=scene_name,
+        scene_pointer=scene_pointer,
+        request=SamSetupRequest(
+            operation="load", model_variant=str(variant), device=str(device)
+        ),
+        kwargs={
+            "describe_error": lambda exc, _phase: _friendly_install_error(
+                exc, "Model Load"
+            )
+        },
+    )
 
 
 def unload_model() -> None:
@@ -1457,285 +1130,50 @@ def unload_model() -> None:
     unload_model_cache()
 
 
-class _ModalJobOperator:
-    _timer = None
-    _job = None
+def unload() -> str:
+    def action() -> str:
+        unload_model()
+        return "SAM 3D Body model unloaded"
 
-    def _begin_modal(self, context, job):
-        self._job = job
-        job.started = True
-        if job.token is not None:
-            COORDINATOR.attach_worker(job.token, thread=job.thread)
-        try:
-            job.thread.start()
-        except Exception as exc:
-            job.finish("ERROR", f"Could not start background operation: {exc}")
-            if job.token is not None:
-                COORDINATOR.release(job.token)
-            self.report({"ERROR"}, f"Could not start background operation: {exc}")
-            return {"CANCELLED"}
-        self._timer = context.window_manager.event_timer_add(
-            0.15,
-            window=context.window,
-        )
-        context.window_manager.modal_handler_add(self)
-        return {"RUNNING_MODAL"}
-
-    def _finish_modal(self, context):
-        if self._timer is not None:
-            context.window_manager.event_timer_remove(self._timer)
-            self._timer = None
-
-    @staticmethod
-    def _tag_redraw(context) -> None:
-        for area in context.screen.areas if context.screen else ():
-            area.tag_redraw()
-
-    def modal(self, context, event):
-        if event.type == "ESC":
-            if self._job.token is not None:
-                COORDINATOR.request_cancel(self._job.token)
-            else:
-                self._job.cancel.set()
-            if self._job.process and self._job.process.poll() is None:
-                self._job.process.terminate()
-            return {"RUNNING_MODAL"}
-        if event.type != "TIMER":
-            return {"PASS_THROUGH"}
-        try:
-            kind, payload = self._job.messages.get_nowait()
-        except queue.Empty:
-            self._tag_redraw(context)
-            return {"RUNNING_MODAL"}
-        self._finish_modal(context)
-        if self._job.token is not None:
-            COORDINATOR.release(self._job.token)
-        self._tag_redraw(context)
-        if kind == "DONE":
-            self.report({"INFO"}, payload)
-            return {"FINISHED"}
-        if kind == "CANCELLED":
-            self.report({"WARNING"}, payload)
-            return {"CANCELLED"}
-        self.report({"ERROR"}, payload)
-        return {"CANCELLED"}
-
-    def cancel(self, context):
-        if self._job:
-            if self._job.token is not None:
-                COORDINATOR.request_cancel(self._job.token)
-            else:
-                self._job.cancel.set()
-        self._finish_modal(context)
-
-
-class MTP_OT_sam3d_setup(Operator):
-    bl_idname = "mtp.sam3d_setup"
-    bl_label = "SAM 3D Body Setup"
-    bl_description = "Install the public SAM 3D Body ONNX model bundle"
-
-    def invoke(self, _context, _event):
-        return bpy.ops.mtp.sam3d_install("INVOKE_DEFAULT")
-
-    def execute(self, _context):
-        return bpy.ops.mtp.sam3d_install("INVOKE_DEFAULT")
-
-
-class MTP_OT_sam3d_install(_ModalJobOperator, Operator):
-    bl_idname = "mtp.sam3d_install"
-    bl_label = "Install SAM 3D Body"
-    bl_description = "Download and install the optional SAM 3D Body backend"
-
-    model_storage_directory: StringProperty(
-        name="Model Storage Location",
-        description=(
-            "Parent directory where Media to Pose stores the downloaded "
-            "SAM 3D Body ONNX graph bundle"
-        ),
-        subtype="DIR_PATH",
-        options={"SKIP_SAVE"},
+    return BACKEND.run_exclusive(
+        OperationKind.SAM3D_MODEL_UNLOAD,
+        "sam3d-model-unload",
+        action,
+        status="Unloading SAM 3D Body model",
     )
 
-    def invoke(self, context, _event):
-        if COORDINATOR.is_busy():
-            self.report({"INFO"}, "Media to Pose is already busy")
-            return {"CANCELLED"}
-        self.model_storage_directory = str(preferred_model_storage_parent())
-        return context.window_manager.invoke_props_dialog(
-            self,
-            width=620,
-            title=(
-                "Repair SAM 3D Body" if backend_present() else "Install SAM 3D Body"
-            ),
-            confirm_text=("Repair" if backend_present() else "Install"),
-        )
 
-    def draw(self, context):
-        layout = self.layout
-        settings = context.scene.mtp_settings
-        spec = model_spec(settings.sam3d_model_variant)
-        size = int(spec.get("download_bytes") or 0)
-        label = f"Download {spec['label']} ONNX graph bundle"
-        if size:
-            label += f" ({size / (1024**3):.1f} GiB)"
-        layout.label(text=label, icon="IMPORT")
-        layout.label(
-            text=f"Source: {spec['repo']} @ {spec.get('revision') or 'not published'}",
-            icon="PACKAGE",
-        )
-        layout.prop(self, "model_storage_directory")
-        try:
-            managed = model_storage_root(self.model_storage_directory)
-            layout.label(
-                text=f"Managed folder: {managed}",
-                icon="FILE_FOLDER",
-            )
-        except (OSError, RuntimeError, ValueError):
-            layout.label(
-                text="Choose an accessible model storage location",
-                icon="ERROR",
-            )
-        layout.label(
-            text="ONNX Runtime is shipped with the extension; setup installs models only.",
-            icon="INFO",
-        )
-
-    def execute(self, context):
-        if COORDINATOR.is_busy():
-            return {"CANCELLED"}
-        settings = context.scene.mtp_settings
+def uninstall() -> str:
+    def action() -> str:
         if is_model_loaded():
-            self.report({"ERROR"}, "Unload SAM 3D Body before repairing it")
-            return {"CANCELLED"}
+            raise InvalidRequest("Unload SAM 3D Body before uninstalling")
+        invalidate_backend_snapshot()
         try:
-            storage_parent = _normalize_storage_parent(self.model_storage_directory)
-        except (OSError, RuntimeError, ValueError) as exc:
-            self.report(
-                {"ERROR"},
-                f"Invalid model storage location: {_safe_metadata(exc)}",
-            )
-            return {"CANCELLED"}
-        install_layout = _new_install_layout(str(storage_parent))
-        token = COORDINATOR.acquire(
-            OperationKind.SAM3D_INSTALL,
-            "sam3d-install",
-            scene_name=context.scene.name,
-            scene_pointer=context.scene.as_pointer(),
-            status="Starting SAM 3D Body installation",
-        )
-        if token is None:
-            self.report({"ERROR"}, "Media to Pose is already busy")
-            return {"CANCELLED"}
-        job = BackgroundJob(
-            "Installing SAM 3D Body",
-            token=token,
-            request=SamSetupRequest(
-                operation="install",
-                model_variant=str(settings.sam3d_model_variant),
-                device=str(settings.sam3d_device),
-                model_storage_directory=str(storage_parent),
-            ),
-        )
-        job.configure_log(install_log_path(create_root=True))
-        job.log(
-            "INFO",
-            (
-                "Starting SAM 3D Body installation "
-                f"(model={settings.sam3d_model_variant}, "
-                f"device={settings.sam3d_device})"
-            ),
-        )
-        job.log("INFO", f"Selected model storage: {storage_parent}")
-        job.thread = threading.Thread(
-            target=_install_worker,
-            args=(
-                job,
-                settings.sam3d_model_variant,
-                settings.sam3d_device,
-                install_layout,
-            ),
-            daemon=True,
-            name="MTP-SAM3D-Installer",
-        )
-        if not SAM_JOBS.assign(SamJobSlot.INSTALL, job):
-            COORDINATOR.finish(
-                token,
-                OperationState.FAILED,
-                "Installation ownership was superseded",
-            )
-            COORDINATOR.release(token)
-            self.report({"ERROR"}, "Could not acquire installation ownership")
-            return {"CANCELLED"}
-        settings.progress = 0.0
-        settings.status = "Starting SAM 3D Body installation"
-        settings.status_kind = "PROGRESS"
-        return self._begin_modal(context, job)
+            manifest = _read_json(manifest_path()) or {}
+            storage_root = installed_model_storage_root(manifest)
+            root = _verified_backend_root()
+            if (
+                storage_root
+                and root not in storage_root.resolve().parents
+                and storage_root.exists()
+            ):
+                STORAGE.remove(storage_root)
+            if root.exists():
+                shutil.rmtree(root)
+        except OSError as exc:
+            raise BackendError(
+                f"Could not remove SAM 3D Body: {_safe_metadata(exc)}"
+            ) from exc
+        finally:
+            invalidate_backend_snapshot()
+        return "SAM 3D Body backend removed"
 
-    def modal(self, context, event):
-        scene = (
-            bpy.data.scenes.get(self._job.token.scene_name)
-            if self._job and self._job.token
-            else context.scene
-        )
-        if scene is None:
-            if self._job and self._job.token:
-                COORDINATOR.request_cancel(
-                    self._job.token, status="Originating scene was removed"
-                )
-            return super().modal(context, event)
-        settings = scene.mtp_settings
-        job = self._job
-        if job and SAM_JOBS.current(SamJobSlot.INSTALL) is job:
-            settings.progress = job.progress * 100.0
-            settings.status = job.status
-            settings.status_kind = (
-                "PROGRESS"
-                if not job.terminal
-                else "READY"
-                if job.outcome in {"DONE", "SUCCESS"}
-                else "WARNING"
-                if job.outcome == "CANCELLED"
-                else "ERROR"
-            )
-        result = super().modal(context, event)
-        if (
-            result not in ({"RUNNING_MODAL"}, {"PASS_THROUGH"})
-            and job
-            and SAM_JOBS.current(SamJobSlot.INSTALL) is job
-        ):
-            settings.progress = job.progress * 100.0
-            settings.status = job.status
-            settings.status_kind = (
-                "READY"
-                if job.outcome in {"DONE", "SUCCESS"}
-                else "WARNING"
-                if job.outcome == "CANCELLED"
-                else "ERROR"
-            )
-        return result
-
-
-class MTP_OT_sam3d_cancel_install(Operator):
-    bl_idname = "mtp.sam3d_cancel_install"
-    bl_label = "Cancel SAM 3D Body Installation"
-
-    def execute(self, _context):
-        job = SAM_JOBS.current(SamJobSlot.INSTALL)
-        if not job:
-            return {"CANCELLED"}
-        if job.token is not None:
-            COORDINATOR.request_cancel(
-                job.token,
-                status="Cancelling installation safely",
-            )
-        else:
-            job.cancel.set()
-        job.update(
-            job.progress,
-            "Cancelling installation safely",
-            phase=job.phase,
-        )
-        return {"FINISHED"}
+    return BACKEND.run_exclusive(
+        OperationKind.SAM3D_UNINSTALL,
+        "sam3d-uninstall",
+        action,
+        status="Uninstalling SAM 3D Body",
+    )
 
 
 def install_diagnostics_text() -> str:
@@ -1769,288 +1207,46 @@ def install_diagnostics_text() -> str:
     return _redact("\n".join(lines))
 
 
-class MTP_OT_sam3d_copy_install_diagnostics(Operator):
-    bl_idname = "mtp.sam3d_copy_install_diagnostics"
-    bl_label = "Copy SAM Installation Diagnostics"
-    bl_description = "Copy redacted SAM installation details and recent logs"
-
-    def execute(self, context):
-        context.window_manager.clipboard = install_diagnostics_text()
-        self.report({"INFO"}, "Redacted installation diagnostics copied")
-        return {"FINISHED"}
+def install_log_file() -> Path:
+    snapshot = install_status_snapshot()
+    return (
+        Path(snapshot.log_path)
+        if snapshot.log_path
+        else install_log_path(create_root=False)
+    )
 
 
-class MTP_OT_sam3d_open_install_log(Operator):
-    bl_idname = "mtp.sam3d_open_install_log"
-    bl_label = "Open SAM Installation Log"
-    bl_description = "Open the retained SAM installation log"
-
-    def execute(self, _context):
-        snapshot = install_status_snapshot()
-        path = (
-            Path(snapshot.log_path)
-            if snapshot.log_path
-            else (install_log_path(create_root=False))
-        )
-        if not path.is_file():
-            self.report({"WARNING"}, "No SAM installation log is available")
-            return {"CANCELLED"}
-        try:
-            bpy.ops.wm.path_open(filepath=str(path))
-        except RuntimeError:
-            try:
-                if os.name == "nt":
-                    os.startfile(str(path))
-                elif sys.platform == "darwin":
-                    subprocess.Popen(["open", str(path)])
-                else:
-                    subprocess.Popen(["xdg-open", str(path)])
-            except OSError as exc:
-                self.report(
-                    {"ERROR"},
-                    f"Could not open install log: {_safe_metadata(exc)}",
-                )
-                return {"CANCELLED"}
-        return {"FINISHED"}
-
-
-class MTP_OT_sam3d_dismiss_install_result(Operator):
-    bl_idname = "mtp.sam3d_dismiss_install_result"
-    bl_label = "Dismiss SAM Installation Result"
-
-    def execute(self, context):
-        if install_running():
-            return {"CANCELLED"}
-        SAM_JOBS.clear(SamJobSlot.INSTALL)
-        settings = context.scene.mtp_settings
-        settings.progress = 0.0
-        settings.status = "Ready"
-        settings.status_kind = "READY"
-        return {"FINISHED"}
-
-
-class MTP_OT_sam3d_load(_ModalJobOperator, Operator):
-    bl_idname = "mtp.sam3d_load"
-    bl_label = "Load SAM 3D Body Model"
-    bl_description = "Load the installed model into RAM or VRAM for capture"
-
-    def execute(self, context):
-        settings = context.scene.mtp_settings
-        if COORDINATOR.is_busy():
-            self.report({"WARNING"}, "Media to Pose is already busy")
-            return {"CANCELLED"}
-        if not sam_backend_ready(settings):
-            self.report({"ERROR"}, "Repair the SAM 3D Body backend first")
-            return {"CANCELLED"}
-        if is_model_loaded():
-            self.report({"INFO"}, "SAM 3D Body model is already loaded")
-            return {"FINISHED"}
-        resolved_runtime_paths = runtime_paths()
-        token = COORDINATOR.acquire(
-            OperationKind.SAM3D_MODEL_LOAD,
-            "sam3d-model-load",
-            scene_name=context.scene.name,
-            scene_pointer=context.scene.as_pointer(),
-            status="Loading SAM 3D Body model",
-        )
-        if token is None:
-            self.report({"WARNING"}, "Media to Pose is already busy")
-            return {"CANCELLED"}
-        job = BackgroundJob(
-            "Loading SAM 3D Body model",
-            token=token,
-            request=SamSetupRequest(
-                operation="load",
-                model_variant=str(settings.sam3d_model_variant),
-                device=str(settings.sam3d_device),
-            ),
-        )
-        if not SAM_JOBS.assign(SamJobSlot.MODEL, job):
-            COORDINATOR.finish(
-                token,
-                OperationState.FAILED,
-                "Model-load ownership was superseded",
-            )
-            COORDINATOR.release(token)
-            self.report({"ERROR"}, "Could not acquire model-load ownership")
-            return {"CANCELLED"}
-        job.thread = threading.Thread(
-            target=_model_load_worker,
-            args=(
-                job,
-                str(settings.sam3d_model_variant),
-                str(settings.sam3d_device),
-                resolved_runtime_paths,
-            ),
-            daemon=True,
-            name="MTP-SAM3D-ModelLoad",
-        )
-        settings.progress = 0.0
-        settings.status = "Loading SAM 3D Body model"
-        settings.status_kind = "PROGRESS"
-        return self._begin_modal(context, job)
-
-    def modal(self, context, event):
-        scene = (
-            bpy.data.scenes.get(self._job.token.scene_name)
-            if self._job and self._job.token
-            else context.scene
-        )
-        if scene is None:
-            if self._job and self._job.token:
-                COORDINATOR.request_cancel(
-                    self._job.token,
-                    status="Originating scene was removed",
-                )
-            return super().modal(context, event)
-        settings = scene.mtp_settings
-        job = self._job
-        if job and SAM_JOBS.current(SamJobSlot.MODEL) is job:
-            settings.progress = job.progress * 100.0
-            settings.status = job.status
-            settings.status_kind = (
-                "PROGRESS"
-                if not job.terminal
-                else "READY"
-                if job.outcome in {"DONE", "SUCCESS"}
-                else "WARNING"
-                if job.outcome == "CANCELLED"
-                else "ERROR"
-            )
-        result = super().modal(context, event)
-        if (
-            result not in ({"RUNNING_MODAL"}, {"PASS_THROUGH"})
-            and job
-            and SAM_JOBS.current(SamJobSlot.MODEL) is job
-        ):
-            settings.progress = job.progress * 100.0
-            settings.status = job.status
-        return result
-
-
-class MTP_OT_sam3d_unload(Operator):
-    bl_idname = "mtp.sam3d_unload"
-    bl_label = "Unload SAM 3D Body"
-    bl_description = "Release the loaded SAM 3D Body model and GPU memory"
-
-    def execute(self, _context):
-        token = COORDINATOR.acquire(
-            OperationKind.SAM3D_MODEL_UNLOAD,
-            "sam3d-model-unload",
-            status="Unloading SAM 3D Body model",
-        )
-        if token is None:
-            self.report({"WARNING"}, "Media to Pose is already busy")
-            return {"CANCELLED"}
-        try:
-            unload_model()
-        except Exception as exc:
-            COORDINATOR.finish(token, OperationState.FAILED, str(exc))
-            COORDINATOR.release(token)
-            self.report({"ERROR"}, _safe_metadata(exc))
-            return {"CANCELLED"}
-        COORDINATOR.finish(token, OperationState.SUCCEEDED, "Model unloaded")
-        COORDINATOR.release(token)
-        self.report({"INFO"}, "SAM 3D Body model unloaded")
-        return {"FINISHED"}
-
-
-class MTP_OT_sam3d_uninstall(Operator):
-    bl_idname = "mtp.sam3d_uninstall"
-    bl_label = "Uninstall SAM 3D Body"
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_confirm(self, event)
-
-    def execute(self, _context):
-        token = COORDINATOR.acquire(
-            OperationKind.SAM3D_UNINSTALL,
-            "sam3d-uninstall",
-            status="Uninstalling SAM 3D Body",
-        )
-        if token is None:
-            self.report({"ERROR"}, "Media to Pose is already busy")
-            return {"CANCELLED"}
-        if is_model_loaded():
-            COORDINATOR.finish(
-                token,
-                OperationState.FAILED,
-                "Unload SAM 3D Body before uninstalling",
-            )
-            COORDINATOR.release(token)
-            self.report({"ERROR"}, "Unload SAM 3D Body before uninstalling")
-            return {"CANCELLED"}
-        invalidate_backend_snapshot()
-        try:
-            manifest = _read_json(manifest_path()) or {}
-            storage_root = installed_model_storage_root(manifest)
-            root = _verified_backend_root()
-            if (
-                storage_root
-                and root not in storage_root.resolve().parents
-                and storage_root.exists()
-            ):
-                shutil.rmtree(_verified_model_storage_root(storage_root))
-            if root.exists():
-                shutil.rmtree(root)
-        except (OSError, RuntimeError, ValueError) as exc:
-            message = f"Could not remove SAM 3D Body: {_safe_metadata(exc)}"
-            self.report({"ERROR"}, message)
-            COORDINATOR.finish(token, OperationState.FAILED, message)
-            COORDINATOR.release(token)
-            return {"CANCELLED"}
-        finally:
-            invalidate_backend_snapshot()
-        COORDINATOR.finish(token, OperationState.SUCCEEDED, "SAM 3D Body uninstalled")
-        COORDINATOR.release(token)
-        self.report({"INFO"}, "SAM 3D Body backend removed")
-        return {"FINISHED"}
-
-
-CLASSES = (
-    MTP_OT_sam3d_setup,
-    MTP_OT_sam3d_install,
-    MTP_OT_sam3d_cancel_install,
-    MTP_OT_sam3d_copy_install_diagnostics,
-    MTP_OT_sam3d_open_install_log,
-    MTP_OT_sam3d_dismiss_install_result,
-    MTP_OT_sam3d_load,
-    MTP_OT_sam3d_unload,
-    MTP_OT_sam3d_uninstall,
-)
-
-
-def register() -> None:
-    invalidate_backend_snapshot()
-    register_classes(CLASSES)
-
-
-def unregister() -> None:
-    invalidate_backend_snapshot()
-    jobs = SAM_JOBS.jobs()
-    for job in jobs:
-        if job:
-            if job.token is not None:
-                COORDINATOR.request_cancel(
-                    job.token,
-                    status="Cancelling during add-on shutdown",
-                )
-            else:
-                job.cancel.set()
-            if job.process and job.process.poll() is None:
-                job.process.terminate()
-    for job in jobs:
-        if (
-            job
-            and job.thread
-            and job.thread.is_alive()
-            and job.thread is not threading.current_thread()
-        ):
-            job.thread.join(timeout=0.5)
-    for slot in SamJobSlot:
-        job = SAM_JOBS.current(slot)
-        if not (job and job.thread and job.thread.is_alive()):
-            SAM_JOBS.clear(slot, job)
+def shutdown() -> None:
+    BACKEND.shutdown(join_timeout=0.5)
     if not model_load_running():
         unload_model()
-    unregister_classes(CLASSES)
+
+
+__all__ = [
+    "BACKEND",
+    "MODEL_VARIANTS",
+    "BackendSnapshot",
+    "BackgroundJob",
+    "backend_present",
+    "backend_snapshot",
+    "cancel_install",
+    "dismiss_install_result",
+    "install_diagnostics_text",
+    "install_log_file",
+    "install_running",
+    "install_status_snapshot",
+    "is_model_loaded",
+    "model_load_running",
+    "model_load_status_snapshot",
+    "model_spec",
+    "preferred_model_storage_parent",
+    "runtime_diagnostics",
+    "runtime_paths",
+    "sam3d_device_enum_items",
+    "sam_backend_ready",
+    "shutdown",
+    "start_install",
+    "start_load",
+    "uninstall",
+    "unload",
+]

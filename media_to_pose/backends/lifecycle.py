@@ -17,6 +17,7 @@ import queue
 import re
 import threading
 import time
+import traceback
 import urllib.parse
 import urllib.request
 import uuid
@@ -508,7 +509,8 @@ class BackgroundJob:
             self.log_path = ""
             LOGGER.warning("Could not initialize install log: %s", safe_metadata(exc))
 
-    def log(self, level: str, message: object) -> None:
+    def log(self, level: str, message: object, *, echo: bool = True) -> None:
+        """Append to the job log and file; ``echo`` also sends it to LOGGER."""
         cleaned = re.sub(r"[\x00-\x1f\x7f]+", " ", redact(message)).strip()
         if not cleaned:
             return
@@ -519,7 +521,8 @@ class BackgroundJob:
             if len(self.logs) > _LOG_LIMIT:
                 del self.logs[:-_LOG_LIMIT]
             log_path = self.log_path
-        LOGGER.log(_LOG_LEVELS.get(level.upper(), logging.INFO), "%s", cleaned)
+        if echo:
+            LOGGER.log(_LOG_LEVELS.get(level.upper(), logging.INFO), "%s", cleaned)
         if log_path:
             try:
                 with Path(log_path).open("a", encoding="utf8") as handle:
@@ -627,6 +630,11 @@ def run_job(
         job.finish(JobOutcome.CANCELLED, str(exc) or f"{job.label} cancelled")
     except Exception as exc:  # Thread entry point.
         LOGGER.exception("%s failed", job.label)
+        job.log(
+            "ERROR",
+            "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+            echo=False,
+        )
         message = (
             describe_error(exc, job.phase)
             if describe_error is not None
