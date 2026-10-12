@@ -175,10 +175,6 @@ class FaceTransferTests(unittest.TestCase):
         self.assertAlmostEqual(target.x, expected, delta=0.1 * expected)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class VroidExpressionTests(unittest.TestCase):
     """VRM / VRoid expression keys driven from ARKit coefficients."""
 
@@ -231,3 +227,118 @@ class VroidExpressionTests(unittest.TestCase):
         self.assertAlmostEqual(self.keys["Fcl_MTH_U"].value, 1.0, places=3)
         self.assertAlmostEqual(self.keys["Fcl_MTH_Joy"].value, 1.0, places=3)
         self.assertEqual(self.keys["Fcl_MTH_A"].value, 0.0)
+
+
+def _blink_clip(count: int = 40) -> list[dict[str, float]]:
+    """A clip with a resting smile bias, jitter, and one quick blink."""
+    clip = []
+    for index in range(count):
+        blink = {20: 0.7, 21: 0.95, 22: 0.9, 23: 0.6}.get(index, 0.05)
+        clip.append(
+            {
+                "eyeBlinkLeft": blink,
+                "eyeBlinkRight": blink,
+                "mouthSmileLeft": 0.3 + 0.12 * math.sin(index * 2.5),
+            }
+        )
+    return clip
+
+
+class FaceSequenceTests(unittest.TestCase):
+    """A video sequence through Face Expression Cleanup and temporal cleanup."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.addon = register_addon()
+        bpy.ops.wm.open_mainfile(filepath=str(fixture_path("facefx_face_rig")))
+        cls.addon.register()
+        settings = bpy.context.scene.mtp_settings
+        settings.use_face = True
+        settings.use_body = False
+        settings.use_hands = False
+        cls.rig = bpy.data.objects["FaceFX.Rig"]
+        settings.target_armature = cls.rig
+        cls.addon.api.auto_map(cls.rig.name)
+        cls.mesh = bpy.data.objects["FaceFX"]
+
+    def _run(self, face_cleanup: bool) -> dict[str, list[float]]:
+        config = self.rig.mtp_rig_config
+        module_config = self.addon.postprocess.module_config
+        saved = [(item, item.enabled) for item in config.post_processing_modules]
+        self.addCleanup(
+            lambda: [setattr(item, "enabled", value) for item, value in saved]
+        )
+        for item in config.post_processing_modules:
+            item.enabled = False
+        module_config(config, "TEMPORAL_CORRECTION").enabled = True
+        module_config(config, "FACE_CORRECTION").enabled = face_cleanup
+
+        context = scene_context()
+        step_ms = 1000.0 / context.fps
+        frames = [
+            self.addon.core.types.CanonicalFrame(
+                timestamp_ms=round(index * step_ms), blendshapes=values
+            )
+            for index, values in enumerate(_blink_clip())
+        ]
+        settings = SimpleNamespace(
+            provider="MEDIAPIPE",
+            use_body=False,
+            use_hands=False,
+            use_face=True,
+            face_output="ARKIT",
+            media_kind="VIDEO",
+            root_motion_mode="OFF",
+            keep_original_root_position=False,
+            keep_detection_cache=False,
+        )
+        keys = self.mesh.data.shape_keys
+        keys.animation_data_clear()
+        self.addCleanup(keys.animation_data_clear)
+        self.addon.retarget.apply_sequence(
+            self.rig, frames, settings, 1.0, scene_context=context
+        )
+        normalize = self.addon.rig.names.normalize_name
+        names = {}
+        for role in ("eyeBlinkLeft", "mouthSmileLeft"):
+            # The face carries arkit_ and facs_bs_ copies; arkit_ is keyed.
+            matches = sorted(
+                (
+                    block.name
+                    for block in keys.key_blocks
+                    if normalize(block.name, shape=True) == role.lower()
+                ),
+                key=lambda name: not name.startswith("arkit_"),
+            )
+            names[role] = matches[0]
+        scene = bpy.context.scene
+        values: dict[str, list[float]] = {role: [] for role in names}
+        for index in range(len(frames)):
+            scene.frame_set(1 + index)
+            for role, name in names.items():
+                values[role].append(keys.key_blocks[name].value)
+        return values
+
+    def test_blink_survives_and_expressions_are_calibrated(self) -> None:
+        values = self._run(face_cleanup=True)
+        blink = values["eyeBlinkLeft"]
+        # The blink keeps nearly its full depth at the detected frame.
+        self.assertGreater(blink[21], 0.85)
+        self.assertLess(max(blink[:15]), 0.05)
+        smile = values["mouthSmileLeft"]
+        roughness = sum(abs(smile[i + 1] - smile[i]) for i in range(len(smile) - 1))
+        raw = [frame["mouthSmileLeft"] for frame in _blink_clip()]
+        raw_roughness = sum(abs(raw[i + 1] - raw[i]) for i in range(len(raw) - 1))
+        self.assertLess(roughness, 0.5 * raw_roughness)
+        # Neutral calibration removed the resting smile.
+        self.assertLess(sum(smile) / len(smile), 0.25)
+
+    def test_without_face_cleanup_temporal_smoothing_still_runs(self) -> None:
+        values = self._run(face_cleanup=False)
+        smile = values["mouthSmileLeft"]
+        # No calibration: the resting smile stays.
+        self.assertGreater(sum(smile) / len(smile), 0.2)
+
+
+if __name__ == "__main__":
+    unittest.main()

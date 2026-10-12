@@ -202,7 +202,9 @@ def filter_face_track(
         stats.blinks = max((len(r) for r in blink_ranges.values()), default=0)
 
     if settings.smooth and settings.strength > 0.0:
-        base = 0.08 * min(max(settings.strength, 0.0), 1.0)
+        # Strength 1 is a 0.15 s Gaussian; the default 0.35 is 1 to 1.5
+        # frames at 30 fps.
+        base = 0.15 * min(max(settings.strength, 0.0), 1.0)
         for name in names:
             original = columns[name]
             sigma = base * GROUP_STRENGTH[coefficient_group(name)]
