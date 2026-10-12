@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from ..core.errors import InvalidRequest
 from .base import ProviderDescriptor
-from .mediapipe_provider import MediaPipeProvider
-from .mediapipe_provider import dependency_status as mp_status
+from .mediapipe import MediaPipeProvider
+from .mediapipe import dependency_status as mp_status
 from .sam3d_body_provider import (
     SAM3DBodyProvider,
 )

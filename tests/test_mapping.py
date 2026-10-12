@@ -301,7 +301,7 @@ class GenericMappingTests(unittest.TestCase):
             )
         frame.body["LEFT_WRIST"].image = (0.99, 0.01)
 
-        observation = self.addon.providers.mediapipe_provider._estimate_root_motion(
+        observation = self.addon.providers.mediapipe.body._estimate_root_motion(
             frame,
             width,
             height,
@@ -315,13 +315,13 @@ class GenericMappingTests(unittest.TestCase):
 
     def test_mediapipe_pose_alignment_rejects_degenerate_observations(self) -> None:
         frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
-        for name in self.addon.providers.mediapipe_provider._ROOT_MOTION_LANDMARKS:
+        for name in self.addon.providers.mediapipe.body._ROOT_MOTION_LANDMARKS:
             frame.body[name] = self.addon.models.Landmark(
                 (0.0, 0.0, 0.0),
                 (0.5, 0.5),
             )
 
-        observation = self.addon.providers.mediapipe_provider._estimate_root_motion(
+        observation = self.addon.providers.mediapipe.body._estimate_root_motion(
             frame,
             1920,
             1080,
