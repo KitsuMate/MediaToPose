@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import importlib
 import tempfile
 import unittest
 
 import numpy as np
+from media_to_pose import sam3d_mhr_runtime as runtime
 
-from tests.blender_test_support import PACKAGE_NAME, load_addon
-
-load_addon()
-runtime = importlib.import_module(f"{PACKAGE_NAME}.sam3d_mhr_runtime")
 MhrCameraOutput = runtime.MhrCameraOutput
 MhrModel = runtime.MhrModel
 MhrOutput = runtime.MhrOutput

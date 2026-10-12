@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import importlib
 import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
-
-from tests.blender_test_support import PACKAGE_NAME, load_addon
+from media_to_pose import rohm_ort_runtime
 
 
 class RohmOrtRuntimeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        load_addon()
-        cls.runtime = importlib.import_module(f"{PACKAGE_NAME}.rohm_ort_runtime")
+        cls.runtime = rohm_ort_runtime
 
     def test_visibility_vector_matches_upstream_channel_mapping(self) -> None:
         visible = np.ones((3, 22), dtype=bool)

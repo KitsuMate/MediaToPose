@@ -4,15 +4,13 @@ import math
 import unittest
 
 import numpy as np
-
-from tests.blender_test_support import load_addon
+from media_to_pose import camera_calibration
 
 
 class CameraCalibrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        addon = load_addon()
-        cls.calibration = addon.camera_calibration
+        cls.calibration = camera_calibration
 
     def test_fallback_retains_diagonal_focal_contract(self):
         value = self.calibration.fallback(1920, 1080)

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import importlib
 import unittest
 from types import SimpleNamespace
 
 import numpy as np
-from mathutils import Quaternion, Vector
-
-from tests.blender_test_support import PACKAGE_NAME, load_addon
+from media_to_pose import rohm_correction
+from media_to_pose.geometry import Quaternion, Vector
 
 
 class _IdentityRuntime:
@@ -62,8 +60,7 @@ class _WildRootRuntime(_RootRepairRuntime):
 class RohmCorrectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        load_addon()
-        cls.correction = importlib.import_module(f"{PACKAGE_NAME}.rohm_correction")
+        cls.correction = rohm_correction
 
     def test_rotation_6d_uses_first_two_columns(self) -> None:
         angle = np.deg2rad(37.0)

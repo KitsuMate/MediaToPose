@@ -2,15 +2,14 @@ from __future__ import annotations
 
 import unittest
 
-from mathutils import Vector
-
-from tests.blender_test_support import load_addon
+from media_to_pose import grounded_cleanup
+from media_to_pose.geometry import Vector
 
 
 class GroundedCleanupTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.grounding = load_addon().grounded_cleanup
+        cls.grounding = grounded_cleanup
 
     def _frames(self, roots, positions, motion_positions):
         frames = []

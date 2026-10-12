@@ -19,14 +19,10 @@ from tests.blender_test_support import unregister_addon  # noqa: E402
 
 TEST_MODULES = (
     "tests.test_core_cache",
-    "tests.test_camera_calibration",
     "tests.test_mapping",
     "tests.test_postprocess",
     "tests.test_camera_motion_correction",
     "tests.test_rohm_backend",
-    "tests.test_rohm_ort_runtime",
-    "tests.test_rohm_correction",
-    "tests.test_grounded_cleanup",
     "tests.test_e2e_vroid",
     "tests.test_golden_retarget",
     "tests.test_capture_operations",
@@ -34,7 +30,6 @@ TEST_MODULES = (
     "tests.test_anycalib_backend",
     "tests.test_sam3d_backend",
     "tests.test_sam3d_split_bundle",
-    "tests.test_sam3d_mhr_runtime",
     "tests.test_sam3d_vith_runtime",
 )
 
