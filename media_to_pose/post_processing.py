@@ -23,7 +23,7 @@ from .constants import (
     PROFILE_GENERIC,
     PROFILE_RIGIFY,
 )
-from .operation import PostProcessConfig, PostProcessModuleConfig
+from .core.requests import PostProcessConfig, PostProcessModuleConfig
 from .target_pose import (
     BoneChannel,
     TargetPose,

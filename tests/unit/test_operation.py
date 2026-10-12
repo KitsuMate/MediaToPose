@@ -8,6 +8,7 @@ import unittest
 from dataclasses import FrozenInstanceError
 
 from media_to_pose import operation
+from media_to_pose.core import requests
 
 
 class OperationCoordinatorTests(unittest.TestCase):
@@ -97,7 +98,7 @@ class OperationCoordinatorTests(unittest.TestCase):
             self.assertTrue(snapshot.cancel_requested)
 
     def test_capture_request_is_an_immutable_snapshot(self) -> None:
-        request = self.operations.CaptureRequest(
+        request = requests.CaptureRequest(
             provider_id="MEDIAPIPE",
             mode="POSE",
             media_path="fixture.png",

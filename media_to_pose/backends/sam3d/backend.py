@@ -18,7 +18,8 @@ from ...constants import CAPTURE_CONFIDENCE, extension_version
 from ...core.errors import BackendError, Cancelled, InvalidRequest, ModelMissing
 from ...core.fs import atomic_json, read_json, remove_tree
 from ...core.log import get_logger
-from ...operation import OperationKind, SamSetupRequest
+from ...core.requests import SamSetupRequest
+from ...operation import OperationKind
 from .. import lifecycle
 from ..lifecycle import (
     BackgroundJob,

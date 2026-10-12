@@ -23,12 +23,12 @@ from .capture_state import (
 from .core.cache.stream import FrameSpool
 from .core.errors import MtpError
 from .core.log import get_logger
+from .core.requests import CaptureRequest
 from .core.scene import SceneContext
 from .media_io import probe_media
 from .models import MediaInfo
 from .operation import (
     COORDINATOR,
-    CaptureRequest,
     OperationKind,
     OperationState,
     OperationToken,

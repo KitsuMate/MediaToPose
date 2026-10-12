@@ -10,10 +10,8 @@ from __future__ import annotations
 import subprocess
 import threading
 import time
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from types import MappingProxyType
 from typing import Any
 
 from .core.errors import OperationBusy
@@ -50,94 +48,6 @@ class OperationState(str, Enum):
     SUCCEEDED = "SUCCEEDED"
     CANCELLED = "CANCELLED"
     FAILED = "FAILED"
-
-
-def _immutable_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
-    return MappingProxyType(dict(value))
-
-
-@dataclass(frozen=True)
-class CaptureRequest:
-    provider_id: str
-    mode: str
-    media_path: str
-    media_kind: str
-    source_frame_index: int
-    use_body: bool
-    use_hands: bool
-    use_face: bool
-    face_output: str
-    root_motion_mode: str
-    keep_original_root_position: bool
-    keep_detection_cache: bool
-    cache_limit_bytes: int
-    start_frame: float
-    scene_name: str
-    scene_pointer: int
-    source_frame_count: int = 0
-    target_name: str = ""
-    target_pointer: int = 0
-    action_name: str = ""
-    object_mode: str = "OBJECT"
-    selected_object_names: tuple[str, ...] = ()
-    analysis_path: str = ""
-    source_identity: Mapping[str, Any] = field(default_factory=dict)
-    options: Mapping[str, Any] = field(default_factory=dict)
-    mapping_entries: Mapping[str, Any] = field(default_factory=dict)
-    postprocess_config: PostProcessConfig | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "source_identity",
-            _immutable_mapping(self.source_identity),
-        )
-        object.__setattr__(self, "options", _immutable_mapping(self.options))
-        object.__setattr__(
-            self,
-            "mapping_entries",
-            _immutable_mapping(self.mapping_entries),
-        )
-
-    @property
-    def provider(self) -> str:
-        return self.provider_id
-
-
-@dataclass(frozen=True)
-class PostProcessModuleConfig:
-    module_id: str
-    display_name: str
-    enabled: bool
-    values: Mapping[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "values", _immutable_mapping(self.values))
-
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self.values[name]
-        except KeyError as exc:
-            raise AttributeError(name) from exc
-
-
-@dataclass(frozen=True)
-class PostProcessConfig:
-    detected_profile: str
-    modules: tuple[PostProcessModuleConfig, ...]
-    diagnostic_mode: bool = False
-
-    @property
-    def post_processing_modules(self) -> tuple[PostProcessModuleConfig, ...]:
-        return self.modules
-
-
-@dataclass(frozen=True)
-class SamSetupRequest:
-    operation: str
-    model_variant: str = ""
-    device: str = ""
-    model_storage_directory: str = ""
 
 
 @dataclass(frozen=True)
@@ -527,13 +437,9 @@ COORDINATOR = OperationCoordinator()
 
 __all__ = [
     "COORDINATOR",
-    "CaptureRequest",
     "OperationCoordinator",
     "OperationKind",
     "OperationSnapshot",
     "OperationState",
     "OperationToken",
-    "PostProcessConfig",
-    "PostProcessModuleConfig",
-    "SamSetupRequest",
 ]

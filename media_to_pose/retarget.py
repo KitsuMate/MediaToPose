@@ -27,6 +27,7 @@ from .constants import (
 )
 from .core.cache.stream import FrameSpool
 from .core.errors import BackendError, InvalidRequest, MediaError
+from .core.requests import FaceOutput, MediaKind, RootMotionMode
 from .core.scene import SceneContext
 from .models import CanonicalFrame, Landmark
 from .pose_translation_solver import PoseTranslationSolver
@@ -3323,13 +3324,13 @@ def build_target_pose(
         )
     if (
         settings.use_face
-        and settings.face_output == "BONES"
+        and settings.face_output == FaceOutput.BONES
         and getattr(settings, "provider", "MEDIAPIPE") == "MEDIAPIPE"
         and frame.blendshapes
     ):
         _apply_eye_gaze(armature, entries, frame, target_pose)
     if settings.use_face and getattr(settings, "provider", "MEDIAPIPE") == "MEDIAPIPE":
-        if settings.face_output in {"ARKIT", "FACS"}:
+        if settings.face_output in {FaceOutput.ARKIT, FaceOutput.FACS}:
             if frame.blendshapes:
                 _apply_shapes(
                     armature,
@@ -3338,7 +3339,7 @@ def build_target_pose(
                     settings.face_output,
                     target_pose,
                 )
-        elif settings.face_output == "BONES" and frame.blendshapes:
+        elif settings.face_output == FaceOutput.BONES and frame.blendshapes:
             _apply_face_controls(
                 armature,
                 entries,
@@ -3632,7 +3633,7 @@ def _root_motion_deltas(
 ) -> tuple[list[Vector], list[float], str, list[str]]:
     zeros = [Vector() for _sample in samples]
     yaws = [0.0 for _sample in samples]
-    if mode != "AUTOMATIC":
+    if mode != RootMotionMode.AUTOMATIC:
         return zeros, yaws, mode, []
     observations = [
         index
@@ -3644,7 +3645,7 @@ def _root_motion_deltas(
             "Automatic root travel is unavailable for this provider/cache; "
             "baked in place"
         )
-        return zeros, yaws, "IN_PLACE", [warning]
+        return zeros, yaws, RootMotionMode.IN_PLACE, [warning]
 
     first_index = observations[0]
     first_sample = samples[first_index]
@@ -3721,7 +3722,7 @@ def _root_motion_deltas(
             yaws[index] -= math.tau
         while yaws[index] - yaws[index - 1] < -math.pi:
             yaws[index] += math.tau
-    return zeros, yaws, "AUTOMATIC", []
+    return zeros, yaws, RootMotionMode.AUTOMATIC, []
 
 
 def _set_root_pose(
@@ -4800,7 +4801,7 @@ def _iter_ground_contacts_run(
     for index in range(len(samples)):
         yield SequenceApplyProgress("Detecting foot contacts", index + 1, len(samples))
 
-    if effective_mode == "AUTOMATIC":
+    if effective_mode == RootMotionMode.AUTOMATIC:
         latest_roots = [frame.root.copy() for frame in ground_frames]
         iterator = grounded_cleanup.stabilize_root(
             ground_frames,
@@ -5063,12 +5064,12 @@ def _iter_camera_motion_correction(
     usable_inputs = [item for item in inputs if item is not None]
     if (
         not is_video
-        or effective_mode != "AUTOMATIC"
+        or effective_mode != RootMotionMode.AUTOMATIC
         or track is None
         or len(usable_inputs) != len(samples)
     ):
         warning = ""
-        if is_video and effective_mode == "AUTOMATIC" and track is None:
+        if is_video and effective_mode == RootMotionMode.AUTOMATIC and track is None:
             warning = (
                 "Camera Motion Correction skipped: no matching camera track and "
                 "the source video was unavailable"
@@ -5079,7 +5080,9 @@ def _iter_camera_motion_correction(
             corrected_intervals=0,
             corrected_frames=0,
             tracked_frames=0,
-            rejected_frames=len(samples) if effective_mode == "AUTOMATIC" else 0,
+            rejected_frames=len(samples)
+            if effective_mode == RootMotionMode.AUTOMATIC
+            else 0,
             median_inliers=0.0,
             warning=warning,
         )
@@ -5496,7 +5499,7 @@ def _rohm_requested_work(
     root_observed = any(value >= threshold for value in root_values)
     correct_root = bool(
         getattr(settings, "root_trajectory_cleanup", True)
-        and effective_mode == "AUTOMATIC"
+        and effective_mode == RootMotionMode.AUTOMATIC
         and root_missing
         and root_observed
     )
@@ -6043,7 +6046,8 @@ def iter_apply_sequence(
             bool(getattr(rohm_settings, "learned_pose_residual", False))
             or (
                 bool(getattr(rohm_settings, "root_trajectory_cleanup", True))
-                and getattr(settings, "root_motion_mode", "AUTOMATIC") == "AUTOMATIC"
+                and RootMotionMode(getattr(settings, "root_motion_mode", "AUTOMATIC"))
+                == RootMotionMode.AUTOMATIC
             )
         )
     )
@@ -6087,15 +6091,15 @@ def iter_apply_sequence(
         entries,
         lambda: target_rest_basis(armature, entries),
     )
-    requested_mode = getattr(settings, "root_motion_mode", "AUTOMATIC")
+    requested_mode = RootMotionMode(getattr(settings, "root_motion_mode", "AUTOMATIC"))
     root_kind, root_target = _sequence_root_target(armature, entries)
-    root_enabled = requested_mode != "OFF"
+    root_enabled = requested_mode != RootMotionMode.OFF
     offline_processing = bool(
         (
             camera_motion_settings
             and camera_motion_settings.enabled
-            and requested_mode == "AUTOMATIC"
-            and str(getattr(settings, "media_kind", "")) == "VIDEO"
+            and requested_mode == RootMotionMode.AUTOMATIC
+            and str(getattr(settings, "media_kind", "")) == MediaKind.VIDEO
         )
         or (detection_filter_settings and detection_filter_settings.enabled)
         or (rohm_settings and rohm_settings.enabled)
@@ -6124,7 +6128,7 @@ def iter_apply_sequence(
     object_delta_basis = Matrix.Identity(3)
     source_to_target_scale = 1.0
 
-    if requested_mode == "AUTOMATIC":
+    if requested_mode == RootMotionMode.AUTOMATIC:
         # The conditional spool is closed by the encompassing generator
         # ``finally`` block, including GeneratorExit during cancellation.
         frame_spool = FrameSpool()
@@ -6159,7 +6163,7 @@ def iter_apply_sequence(
         if (
             camera_motion_settings
             and camera_motion_settings.enabled
-            and str(getattr(settings, "media_kind", "")) == "VIDEO"
+            and str(getattr(settings, "media_kind", "")) == MediaKind.VIDEO
         ):
             try:
                 camera_preflight = _iter_prepare_camera_motion_track(
@@ -6198,7 +6202,7 @@ def iter_apply_sequence(
         baseline = None
         for index, detected in enumerate(frame_iterator, 1):
             timestamp_ms = int(detected.timestamp_ms)
-            if requested_mode != "AUTOMATIC":
+            if requested_mode != RootMotionMode.AUTOMATIC:
                 if (
                     previous_timestamp_ms is not None
                     and timestamp_ms <= previous_timestamp_ms
@@ -6227,7 +6231,7 @@ def iter_apply_sequence(
                     if root_kind == "BONE"
                     else root_target.matrix_world.copy()
                 )
-                if requested_mode == "AUTOMATIC":
+                if requested_mode == RootMotionMode.AUTOMATIC:
                     (
                         planned_deltas,
                         planned_yaws,
@@ -6279,9 +6283,15 @@ def iter_apply_sequence(
                 keyframe_state = _KeyframeWriteState(armature)
 
             delta = (
-                planned_deltas[index - 1] if effective_mode == "AUTOMATIC" else Vector()
+                planned_deltas[index - 1]
+                if effective_mode == RootMotionMode.AUTOMATIC
+                else Vector()
             )
-            yaw = planned_yaws[index - 1] if effective_mode == "AUTOMATIC" else 0.0
+            yaw = (
+                planned_yaws[index - 1]
+                if effective_mode == RootMotionMode.AUTOMATIC
+                else 0.0
+            )
             if root_enabled:
                 _set_root_pose(
                     root_kind,
@@ -6358,7 +6368,7 @@ def iter_apply_sequence(
                 camera_track,
                 camera_motion_ui_settings,
                 camera_track_status,
-                str(getattr(settings, "media_kind", "")) == "VIDEO",
+                str(getattr(settings, "media_kind", "")) == MediaKind.VIDEO,
                 scene_context=scene_context,
             ),
             process_temporal=lambda module_settings: _iter_temporal_correction(
