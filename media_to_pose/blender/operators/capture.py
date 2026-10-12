@@ -8,6 +8,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Operator
 
+from ...api.common import drive
 from ...core.cache import media_source as cache_media
 from ...core.cache import store as cache_store
 from ...core.coordinator import COORDINATOR, OperationKind, OperationState
@@ -119,6 +120,27 @@ class MTP_OT_apply_capture(Operator):
         self._schedule(context, update.interval)
         context.window_manager.modal_handler_add(self)
         return {"RUNNING_MODAL"}
+
+    def execute(self, context):
+        """Run the whole capture now; used by scripts calling the operator.
+
+        The panel invokes the operator and runs modally instead.
+        """
+        self._session = None
+        self._timer = None
+        session = self._prepare(context)
+        if session is None:
+            return {"CANCELLED"}
+        settings = context.scene.mtp_settings
+        self._session = session
+        try:
+            update = drive(session)
+        except MtpError as exc:
+            self._mirror(settings, session.step())
+            self.report({"ERROR"}, str(exc))
+            return self._end(context, {"CANCELLED"})
+        self._mirror(settings, update)
+        return self._report_finished(context, update)
 
     def _schedule(self, context, interval: float) -> None:
         if self._timer is not None and abs(interval - self._interval) < 1.0e-6:

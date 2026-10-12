@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
+
 import bpy
 from bpy.app.handlers import persistent
 
+from ..api import cli
 from ..backends.anycalib import runtime as anycalib_ort_runtime
 from ..backends.rohm import runtime as rohm_ort_runtime
 from ..core.camera import calibration as camera_calibration
@@ -43,6 +46,9 @@ MODULES = (
 
 _scene_state_pending = True
 _STATE_TIMER_KEY = "_media_to_pose_state_watch_timer"
+# The handle of the registered command line, kept in the driver namespace so
+# a reloaded module can still remove the previous registration.
+_CLI_KEY = "_media_to_pose_cli_command"
 
 
 def _reset_scene_state(data=None) -> bool:
@@ -96,7 +102,22 @@ def _state_watch_timer():
     return 0.75
 
 
+def _register_cli() -> None:
+    _unregister_cli()
+    register_command = getattr(bpy.utils, "register_cli_command", None)
+    if register_command is not None:
+        bpy.app.driver_namespace[_CLI_KEY] = register_command(cli.COMMAND, cli.execute)
+
+
+def _unregister_cli() -> None:
+    handle = bpy.app.driver_namespace.pop(_CLI_KEY, None)
+    if handle is not None:
+        with suppress(RuntimeError, ValueError):
+            bpy.utils.unregister_cli_command(handle)
+
+
 def _remove_runtime_hooks() -> None:
+    _unregister_cli()
     previous_timer = bpy.app.driver_namespace.pop(
         _STATE_TIMER_KEY,
         None,
@@ -137,6 +158,7 @@ def register() -> None:
             persistent=True,
         )
         bpy.app.handlers.load_post.append(_initialize_scene_state)
+        _register_cli()
         # This is a no-op during Blender's restricted extension-install
         # context; the timer retries after normal access is restored.
         _reset_scene_state()

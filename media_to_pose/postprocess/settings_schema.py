@@ -65,6 +65,14 @@ class Parameter:
             raise InvalidRequest(
                 f"{self.name} must be a valid {self.kind}", parameter=self.name
             ) from exc
+        if self.kind == "float":
+            # Blender stores floats in single precision, so a stored bound
+            # such as pi/2 reads back a little outside the declared range.
+            for bound in (self.minimum, self.maximum):
+                if bound is not None and math.isclose(
+                    result, bound, rel_tol=1.0e-6, abs_tol=1.0e-6
+                ):
+                    result = float(bound)
         if self.minimum is not None and result < self.minimum:
             raise InvalidRequest(
                 f"{self.name} must be at least {self.minimum}", parameter=self.name

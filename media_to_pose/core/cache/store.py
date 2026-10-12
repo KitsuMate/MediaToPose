@@ -151,6 +151,11 @@ def _read_manifest(directory: Path | None = None) -> dict | None:
     return value
 
 
+def current_manifest() -> dict | None:
+    """The manifest of the retained detections, or ``None`` when empty."""
+    return _read_manifest()
+
+
 def _path_size(path: Path) -> int:
     if not path.exists():
         return 0
