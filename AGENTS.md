@@ -35,20 +35,26 @@ Local runtimes, downloaded models and scratch files go in `.workspace/`
 Allowed import direction:
 
 ```
-blender → api → session → retarget, postprocess, rig, providers, backends → core
+blender → api → session → retarget, postprocess, rig, providers, backends, evaluate → core
 ```
 
-- `core/` imports only the standard library and numpy. No `bpy`, no
-  `mathutils`.
-- `mathutils` is allowed in `rig/`, `retarget/` and `postprocess/`.
+- `core/` imports only the standard library and numpy. No `bpy`; `mathutils`
+  only as an optional import with a pure-Python fallback (`core/geometry.py`).
+- `bpy` is allowed in `rig/`, `retarget/`, `evaluate/`, `session/`, `api/`
+  and `blender/`; `mathutils` also in `postprocess/`.
 - Nothing imports `blender/` except the package `__init__.py`.
 - `tests/unit/test_layering.py` parses every module and enforces this. Its
-  `ALLOWLIST` holds the known violations; it may only shrink.
+  `ALLOWLIST` is empty; keep it that way.
+- `tests/unit/test_imports.py` resolves every relative import, including
+  imports inside functions, so a move cannot leave a broken lazy import.
+  Package files (models, manifest) are found through `core/paths.py`, never
+  through `__file__`.
 
 ## Blender access
 
-- Only `blender/operators/*` and `api/` read `bpy.context`. Everything else
-  takes scene, armature and fps as arguments.
+- Only `blender/operators/*` and `api/` read `bpy.context`, plus
+  `blender/context.py` for timers and handlers, which get no context
+  argument. Everything else takes scene, armature and fps as arguments.
 - Blender data is changed only on the main thread. Worker threads see only
   `core` types.
 - PropertyGroups are converted to frozen dataclasses once, at the operator or
@@ -60,12 +66,16 @@ blender → api → session → retarget, postprocess, rig, providers, backends 
 - `iter_x(...)` yields `Progress`; a plain `x(...)` drains it.
 - A `CaptureSession` exposes `step()` and `cancel()`. The modal operator, the
   synchronous API and the CLI are all drivers of `step()`.
+- The scripting API and the `blender -c media_to_pose` command are documented
+  for users in `docs/agents.md`; `tests/unit/test_agent_docs.py` fails when
+  a function, command, metric, warning code or error code is missing there.
 
 ## Errors and logging
 
-- Raised errors subclass `core.errors.MtpError` (`MediaError`,
-  `ModelMissing`, `MappingIncomplete`, `OperationBusy`, `Cancelled`,
-  `BackendError`). Each has a stable `code` string.
+- Raised errors subclass `core.errors.MtpError` (`InvalidRequest`,
+  `MediaError`, `ModelMissing`, `MappingIncomplete`, `OperationBusy`,
+  `Cancelled`, `BackendError`, `CaptureFailed`). Each has a stable `code`
+  string and a command-line `exit_code`.
 - `except Exception` only at thread entry points, operators and the CLI
   entry, and it must log the traceback. Ruff `BLE` enforces this.
 - Use `logging.getLogger(__name__)`; everything sits under the
@@ -89,8 +99,8 @@ blender → api → session → retarget, postprocess, rig, providers, backends 
   and states instead of bare strings.
 - Pyright basic mode on the modules listed in `pyproject.toml`; widen the
   list when a module passes.
-- Soft limits: about 600 lines per module and 80 per function. Note
-  deliberate exceptions in review.
+- Soft limits: about 600 lines per module and 80 per function. Modules over
+  850 lines fail `tests/unit/test_module_size.py` unless it records why.
 
 ## Blender naming
 
