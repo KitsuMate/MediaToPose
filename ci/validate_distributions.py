@@ -55,6 +55,7 @@ PLATFORMS = {
 }
 ROOT_FILES = {
     "__init__.py",
+    "addon_lifecycle.py",
     "animation_cleanup.py",
     "anycalib_backend.py",
     "anycalib_ort_runtime.py",

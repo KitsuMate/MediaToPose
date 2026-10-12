@@ -20,20 +20,20 @@ class RegistrationTests(unittest.TestCase):
         callbacks = [
             callback
             for callback in bpy.app.handlers.load_post
-            if callback is self.addon._initialize_scene_state
+            if callback is self.addon.addon_lifecycle._initialize_scene_state
         ]
         self.assertEqual(len(callbacks), 1)
         self.assertIs(
-            bpy.app.driver_namespace[self.addon._STATE_TIMER_KEY],
-            self.addon._state_watch_timer,
+            bpy.app.driver_namespace[self.addon.addon_lifecycle._STATE_TIMER_KEY],
+            self.addon.addon_lifecycle._state_watch_timer,
         )
 
     def test_restricted_install_context_defers_scene_access(self) -> None:
         self.addon.unregister()
         with RestrictBlend():
             self.addon.register()
-        self.assertTrue(self.addon._scene_state_pending)
-        self.assertTrue(self.addon._reset_scene_state(bpy.data))
+        self.assertTrue(self.addon.addon_lifecycle._scene_state_pending)
+        self.assertTrue(self.addon.addon_lifecycle._reset_scene_state(bpy.data))
 
     def test_capture_and_cleanup_use_safe_defaults(self) -> None:
         scene_properties = self.addon.properties.MTPSceneSettings.bl_rna.properties
