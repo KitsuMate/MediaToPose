@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .core.errors import BackendError
 from .geometry import Matrix, Quaternion, Vector
 from .rohm_ort_runtime import (
     BETAS_SLICE,
@@ -89,7 +90,7 @@ _IDENTITY = np.eye(3, dtype=np.float64)
 MAX_LEARNED_GLOBAL_POSE_DELTA_DEGREES = 2.0
 
 
-class RohmCorrectionError(RuntimeError):
+class RohmCorrectionError(BackendError):
     """A semantic conversion or corrected-motion validation failure."""
 
 

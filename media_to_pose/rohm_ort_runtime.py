@@ -11,6 +11,8 @@ from pathlib import Path, PurePosixPath
 
 import numpy as np
 
+from .core.errors import BackendError
+
 MODEL_FPS = 30.0
 SOURCE_WINDOW_FRAMES = 145
 MODEL_WINDOW_FRAMES = 144
@@ -26,7 +28,7 @@ FOOT_CONTACT_SLICE = slice(290, 294)
 FORBIDDEN_SUFFIXES = {".pt", ".pth", ".ckpt", ".pkl", ".pickle"}
 
 
-class RohmRuntimeError(RuntimeError):
+class RohmRuntimeError(BackendError):
     """A RoHM bundle contract or inference failure."""
 
 

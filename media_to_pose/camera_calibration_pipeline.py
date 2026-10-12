@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from . import anycalib_backend, camera_calibration
+from .core.errors import Cancelled, MediaError
 from .dependency_bootstrap import import_runtime_dependencies
 
 
@@ -60,7 +61,7 @@ def _calibrate_image_views(session, rgb, cv2, np):
 def _read_video_samples(path: str, cv2):
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():
-        raise OSError(f"Could not open video for camera calibration: {path}")
+        raise MediaError(f"Could not open video for camera calibration: {path}")
     try:
         count = max(1, int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
         for fraction in (0.1, 0.3, 0.5, 0.7, 0.9):
@@ -104,14 +105,16 @@ def resolve(
         if str(media_kind).upper() == "IMAGE":
             bgr = cv2.imread(path, cv2.IMREAD_COLOR)
             if bgr is None:
-                raise OSError(f"Could not decode image for camera calibration: {path}")
+                raise MediaError(
+                    f"Could not decode image for camera calibration: {path}"
+                )
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
             result = _calibrate_image_views(session, rgb, cv2, np)
         else:
             samples = tuple(_read_video_samples(path, cv2))
             for index, bgr in enumerate(samples, 1):
                 if cancel_event is not None and cancel_event.is_set():
-                    raise InterruptedError("Camera calibration cancelled")
+                    raise Cancelled("Camera calibration cancelled")
                 if progress is not None:
                     progress(index, max(len(samples), 1), "Calibrating video camera")
                 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)

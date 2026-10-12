@@ -22,6 +22,7 @@ from .constants import (
     PROFILE_RIGIFY,
     SCHEMA_VERSION,
 )
+from .core.errors import InvalidRequest
 
 _ARKIT_NORMALIZED = {
     normalize
@@ -2052,7 +2053,7 @@ def serialize_config(armature: bpy.types.Object) -> dict:
 def load_config(armature: bpy.types.Object, payload: dict) -> None:
     schema_version = int(payload.get("schema_version", 0))
     if schema_version != SCHEMA_VERSION:
-        raise ValueError(
+        raise InvalidRequest(
             f"Unsupported mapping schema {schema_version}; expected {SCHEMA_VERSION}"
         )
     ensure_mapping_entries(armature)

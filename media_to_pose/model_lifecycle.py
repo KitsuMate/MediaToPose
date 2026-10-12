@@ -9,6 +9,8 @@ import uuid
 from contextlib import suppress
 from pathlib import Path
 
+from .core.errors import BackendError, OperationBusy
+
 
 def _pid_running(pid: int) -> bool:
     if pid <= 0:
@@ -56,13 +58,13 @@ class InstallationLock:
                 pid = int(existing.get("pid") or 0)
                 stale = not _pid_running(pid)
                 if not stale:
-                    raise RuntimeError(
+                    raise OperationBusy(
                         f"Another Blender process is managing {self.model_label}"
                     ) from None
                 try:
                     self.path.unlink()
                 except OSError as exc:
-                    raise RuntimeError(
+                    raise BackendError(
                         f"A stale {self.model_label} installation lock could not be removed"
                     ) from exc
                 continue
@@ -72,7 +74,7 @@ class InstallationLock:
                 os.close(descriptor)
             self.acquired = True
             return
-        raise RuntimeError(
+        raise OperationBusy(
             f"Could not acquire the {self.model_label} installation lock"
         )
 

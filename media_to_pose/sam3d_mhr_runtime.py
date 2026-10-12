@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .core.errors import BackendError
+
 LBS_MAGIC = 0x4C425300
 LBS_VERSION = 3
 CORRECTIVES_MAGIC = 0x43524543
@@ -31,7 +33,7 @@ N_PARAMETER_COLUMNS = 249
 N_KEYPOINTS = 70
 
 
-class MhrRuntimeError(RuntimeError):
+class MhrRuntimeError(BackendError):
     """An MHR artifact or runtime input violates the known ViT-H contract."""
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
+from .core.errors import Cancelled, MediaError
 from .dependency_bootstrap import import_runtime_dependencies
 from .models import MediaInfo
 
@@ -14,7 +15,7 @@ def decode_image(path: str, cv2, np):
     encoded = np.fromfile(path, dtype=np.uint8)
     image = cv2.imdecode(encoded, cv2.IMREAD_COLOR) if encoded.size else None
     if image is None:
-        raise ValueError("Image could not be decoded")
+        raise MediaError("Image could not be decoded")
     return image
 
 
@@ -23,12 +24,12 @@ def decode_video_frame_index_with_timestamp(path: str, source_index: int, cv2):
     capture = cv2.VideoCapture(path)
     try:
         if not capture.isOpened():
-            raise ValueError("Video could not be opened")
+            raise MediaError("Video could not be opened")
         source_index = max(0, int(source_index))
         capture.set(cv2.CAP_PROP_POS_FRAMES, source_index)
         ok, image = capture.read()
         if not ok or image is None:
-            raise ValueError("Source frame could not be decoded")
+            raise MediaError("Source frame could not be decoded")
         timestamp_ms = int(round(capture.get(cv2.CAP_PROP_POS_MSEC) or 0.0))
         if timestamp_ms <= 0 and source_index > 0:
             fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
@@ -48,7 +49,7 @@ def iter_video_frames(
     capture = cv2.VideoCapture(path)
     try:
         if not capture.isOpened():
-            raise ValueError("Video could not be opened")
+            raise MediaError("Video could not be opened")
         fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
         total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         index = 0
@@ -69,7 +70,7 @@ def iter_video_frames(
             yield index, timestamp, total, image
             index += 1
         if cancel_event.is_set():
-            raise InterruptedError("Processing cancelled")
+            raise Cancelled("Processing cancelled")
     finally:
         capture.release()
 
@@ -92,7 +93,7 @@ def probe_media(path: str) -> MediaInfo:
     capture = cv2.VideoCapture(filepath)
     try:
         if not capture.isOpened():
-            raise ValueError("Media file could not be decoded")
+            raise MediaError("Media file could not be decoded")
         fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0)
         count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)

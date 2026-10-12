@@ -16,6 +16,8 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any
 
+from .core.errors import OperationBusy
+
 PROCESS_TERMINATE_GRACE_SECONDS = 2.0
 
 
@@ -45,10 +47,6 @@ class OperationState(str, Enum):
     SUCCEEDED = "SUCCEEDED"
     CANCELLED = "CANCELLED"
     FAILED = "FAILED"
-
-
-class OperationBusyError(RuntimeError):
-    """Raised when another process-wide operation owns the lease."""
 
 
 def _immutable_mapping(value: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -292,7 +290,7 @@ class OperationCoordinator:
         if token is None:
             snapshot = self.snapshot()
             label = snapshot.status or snapshot.kind or "another operation"
-            raise OperationBusyError(f"Media to Pose is busy: {label}")
+            raise OperationBusy(f"Media to Pose is busy: {label}")
         return token
 
     def owns(self, token: OperationToken | None) -> bool:
@@ -530,7 +528,6 @@ COORDINATOR = OperationCoordinator()
 __all__ = [
     "COORDINATOR",
     "CaptureRequest",
-    "OperationBusyError",
     "OperationCoordinator",
     "OperationKind",
     "OperationSnapshot",

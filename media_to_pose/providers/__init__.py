@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..core.errors import InvalidRequest
 from .base import ProviderDescriptor
 from .mediapipe_provider import MediaPipeProvider
 from .mediapipe_provider import dependency_status as mp_status
@@ -52,7 +53,7 @@ def descriptor(identifier: str) -> ProviderDescriptor:
         return DESCRIPTORS[str(identifier)]
     except KeyError as exc:
         supported = ", ".join(sorted(DESCRIPTORS))
-        raise ValueError(
+        raise InvalidRequest(
             f"Unknown capture provider {identifier!r}; expected {supported}"
         ) from exc
 

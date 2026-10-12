@@ -15,6 +15,7 @@ from ..constants import (
     HAND_LANDMARK_NAMES,
     POSE_LANDMARK_NAMES,
 )
+from ..core.errors import ModelMissing
 from ..dependency_bootstrap import (
     dependency_snapshot,
     import_runtime_dependencies,
@@ -270,7 +271,7 @@ class MediaPipeProvider:
     def _model(self, filename: str) -> str:
         path = self.model_directory / filename
         if not path.exists():
-            raise FileNotFoundError(
+            raise ModelMissing(
                 f"Bundled MediaPipe model is missing: {path.name}. "
                 "Reinstall a complete Media to Pose package."
             )

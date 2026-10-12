@@ -12,6 +12,7 @@ from threading import Event
 
 from .. import camera_calibration, sam3d_backend, sam3d_ort_runtime
 from ..constants import HAND_LANDMARK_NAMES
+from ..core.errors import InvalidRequest, MediaError, ModelMissing
 from ..dependency_bootstrap import import_runtime_dependencies
 from ..media_io import (
     decode_image,
@@ -200,7 +201,7 @@ class SAM3DBodyProvider:
     ):
         del model_directory
         if use_face:
-            raise ValueError("SAM 3D Body does not support face capture")
+            raise InvalidRequest("SAM 3D Body does not support face capture")
         self.use_body = bool(use_body)
         self.use_hands = bool(use_hands)
         self.mirror = bool(mirror)
@@ -241,7 +242,7 @@ class SAM3DBodyProvider:
             / "pose_landmarker_full.task"
         )
         if not model.is_file():
-            raise FileNotFoundError("Bundled person locator model is missing")
+            raise ModelMissing("Bundled person locator model is missing")
         options = self.mp.tasks.vision.PoseLandmarkerOptions(
             base_options=self.mp.tasks.BaseOptions(model_asset_path=str(model)),
             running_mode=mode,
@@ -381,7 +382,7 @@ class SAM3DBodyProvider:
 
     def _convert(self, output, width: int, height: int, timestamp_ms: int):
         if not output:
-            raise ValueError("SAM 3D Body did not return a person")
+            raise MediaError("SAM 3D Body did not return a person")
         person = output[0] if isinstance(output, (list, tuple)) else output
         joints3d = self.np.asarray(person["pred_keypoints_3d"])
         joints2d_value = person.get("pred_keypoints_2d")
@@ -393,7 +394,7 @@ class SAM3DBodyProvider:
         if joints2d is not None and joints2d.ndim > 2:
             joints2d = joints2d[0]
         if len(joints3d) < 70:
-            raise ValueError("SAM 3D Body returned an incomplete MHR70 pose")
+            raise MediaError("SAM 3D Body returned an incomplete MHR70 pose")
         points = [
             self._point(joints3d, joints2d, index, width, height) for index in range(70)
         ]

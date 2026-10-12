@@ -24,6 +24,7 @@ from pathlib import Path
 import bpy
 
 from .constants import CAPTURE_CONFIDENCE
+from .core.errors import InvalidRequest, MediaError
 from .models import (
     CameraIntrinsicsObservation,
     CanonicalFrame,
@@ -383,7 +384,7 @@ def _safe_remove(path: Path) -> None:
     root = cache_root(create=True).resolve()
     resolved = path.resolve()
     if resolved == root or root not in resolved.parents:
-        raise ValueError(f"Refusing to remove path outside cache root: {path}")
+        raise InvalidRequest(f"Refusing to remove path outside cache root: {path}")
     if resolved.is_dir():
         shutil.rmtree(resolved, ignore_errors=True)
     elif resolved.exists():
@@ -1023,7 +1024,7 @@ class SequenceWriter:
         self._flush()
         if self.count == 0:
             self.discard()
-            raise ValueError("No detectable frames were produced")
+            raise MediaError("No detectable frames were produced")
         manifest = {
             "schema_version": CACHE_SCHEMA_VERSION,
             "key": self.key,

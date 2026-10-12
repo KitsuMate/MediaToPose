@@ -27,6 +27,7 @@ from .constants import (
     PROFILE_ARP,
     PROFILE_RIGIFY,
 )
+from .core.errors import BackendError, InvalidRequest, MediaError
 from .models import CanonicalFrame, Landmark
 from .pose_translation_solver import PoseTranslationSolver
 from .post_processing import (
@@ -5112,7 +5113,7 @@ def _iter_apply_rohm_root_deltas(
     root_target,
 ) -> Iterator[SequenceApplyProgress]:
     if len(root_deltas) != len(samples):
-        raise ValueError("RoHM root corrections do not match the baked sequence")
+        raise BackendError("RoHM root corrections do not match the baked sequence")
     temporary = _sequence_state(armature)
     try:
         for index, (sample, raw_delta) in enumerate(
@@ -5245,7 +5246,7 @@ def _iter_apply_rohm_pose(
 ) -> Iterator[SequenceApplyProgress]:
     """Rest-align RoHM globals and resolve them through the control rig."""
     if len(pose_global_rotations) != len(samples):
-        raise ValueError("RoHM pose corrections do not match the baked sequence")
+        raise BackendError("RoHM pose corrections do not match the baked sequence")
     rest_basis = rig_plan.rest_basis.to_3x3()
     rest_inverse = rest_basis.inverted_safe()
     temporary = _sequence_state(armature)
@@ -5544,7 +5545,7 @@ def _iter_detection_filter(
             str(getattr(settings, "manual_bad_frames", "")), len(samples)
         )
     except ValueError as exc:
-        raise ValueError(f"Additional Bad Source Frames: {exc}") from exc
+        raise InvalidRequest(f"Additional Bad Source Frames: {exc}") from exc
     manual_rejected = motion_filter.apply_manual_motion_rejections(
         samples,
         manual_frames,
@@ -6050,7 +6051,7 @@ def iter_apply_sequence(
                     previous_timestamp_ms is not None
                     and timestamp_ms <= previous_timestamp_ms
                 ):
-                    raise ValueError("Detected video timestamps must increase")
+                    raise MediaError("Detected video timestamps must increase")
                 previous_timestamp_ms = timestamp_ms
                 pickle.dump(
                     detected,
@@ -6068,7 +6069,7 @@ def iter_apply_sequence(
                     total_hint,
                 )
             if not frame_count:
-                raise ValueError("No detectable frames were produced")
+                raise MediaError("No detectable frames were produced")
             frame_spool.seek(0)
         except BaseException:
             frame_spool.close()
@@ -6127,7 +6128,7 @@ def iter_apply_sequence(
                     previous_timestamp_ms is not None
                     and timestamp_ms <= previous_timestamp_ms
                 ):
-                    raise ValueError("Detected video timestamps must increase")
+                    raise MediaError("Detected video timestamps must increase")
                 previous_timestamp_ms = timestamp_ms
                 frame_count = index
                 yield SequenceApplyProgress(
@@ -6255,7 +6256,7 @@ def iter_apply_sequence(
                 phase="Streaming keyframes",
             )
         if not frame_count:
-            raise ValueError("No detectable frames were produced")
+            raise MediaError("No detectable frames were produced")
     finally:
         _restore_sequence_state(armature, state)
         if frame_spool is not None:

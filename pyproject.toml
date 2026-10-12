@@ -22,6 +22,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["N802", "N806"]
 "**/__init__.py" = ["N999"]
+# The error names are part of the public API and read better without a suffix.
+"media_to_pose/core/errors.py" = ["N818"]
 # Blender loads the extension as bl_ext.<repository>.media_to_pose, so code
 # inside the package can only use relative imports. TID252 applies to tests/
 # and ci/, which import the package by its absolute name.
@@ -49,6 +51,7 @@ pythonVersion = "3.13"
 include = [
   "media_to_pose/camera_motion_correction.py",
   "media_to_pose/constants.py",
+  "media_to_pose/core",
   "media_to_pose/dependency_bootstrap.py",
   "media_to_pose/media_io.py",
   "media_to_pose/model_lifecycle.py",

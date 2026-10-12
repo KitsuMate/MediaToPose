@@ -21,6 +21,8 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
+from .core.errors import BackendError
+
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_CONTRACT = "media-to-pose.sam3d.raw.v1"
 SUPPORTED_BUNDLE_CONTRACTS = frozenset(
@@ -94,7 +96,7 @@ _EP_REGISTRATION_LOCK = threading.RLock()
 _REGISTERED_ORT_MODULES: set[int] = set()
 
 
-class OrtRuntimeError(RuntimeError):
+class OrtRuntimeError(BackendError):
     """Base error for an unavailable runtime or incompatible model bundle."""
 
 

@@ -9,6 +9,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .core.errors import DependencyMissing
+
 REQUIRED_MODULES = ("mediapipe", "cv2", "onnxruntime")
 EXPECTED_ONNX_ACCELERATOR = {
     "win32": "WebGpuExecutionProvider",
@@ -98,13 +100,13 @@ def import_runtime_dependencies():
     """Return imported cv2, MediaPipe, and Blender's NumPy."""
     available, message = ensure_bundled_dependencies()
     if not available:
-        raise ImportError(message)
+        raise DependencyMissing(message)
     try:
         cv2 = importlib.import_module("cv2")
         mediapipe = importlib.import_module("mediapipe")
         numpy = importlib.import_module("numpy")
     except Exception as exc:
-        raise ImportError(
+        raise DependencyMissing(
             f"Bundled MediaPipe dependencies could not be loaded: {exc}"
         ) from exc
     return cv2, mediapipe, numpy
@@ -114,14 +116,14 @@ def import_camera_dependencies():
     """Import only OpenCV and NumPy for model-free camera tracking."""
     missing = [name for name in ("cv2", "numpy") if not _module_is_available(name)]
     if missing:
-        raise ImportError(
+        raise DependencyMissing(
             "Blender did not activate the packaged camera-tracking wheels: "
             + ", ".join(missing)
         )
     try:
         return importlib.import_module("cv2"), importlib.import_module("numpy")
     except Exception as exc:
-        raise ImportError(
+        raise DependencyMissing(
             f"Camera-tracking dependencies could not be loaded: {exc}"
         ) from exc
 
@@ -130,11 +132,13 @@ def import_onnxruntime():
     """Import the platform-bundled ONNX Runtime distribution."""
     available, message = ensure_bundled_dependencies()
     if not available:
-        raise ImportError(message)
+        raise DependencyMissing(message)
     try:
         return importlib.import_module("onnxruntime")
     except Exception as exc:
-        raise ImportError(f"Bundled ONNX Runtime could not be loaded: {exc}") from exc
+        raise DependencyMissing(
+            f"Bundled ONNX Runtime could not be loaded: {exc}"
+        ) from exc
 
 
 def onnxruntime_diagnostics() -> dict[str, object]:
