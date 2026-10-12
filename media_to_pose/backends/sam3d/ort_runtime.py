@@ -692,9 +692,9 @@ def create_estimator(
     if bundle.runner != SPLIT_NUMPY_RUNNER:
         raise OrtRuntimeError(f"Unsupported ONNX bundle runner {bundle.runner!r}")
     try:
-        from . import vith_runtime
+        from . import vith
 
-        estimator_type = vith_runtime.VithEstimator
+        estimator_type = vith.VithEstimator
     except Exception as exc:
         raise OrtRuntimeError(f"Could not load the ViT-H orchestrator: {exc}") from exc
     return estimator_type(bundle, requested_mode, **common)

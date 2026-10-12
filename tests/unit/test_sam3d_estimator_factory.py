@@ -6,13 +6,13 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from media_to_pose.backends.sam3d import ort_runtime, vith_runtime
+from media_to_pose.backends.sam3d import ort_runtime, vith
 
 
 class EstimatorFactoryTests(unittest.TestCase):
     def test_split_numpy_runner_creates_the_vith_estimator(self) -> None:
         bundle = SimpleNamespace(runner=ort_runtime.SPLIT_NUMPY_RUNNER)
-        with mock.patch.object(vith_runtime, "VithEstimator") as estimator:
+        with mock.patch.object(vith, "VithEstimator") as estimator:
             result = ort_runtime.create_estimator(bundle, "CPU")
         self.assertIs(result, estimator.return_value)
         estimator.assert_called_once()

@@ -18,26 +18,12 @@ from ..log import get_logger
 from .frames import compact_frame, read_chunk, write_chunk
 
 LOGGER = get_logger(__name__)
-
-
 CACHE_SCHEMA_VERSION = 7
-
-
 CHUNK_SIZE = 120
-
-
 CURRENT_DIRECTORY = "current"
-
-
 SOURCE_DIRECTORY = "source"
-
-
 CAMERA_MOTION_DIRECTORY = "camera_motion"
-
-
 MANIFEST_NAME = "manifest.json"
-
-
 _LOCK = threading.RLock()
 
 

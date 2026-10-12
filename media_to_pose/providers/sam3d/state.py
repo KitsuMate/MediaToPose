@@ -10,14 +10,8 @@ from ...backends.sam3d import backend as sam3d_backend
 from ...backends.sam3d import ort_runtime as sam3d_ort_runtime
 
 _MODEL_LOCK = threading.RLock()
-
-
 _MODEL_KEY = None
-
-
 _ESTIMATOR = None
-
-
 _RUNTIME_DIAGNOSTICS = None
 
 

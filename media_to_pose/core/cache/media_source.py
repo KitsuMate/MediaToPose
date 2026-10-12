@@ -22,8 +22,6 @@ from .store import (
 )
 
 LOGGER = get_logger(__name__)
-
-
 IMAGE_EXTENSIONS = {
     ".bmp",
     ".exr",
