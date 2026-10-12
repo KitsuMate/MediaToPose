@@ -1,7 +1,8 @@
 """Robust, time-aware helpers for offline animation stabilization.
 
 The functions here are symmetric in time and deliberately avoid SciPy. They
-operate on Blender's existing ``mathutils`` values and use real timestamps.
+operate on ``geometry`` (``mathutils`` in Blender) values and use real
+timestamps.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import statistics
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Sequence
 
-from mathutils import Quaternion, Vector
+from .geometry import Quaternion, Vector
 
 
 def _median(values: Iterable[float]) -> float:

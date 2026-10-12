@@ -8,8 +8,8 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 import numpy as np
-from mathutils import Matrix, Quaternion, Vector
 
+from .geometry import Matrix, Quaternion, Vector
 from .rohm_ort_runtime import (
     BETAS_SLICE,
     FEATURE_COUNT,

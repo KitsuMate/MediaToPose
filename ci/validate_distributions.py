@@ -66,6 +66,7 @@ ROOT_FILES = {
     "camera_motion_correction.py",
     "capture_state.py",
     "constants.py",
+    "geometry.py",
     "dependency_bootstrap.py",
     "detection_cache.py",
     "grounded_cleanup.py",

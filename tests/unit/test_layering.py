@@ -8,7 +8,10 @@ resolved to a package-relative module name and checked against these rules:
   backends, evaluate) → core``.
 - Nothing imports ``blender/`` except the package ``__init__`` and
   ``blender/`` itself.
-- ``core/`` imports only the standard library, numpy and ``core/``.
+- ``core/`` imports only the standard library, numpy and ``core/``. The one
+  exception is an optional import inside ``try``/``except ImportError`` that
+  has a pure-Python fallback (``core.geometry`` uses ``mathutils`` when
+  Blender provides it).
 - ``bpy`` and ``mathutils`` are used only where the layer allows them.
 - Only ``blender/operators/`` and ``api/`` read ``bpy.context``.
 
@@ -64,6 +67,7 @@ LEGACY_LAYERS: dict[str, str] = {
     "capture_state": "session",
     "constants": "core",
     "dependency_bootstrap": "core",
+    "geometry": "core",
     "detection_cache": "core",
     "grounded_cleanup": "core",
     "mapping": "rig",
@@ -94,7 +98,6 @@ LEGACY_LAYERS: dict[str, str] = {
 
 # (module, rule, detail) tuples for known violations.
 ALLOWLIST: set[tuple[str, str, str]] = {
-    ("animation_cleanup", "uses-mathutils", "mathutils"),
     ("anycalib_backend", "imports-blender", "registration"),
     ("anycalib_backend", "uses-bpy", "bpy"),
     ("cache_preview", "reads-bpy-context", "bpy.context"),
@@ -103,7 +106,6 @@ ALLOWLIST: set[tuple[str, str, str]] = {
     ("detection_cache", "upward-import", "providers"),
     ("detection_cache", "upward-import", "sam3d_backend"),
     ("detection_cache", "uses-bpy", "bpy"),
-    ("grounded_cleanup", "uses-mathutils", "mathutils"),
     ("mapping", "imports-blender", "properties"),
     ("mapping", "reads-bpy-context", "bpy.context"),
     ("operators_capture", "reads-bpy-context", "bpy.context"),
@@ -112,7 +114,6 @@ ALLOWLIST: set[tuple[str, str, str]] = {
     ("rohm_backend", "imports-blender", "registration"),
     ("rohm_backend", "uses-bpy", "bpy"),
     ("rohm_correction", "upward-import", "rohm_ort_runtime"),
-    ("rohm_correction", "uses-mathutils", "mathutils"),
     ("sam3d_backend", "imports-blender", "registration"),
     ("sam3d_backend", "uses-bpy", "bpy"),
     ("target_pose", "reads-bpy-context", "bpy.context"),
@@ -172,15 +173,38 @@ class _ImportVisitor(ast.NodeVisitor):
         self.modules = modules
         self.internal: set[str] = set()
         self.external: set[str] = set()
+        self.optional: set[str] = set()
         self.reads_context = False
+        self._optional_depth = 0
+
+    def visit_Try(self, node: ast.Try) -> None:
+        caught = set()
+        for handler in node.handlers:
+            names = (
+                handler.type.elts
+                if isinstance(handler.type, ast.Tuple)
+                else [handler.type]
+            )
+            caught.update(name.id for name in names if isinstance(name, ast.Name))
+        optional = bool(caught & {"ImportError", "ModuleNotFoundError"})
+        self._optional_depth += optional
+        for statement in node.body:
+            self.visit(statement)
+        self._optional_depth -= optional
+        for statement in [*node.handlers, *node.orelse, *node.finalbody]:
+            self.visit(statement)
+
+    def _external(self, name: str) -> None:
+        name = name.split(".", 1)[0]
+        (self.optional if self._optional_depth else self.external).add(name)
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
-            self.external.add(alias.name.split(".", 1)[0])
+            self._external(alias.name)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.level == 0:
-            self.external.add(str(node.module).split(".", 1)[0])
+            self._external(str(node.module))
             return
         base = _resolve_relative(self.module, self.is_package, node.level, node.module)
         for alias in node.names:
@@ -220,6 +244,8 @@ def collect_violations() -> set[tuple[str, str, str]]:
                 violations.add((module, "upward-import", target))
             elif layer == "core" and target_layer != "core":
                 violations.add((module, "core-imports-layer", target))
+        if layer != "core":
+            visitor.external |= visitor.optional
         for name in sorted(visitor.external):
             if name in BLENDER_MODULES:
                 allowed = MATHUTILS_LAYERS if name == "mathutils" else BPY_LAYERS
