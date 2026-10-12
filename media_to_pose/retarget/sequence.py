@@ -10,6 +10,8 @@ from mathutils import Matrix, Vector
 from ..core.cache.stream import FrameSpool
 from ..core.camera import motion_correction as camera_motion_correction
 from ..core.errors import MediaError
+from ..core.motion.face_filter import FaceFilterSettings, filter_face_track
+from ..core.report import record_step
 from ..core.requests import MediaKind, RootMotionMode
 from ..core.scene import SceneContext
 from ..core.types import CanonicalFrame
@@ -113,6 +115,9 @@ class _SequenceRun:
         ) or compile_postprocess_config(config)
         modules = self.postprocess_config
         self.temporal_settings = _module(modules, "TEMPORAL_CORRECTION")
+        self.face_settings = _module(modules, "FACE_CORRECTION")
+        # Cleaned face coefficients per frame, when Face Expression Cleanup ran.
+        self.face_track: list[dict[str, float]] | None = None
         self.rohm_settings = _module(modules, "ROHM_CORRECTION")
         self.detection_filter_settings = _module(modules, "DETECTION_FILTER")
         self.camera_motion_settings = _module(modules, "CAMERA_MOTION_CORRECTION")
@@ -323,6 +328,57 @@ class _SequenceRun:
             scene_context=self.scene_context,
         )
 
+    def _face_cleanup_requested(self) -> bool:
+        face = self.face_settings
+        return bool(
+            face is not None
+            and face.enabled
+            and self.is_video
+            and getattr(self.settings, "use_face", False)
+        )
+
+    def prepare_face_track(self) -> Iterator[SequenceApplyProgress]:
+        """Clean the clip's face coefficients before any frame is solved."""
+        if not self._face_cleanup_requested():
+            return
+        if self.frame_spool is None:
+            # Streaming modes read the clip once more from a spool.
+            self.frame_spool = FrameSpool()
+            for index, detected in enumerate(self.frame_iterator, 1):
+                self.frame_spool.append(detected)
+                yield SequenceApplyProgress(
+                    "Loading face expressions", index, self.total_hint
+                )
+        track = []
+        times = []
+        for detected in self.frame_spool:
+            track.append(dict(detected.blendshapes) or None)
+            times.append(int(detected.timestamp_ms) / 1000.0)
+        face = self.face_settings
+        self.face_track, stats = filter_face_track(
+            track,
+            times,
+            FaceFilterSettings(
+                smooth=bool(face.smooth_face),
+                strength=float(face.face_smoothing),
+                preserve_blinks=bool(face.preserve_blinks),
+                neutral_calibration=bool(face.neutral_calibration),
+                deadzone=float(face.face_deadzone),
+                hold_seconds=float(face.face_hold),
+            ),
+        )
+        self.frame_iterator = iter(self.frame_spool)
+        if self.requested_mode != RootMotionMode.AUTOMATIC:
+            self.total_hint = len(track)
+        record_step(
+            "FACE_CORRECTION",
+            frames=stats.frames,
+            frames_without_face=stats.frames_without_face,
+            held_frames=stats.held_frames,
+            blinks=stats.blinks,
+            calibrated=stats.calibrated,
+        )
+
     def solve_frames(self) -> Iterator[SequenceApplyProgress]:
         """Solve each frame, keep it for clean-up and stream its keyframes."""
         self.solving_started = True
@@ -330,6 +386,8 @@ class _SequenceRun:
         automatic = self.requested_mode == RootMotionMode.AUTOMATIC
         fps = self.scene_context.fps
         for index, detected in enumerate(self.frame_iterator, 1):
+            if self.face_track is not None and index <= len(self.face_track):
+                detected.blendshapes = self.face_track[index - 1]
             timestamp_ms = int(detected.timestamp_ms)
             if not automatic:
                 timestamp_ms = self._check_timestamp(detected)
@@ -431,6 +489,7 @@ class _SequenceRun:
                 self.root_target,
                 self.target_up,
                 scene_context=scene_context,
+                face_cleaned=self.face_track is not None,
             ),
             process_detection_filter=lambda module_settings: _iter_detection_filter(
                 samples,
@@ -495,6 +554,7 @@ def iter_apply_sequence(
     run = _SequenceRun(armature, frames, settings, start_frame, scene_context)
     try:
         yield from run.load_detections()
+        yield from run.prepare_face_track()
         yield from run.prepare_camera_track()
         yield from run.solve_frames()
     finally:

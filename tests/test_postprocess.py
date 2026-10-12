@@ -60,6 +60,12 @@ class PostProcessCompilationTests(unittest.TestCase):
             "learned_pose_residual": False,
             "root_trajectory_cleanup": True,
         }
+        schema = importlib.import_module(
+            f"{self.addon.__name__}.postprocess.settings_schema"
+        )
+        defaults = {
+            name: parameter.default for name, parameter in schema.PARAMETERS.items()
+        } | defaults
         for module_id, name, description in self.post.POST_PROCESSING_MODULES:
             item = SimpleNamespace(
                 module_id=module_id,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .modules.camera_motion import CameraMotionCorrection
 from .modules.detection_filter import DetectionFilter
+from .modules.face import FaceCorrection
 from .modules.limb_axis import ArmAxisCorrection, LegAxisCorrection
 from .modules.rohm import RohmCorrection
 from .modules.shoulders import ShoulderCorrection
@@ -20,6 +21,7 @@ CORRECTION_REGISTRY = {
         CameraMotionCorrection(),
         DetectionFilter(),
         RohmCorrection(),
+        FaceCorrection(),
         TemporalCorrection(),
     )
 }
