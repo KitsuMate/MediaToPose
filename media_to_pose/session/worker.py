@@ -150,12 +150,16 @@ def _calibrated_options(job, request: CaptureRequest) -> dict:
     width = int(getattr(media, "width", 0))
     height = int(getattr(media, "height", 0))
     if width > 0 and height > 0:
+        from ..backends.anycalib import backend as anycalib_backend
+
         camera = camera_calibration_pipeline.resolve(
             media.path,
             media.kind,
             width,
             height,
             options,
+            load_estimator=anycalib_backend.ensure_model_loaded,
+            bundle_revision=str(anycalib_backend.MODEL_SPEC["revision"]),
             cancel_event=job.cancel,
             progress=lambda current, total, message: _phase_progress(
                 job, "calibration", current, total, message

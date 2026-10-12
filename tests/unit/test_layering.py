@@ -92,10 +92,8 @@ LEGACY_LAYERS: dict[str, str] = {
 
 # (module, rule, detail) tuples for known violations.
 ALLOWLIST: set[tuple[str, str, str]] = {
-    ("camera_calibration_pipeline", "upward-import", "backends.anycalib.backend"),
     ("detection_cache", "upward-import", "backends.anycalib.backend"),
     ("detection_cache", "upward-import", "backends.sam3d.backend"),
-    ("rohm_correction", "upward-import", "backends.rohm.runtime"),
     ("cache_preview", "reads-bpy-context", "bpy.context"),
     ("detection_cache", "upward-import", "providers"),
     ("detection_cache", "uses-bpy", "bpy"),

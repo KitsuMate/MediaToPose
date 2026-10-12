@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from . import camera_calibration
-from .backends.anycalib import backend as anycalib_backend
 from .core.errors import Cancelled, MediaError
 from .core.log import get_logger
 from .dependency_bootstrap import import_runtime_dependencies
@@ -28,21 +28,21 @@ def _crop_back(value, left: int, top: int, width: int, height: int):
     )
 
 
-def _calibrate_image_views(session, rgb, cv2, np):
+def _calibrate_image_views(session, rgb, cv2, np, bundle_revision: str):
     height, width = rgb.shape[:2]
     estimates = [
         session.calibrate(
             rgb,
             cv2,
             np,
-            bundle_revision=str(anycalib_backend.MODEL_SPEC["revision"]),
+            bundle_revision=bundle_revision,
         )
     ]
     flipped = session.calibrate(
         np.ascontiguousarray(rgb[:, ::-1]),
         cv2,
         np,
-        bundle_revision=str(anycalib_backend.MODEL_SPEC["revision"]),
+        bundle_revision=bundle_revision,
     )
     estimates.append(camera_calibration.mirrored(flipped))
     crop_width = max(14, int(width * 0.9))
@@ -56,7 +56,7 @@ def _calibrate_image_views(session, rgb, cv2, np):
         cropped,
         cv2,
         np,
-        bundle_revision=str(anycalib_backend.MODEL_SPEC["revision"]),
+        bundle_revision=bundle_revision,
     )
     estimates.append(_crop_back(crop_estimate, left, top, width, height))
     return camera_calibration.image_consensus(estimates)
@@ -85,10 +85,16 @@ def resolve(
     height: int,
     options: Mapping[str, object],
     *,
+    load_estimator: Callable[[object, str], Any] | None = None,
+    bundle_revision: str = "",
     cancel_event=None,
     progress=None,
 ):
-    """Return calibrated, manual, or fallback intrinsics without blocking capture."""
+    """Return calibrated, manual, or fallback intrinsics without blocking capture.
+
+    ``load_estimator(device, bundle_directory)`` returns the AnyCalib session;
+    without it automatic calibration falls back to the default camera.
+    """
 
     mode = str(options.get("perspective_correction", "AUTO")).upper()
     manual_enabled = bool(options.get("manual_fov_override", False))
@@ -97,11 +103,11 @@ def resolve(
         return camera_calibration.fallback(width, height)
     if manual_enabled:
         return camera_calibration.manual(width, height, manual_fov)
-    if not bool(options.get("anycalib_installed", False)):
+    if load_estimator is None or not bool(options.get("anycalib_installed", False)):
         return camera_calibration.fallback(width, height)
     try:
         cv2, _mp, np = import_runtime_dependencies()
-        session = anycalib_backend.ensure_model_loaded(
+        session = load_estimator(
             options.get("anycalib_device", "AUTO"),
             str(options.get("anycalib_bundle_directory", "")),
         )
@@ -113,7 +119,7 @@ def resolve(
                     f"Could not decode image for camera calibration: {path}"
                 )
             rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            result = _calibrate_image_views(session, rgb, cv2, np)
+            result = _calibrate_image_views(session, rgb, cv2, np, bundle_revision)
         else:
             samples = tuple(_read_video_samples(path, cv2))
             for index, bgr in enumerate(samples, 1):
@@ -128,9 +134,7 @@ def resolve(
                             rgb,
                             cv2,
                             np,
-                            bundle_revision=str(
-                                anycalib_backend.MODEL_SPEC["revision"]
-                            ),
+                            bundle_revision=bundle_revision,
                         )
                     )
                 except (RuntimeError, ValueError):

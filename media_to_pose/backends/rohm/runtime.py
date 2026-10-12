@@ -12,19 +12,12 @@ from pathlib import Path, PurePosixPath
 import numpy as np
 
 from ...core.errors import BackendError
-
-MODEL_FPS = 30.0
-SOURCE_WINDOW_FRAMES = 145
-MODEL_WINDOW_FRAMES = 144
-FEATURE_COUNT = 294
-TRAJECTORY_COUNT = 22
-POSE_COUNT = 272
-TRAJECTORY_ABSOLUTE_INDICES = np.asarray(
-    (0, 2, 3, 6, 7, 8, 9, 10, 11, 12, 16, 17, 18), dtype=np.int64
+from ...core.motion.rohm_format import (
+    FEATURE_COUNT,
+    MODEL_WINDOW_FRAMES,
+    POSE_COUNT,
 )
-POSE_START = 22
-BETAS_SLICE = slice(280, 290)
-FOOT_CONTACT_SLICE = slice(290, 294)
+
 FORBIDDEN_SUFFIXES = {".pt", ".pth", ".ckpt", ".pkl", ".pickle"}
 
 
@@ -200,22 +193,6 @@ def _safe_npz(
     for name, shape in expected.items():
         if result[name].shape != shape or not np.isfinite(result[name]).all():
             raise RohmRuntimeError(f"invalid {path.name} array {name}")
-    return result
-
-
-def visibility_vector(joint_visibility: np.ndarray) -> np.ndarray:
-    visible = np.asarray(joint_visibility, dtype=bool)
-    if visible.ndim != 2 or visible.shape[1] != 22:
-        raise RohmRuntimeError("RoHM visibility must have shape [T, 22]")
-    result = np.ones((len(visible), FEATURE_COUNT), dtype=np.float32)
-    result[:, 22:88] = np.repeat(visible, 3, axis=1)
-    result[:, 88:154] = np.repeat(visible, 3, axis=1)
-    result[:, 154:280] = np.repeat(visible[:, 1:], 6, axis=1)
-    result[:, FOOT_CONTACT_SLICE] = 0.0
-    left = visible[:, 7] & visible[:, 10]
-    right = visible[:, 8] & visible[:, 11]
-    result[left, 290:292] = 1.0
-    result[right, 292:294] = 1.0
     return result
 
 

@@ -9,7 +9,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .backends.rohm.runtime import (
+from .core.errors import BackendError
+from .core.motion.rohm_format import (
     BETAS_SLICE,
     FEATURE_COUNT,
     MODEL_FPS,
@@ -20,7 +21,6 @@ from .backends.rohm.runtime import (
     TRAJECTORY_COUNT,
     visibility_vector,
 )
-from .core.errors import BackendError
 from .geometry import Matrix, Quaternion, Vector
 
 SMPLX_SEMANTICS = (
