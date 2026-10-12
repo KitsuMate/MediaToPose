@@ -7,7 +7,7 @@ from typing import (
     Any,
 )
 
-from ..target_pose import TargetPose
+from ..retarget.target_pose import TargetPose
 from .base import PostProcessingSession, SequenceProcessingContext
 from .config import compile_postprocess_config, ensure_module_configs
 from .registry import CORRECTION_REGISTRY

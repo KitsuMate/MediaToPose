@@ -10,11 +10,11 @@ from ... import (
     mapping,
 )
 from ...core.scene import SceneContext
-from ...pose_translation_solver import PoseTranslationSolver
-from ...target_pose import TargetPose
 from ..keyframes import _action_fcurves
+from ..target_pose import TargetPose
 from .common import evaluated_semantic_bone
 from .frames import _target_body_direction
+from .translation import PoseTranslationSolver
 
 
 def prepare_limb_ownership(armature) -> None:

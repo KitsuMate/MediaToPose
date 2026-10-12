@@ -304,7 +304,7 @@ class VroidFixtureTests(unittest.TestCase):
         bone = self.armature.pose.bones["J_Bip_C_Hips"]
         original = bone.matrix_basis.copy()
         try:
-            solver = self.addon.pose_translation_solver.PoseTranslationSolver(
+            solver = self.addon.retarget.solve.translation.PoseTranslationSolver(
                 scene_context().update
             )
             result = solver.solve(
@@ -389,7 +389,7 @@ class VroidFixtureTests(unittest.TestCase):
         )
         for semantic_id in ("HAND_L", "HAND_R"):
             channel = pose.channel_for(semantic_id)
-            expected = self.addon.target_pose.stable_orientation_delta(
+            expected = self.addon.retarget.target_pose.stable_orientation_delta(
                 channel.rest_direction,
                 channel.desired_direction,
                 channel.rest_reference,

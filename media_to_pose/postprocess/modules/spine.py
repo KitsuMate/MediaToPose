@@ -6,9 +6,11 @@ import math
 
 from mathutils import Matrix, Quaternion, Vector
 
-from ...target_pose import TargetPose
-from ...target_pose import signed_twist_angle as _signed_twist_angle
-from ...target_pose import stable_orientation_delta as _stable_orientation_delta
+from ...retarget.target_pose import TargetPose
+from ...retarget.target_pose import signed_twist_angle as _signed_twist_angle
+from ...retarget.target_pose import (
+    stable_orientation_delta as _stable_orientation_delta,
+)
 from ..base import CorrectionModule, _arc_point, _curve_sample, _hermite_sample
 
 

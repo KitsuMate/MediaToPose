@@ -44,7 +44,13 @@ def load_addon() -> ModuleType:
         raise RuntimeError("Unable to construct the Media to Pose test package")
     module = importlib.util.module_from_spec(spec)
     sys.modules[package_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        # Never leave a half-initialised package behind: later tests would
+        # see a module without register() instead of the real import error.
+        sys.modules.pop(package_name, None)
+        raise
     return module
 
 

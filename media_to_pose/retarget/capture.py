@@ -17,7 +17,6 @@ from ..postprocess import (
     PostProcessingSession,
     iter_pipeline,
 )
-from ..target_pose import TargetPose
 from .grounding import _capture_grounding_frame
 from .pose import _iter_commit_target_pose, build_target_pose
 from .root_motion import _target_body_height
@@ -29,6 +28,7 @@ from .samples import (
 )
 from .solve.common import evaluated_semantic_bone
 from .solve.ik import _prepare_ik_output
+from .target_pose import TargetPose
 
 
 def _ik_bone_confidences(ik_proposals: Sequence[dict]) -> dict[object, float]:

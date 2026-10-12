@@ -13,7 +13,6 @@ from .. import (
 from ..core.errors import BackendError
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
-from ..target_pose import TargetPose
 from .capture import _ik_bone_confidences
 from .pose import _commit_target_pose
 from .samples import (
@@ -32,6 +31,7 @@ from .samples import (
 from .solve.common import _mapped_bone
 from .solve.frames import target_basis
 from .solve.ik import _prepare_ik_output
+from .target_pose import TargetPose
 
 
 def _iter_apply_rohm_root_deltas(

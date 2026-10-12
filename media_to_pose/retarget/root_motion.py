@@ -10,10 +10,10 @@ from mathutils import Matrix, Quaternion, Vector
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
 from ..models import CanonicalFrame
-from ..target_pose import signed_twist_angle as _signed_twist_angle
 from .samples import _BakedFrameSample, _RootMotionSample, _translate_grounding
 from .solve.common import _canonical_vector, _mapped_bone, body_points
 from .solve.frames import source_root_basis, target_basis
+from .target_pose import signed_twist_angle as _signed_twist_angle
 
 
 def _sequence_root_target(armature, entries):

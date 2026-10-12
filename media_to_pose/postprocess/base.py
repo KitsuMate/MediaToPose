@@ -12,7 +12,7 @@ from typing import (
 from mathutils import Vector
 
 from ..constants import PROFILE_ARP, PROFILE_GENERIC, PROFILE_RIGIFY
-from ..target_pose import TargetPose
+from ..retarget.target_pose import TargetPose
 
 
 def _smoothstep(start: float, end: float, value: float) -> float:

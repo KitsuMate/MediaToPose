@@ -14,7 +14,6 @@ from .. import (
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
 from ..models import CanonicalFrame, Landmark
-from ..pose_translation_solver import PoseTranslationSolver
 from .root_motion import _target_body_height
 from .samples import (
     SequenceApplyProgress,
@@ -34,6 +33,7 @@ from .solve.ik import (
     _set_pose_translation_preserve_basis_rotation,
     limb_ownership,
 )
+from .solve.translation import PoseTranslationSolver
 
 
 def _grounding_landmark(frame: CanonicalFrame, *names: str) -> Landmark | None:

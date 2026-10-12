@@ -10,7 +10,7 @@ from mathutils import Quaternion, Vector
 from ... import (
     mapping,
 )
-from ...target_pose import TargetPose
+from ..target_pose import TargetPose
 from .common import _mapped_bone
 
 

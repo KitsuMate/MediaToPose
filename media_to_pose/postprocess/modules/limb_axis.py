@@ -6,9 +6,9 @@ import math
 
 from mathutils import Quaternion, Vector
 
-from ...target_pose import BoneChannel, TargetPose
-from ...target_pose import orientation_frame as _orientation_frame
-from ...target_pose import signed_twist_angle as _signed_twist_angle
+from ...retarget.target_pose import BoneChannel, TargetPose
+from ...retarget.target_pose import orientation_frame as _orientation_frame
+from ...retarget.target_pose import signed_twist_angle as _signed_twist_angle
 from ..base import CorrectionModule, PostProcessingSession
 
 

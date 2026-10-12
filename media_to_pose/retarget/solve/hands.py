@@ -11,7 +11,7 @@ from ... import (
     mapping,
 )
 from ...constants import HAND_JOINT_PAIRS, PROFILE_ARP
-from ...target_pose import TargetPose
+from ..target_pose import TargetPose
 from .common import (
     _FINGER_ARTICULATION_LIMITS,
     _bounded_parent_relative_direction_delta,

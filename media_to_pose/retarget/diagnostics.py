@@ -11,7 +11,6 @@ from .. import (
 )
 from ..constants import BODY_JOINT_PAIRS, HAND_JOINT_PAIRS
 from ..models import CanonicalFrame
-from ..target_pose import signed_twist_angle as _signed_twist_angle
 from .solve.common import (
     _FINGER_ARTICULATION_LIMITS,
     _bounded_parent_relative_direction_delta,
@@ -29,6 +28,7 @@ from .solve.frames import (
     source_root_basis,
     target_basis,
 )
+from .target_pose import signed_twist_angle as _signed_twist_angle
 
 
 def normalized_arm_positions(

@@ -17,7 +17,6 @@ from ..postprocess import (
     iter_pipeline,
     run_pipeline,
 )
-from ..target_pose import TargetPose
 from .keyframes import _key_bone, _key_shape, _set_key_interpolation
 from .root_motion import _reset_root_location, _sequence_root_target
 from .samples import SequenceApplyProgress
@@ -26,6 +25,7 @@ from .solve.face import _apply_eye_gaze, _apply_face_controls, _apply_shapes
 from .solve.frames import source_root_basis, target_basis, target_rest_basis
 from .solve.hands import _apply_hands
 from .solve.ik import _commit_ik_output, _prepare_ik_output
+from .target_pose import TargetPose
 
 
 def _iter_commit_target_pose(

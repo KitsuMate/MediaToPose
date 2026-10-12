@@ -8,8 +8,8 @@ import bpy
 from mathutils import Quaternion, Vector
 
 from ...constants import BODY_JOINT_PAIRS
-from ...target_pose import TargetPose
-from ...target_pose import stable_orientation_delta as _stable_orientation_delta
+from ..target_pose import TargetPose
+from ..target_pose import stable_orientation_delta as _stable_orientation_delta
 from .common import (
     _clamp_rotation,
     _mapped_bone,
