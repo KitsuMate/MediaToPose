@@ -59,3 +59,9 @@ include = [
   "rohm_ort_runtime.py",
   "sam3d_state.py",
 ]
+
+[tool.pytest.ini_options]
+# Plain unit tier: runs without Blender. The Blender suite is started with
+# tests/run_blender_tests.py.
+testpaths = ["tests/unit"]
+addopts = "--import-mode=importlib -p no:cacheprovider"
