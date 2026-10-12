@@ -77,7 +77,7 @@ def _detect(addon, provider_name: str, image: Path, sam_device: str):
 
 
 def _spine_quality(addon, armature, frame):
-    entries = addon.mapping.mapping_by_id(armature.mtp_rig_config)
+    entries = addon.rig.mapping.mapping_by_id(armature.mtp_rig_config)
     samples, inferred = addon.postprocess.CORRECTION_REGISTRY[
         "SPINE_CORRECTION"
     ]._source_curve(SimpleNamespace(frame=frame))
@@ -134,7 +134,7 @@ def _retarget_and_assert(addon, provider_name: str, frame) -> dict:
     if armature is None:
         raise AssertionError("VRoid fixture has no armature")
     armature.mtp_rig_config.mappings.clear()
-    addon.mapping.auto_map(armature, force_profile=True)
+    addon.rig.mapping.auto_map(armature, force_profile=True)
     addon.retarget.prepare_limb_ownership(armature)
     for bone in armature.pose.bones:
         bone.matrix_basis = Matrix.Identity(4)
@@ -179,7 +179,7 @@ def _retarget_and_assert(addon, provider_name: str, frame) -> dict:
     )
     if not head_errors or max(head_errors.values()) >= 0.01:
         raise AssertionError(f"Head endpoint quality failed: {head_errors}")
-    entries = addon.mapping.mapping_by_id(armature.mtp_rig_config)
+    entries = addon.rig.mapping.mapping_by_id(armature.mtp_rig_config)
     finger_errors = addon.retarget.diagnostics.finger_world_position_errors(
         armature,
         entries,

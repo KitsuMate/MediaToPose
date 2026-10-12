@@ -106,7 +106,8 @@ def _toggle_registration() -> object:
 
 
 def _exercise_fake_capture(addon: object) -> None:
-    operators = addon.blender.operators.capture
+    worker = addon.session.worker
+    requests = addon.core.requests
 
     class FakeProvider:
         closed = False
@@ -131,27 +132,35 @@ def _exercise_fake_capture(addon: object) -> None:
             self.progress_updates.append((current, total, status))
 
     media = addon.core.types.MediaInfo(path="ignored.png", kind="IMAGE")
+    request = requests.CaptureRequest(
+        provider_id="MEDIAPIPE",
+        mode="POSE",
+        media_path=media.path,
+        media_kind="IMAGE",
+        source_frame_index=0,
+        use_body=True,
+        use_hands=False,
+        use_face=False,
+        face_output="ARKIT",
+        root_motion_mode="AUTOMATIC",
+        keep_original_root_position=False,
+        keep_detection_cache=False,
+        cache_limit_bytes=1024,
+        start_frame=0.0,
+        scene_name="",
+        scene_pointer=0,
+        media_info=media,
+        cache_media_info=media,
+    )
     job = FakeJob()
-    original_descriptor = operators.descriptor
-    operators.descriptor = lambda _provider_id: SimpleNamespace(
+    original_descriptor = worker.descriptor
+    worker.descriptor = lambda _provider_id: SimpleNamespace(
         provider_class=FakeProvider
     )
     try:
-        operators._worker(
-            job,
-            "MEDIAPIPE",
-            {},
-            media,
-            media,
-            "POSE",
-            0.0,
-            "unused-cache-key",
-            {},
-            False,
-            1024,
-        )
+        worker.run_detection(job, request)
     finally:
-        operators.descriptor = original_descriptor
+        worker.descriptor = original_descriptor
     kind, frame = job.messages.get_nowait()
     if kind != "FRAME" or frame.timestamp_ms != 0:
         raise AssertionError(f"Unexpected fake capture result: {kind!r}")
