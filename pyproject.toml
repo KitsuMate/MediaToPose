@@ -41,3 +41,21 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
+
+[tool.pyright]
+# Basic mode on modules that already pass. Widen this list as modules are
+# moved into core/, providers/, postprocess/ and api/.
+typeCheckingMode = "basic"
+pythonVersion = "3.13"
+include = [
+  "camera_motion_correction.py",
+  "constants.py",
+  "dependency_bootstrap.py",
+  "media_io.py",
+  "model_lifecycle.py",
+  "models.py",
+  "operation.py",
+  "providers/base.py",
+  "rohm_ort_runtime.py",
+  "sam3d_state.py",
+]
