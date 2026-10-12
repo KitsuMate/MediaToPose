@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import os
-import pickle
 import queue
-import tempfile
 import threading
 import time
 import traceback
@@ -23,6 +20,7 @@ from .capture_state import (
     face_output_warning,
     mapping_scope_issues,
 )
+from .core.cache.stream import FrameSpool
 from .core.log import get_logger
 from .media_io import probe_media
 from .models import MediaInfo
@@ -274,6 +272,7 @@ class CaptureJob:
         self.overall_progress = 0.0
         self.thread = None
         self.temp_path = ""
+        self.spool: FrameSpool | None = None
         self.transaction = None
         self.progress_plan = _capture_progress_plan(request, cached=cached)
         self.frame_total = (
@@ -577,17 +576,11 @@ def _begin_capture_operation(
     return job
 
 
-def _remove_worker_temp_file(job) -> None:
-    if not job.temp_path or not Path(job.temp_path).is_file():
-        return
-    try:
-        Path(job.temp_path).unlink()
-    except OSError as exc:
-        LOGGER.warning(
-            "Could not remove temporary capture file %s: %s", job.temp_path, exc
-        )
-    else:
-        job.temp_path = ""
+def _remove_worker_spool(job) -> None:
+    spool = getattr(job, "spool", None)
+    if spool is not None:
+        spool.close()
+        job.spool = None
 
 
 def _worker(
@@ -704,26 +697,18 @@ def _worker(
             job.messages.put(("CACHE_DIR", (str(directory), count, persisted)))
             return
 
-        file_descriptor, temp_path = tempfile.mkstemp(
-            prefix="media_to_pose_",
-            suffix=".frames",
-        )
-        os.close(file_descriptor)
-        job.temp_path = temp_path
-        count = 0
-        with Path(temp_path).open("wb") as handle:
-            for detected in provider.iter_video(
-                media_info.path, job.cancel, job.progress
-            ):
-                pickle.dump(detected, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                count += 1
+        spool = FrameSpool(prefix="media_to_pose_capture_")
+        job.spool = spool
+        for detected in provider.iter_video(media_info.path, job.cancel, job.progress):
+            spool.append(detected)
+        spool.flush()
         job.progress(1, 1, "Detection complete")
-        job.messages.put(("CACHE", (temp_path, count)))
+        job.messages.put(("CACHE", (spool, len(spool))))
     except InterruptedError as exc:
-        _remove_worker_temp_file(job)
+        _remove_worker_spool(job)
         job.messages.put(("CANCELLED", str(exc)))
     except Exception as exc:
-        _remove_worker_temp_file(job)
+        _remove_worker_spool(job)
         job.messages.put(("ERROR", (str(exc), traceback.format_exc())))
     finally:
         if writer is not None:
@@ -736,15 +721,6 @@ def _worker(
                 provider.close()
             except Exception:
                 LOGGER.exception("Capture-provider cleanup failed")
-
-
-def _read_cache(path):
-    with Path(path).open("rb") as handle:
-        while True:
-            try:
-                yield pickle.load(handle)
-            except EOFError:
-                break
 
 
 class MTP_OT_apply_capture(Operator):
@@ -1473,8 +1449,8 @@ class MTP_OT_apply_capture(Operator):
                 return {"RUNNING_MODAL"}
             if kind in {"CACHE", "CACHE_DIR"}:
                 if kind == "CACHE":
-                    path, _count = payload
-                    source_frames = _read_cache(path)
+                    spool, _count = payload
+                    source_frames = iter(spool)
                 else:
                     path, _count, _persisted = payload
                     source_frames = detection_cache.iter_directory(path)
@@ -1536,13 +1512,12 @@ class MTP_OT_apply_capture(Operator):
         if released:
             _CAPTURE_JOBS.pop(self._token.generation, None)
         _tag_progress_redraw(context)
+        if job and released:
+            _remove_worker_spool(job)
         if job and released and job.temp_path:
             path = Path(job.temp_path)
             try:
-                if path.is_dir():
-                    detection_cache.discard_temporary(str(path))
-                else:
-                    Path(path).unlink()
+                detection_cache.discard_temporary(str(path))
             except (OSError, ValueError):
                 LOGGER.warning("Could not remove temporary capture data: %s", path)
         return {"CANCELLED"} if cancelled else {"FINISHED"}

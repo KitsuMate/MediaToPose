@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import math
-import pickle
-import tempfile
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
@@ -27,6 +25,7 @@ from .constants import (
     PROFILE_ARP,
     PROFILE_RIGIFY,
 )
+from .core.cache.stream import FrameSpool
 from .core.errors import BackendError, InvalidRequest, MediaError
 from .models import CanonicalFrame, Landmark
 from .pose_translation_solver import PoseTranslationSolver
@@ -6041,9 +6040,7 @@ def iter_apply_sequence(
     if requested_mode == "AUTOMATIC":
         # The conditional spool is closed by the encompassing generator
         # ``finally`` block, including GeneratorExit during cancellation.
-        frame_spool = tempfile.TemporaryFile(  # noqa: SIM115
-            prefix="media_to_pose_frames_"
-        )
+        frame_spool = FrameSpool()
         try:
             for detected in frames:
                 timestamp_ms = int(detected.timestamp_ms)
@@ -6053,11 +6050,7 @@ def iter_apply_sequence(
                 ):
                     raise MediaError("Detected video timestamps must increase")
                 previous_timestamp_ms = timestamp_ms
-                pickle.dump(
-                    detected,
-                    frame_spool,
-                    protocol=pickle.HIGHEST_PROTOCOL,
-                )
+                frame_spool.append(detected)
                 root_samples.append(_root_motion_sample(detected))
                 camera_inputs.append(
                     camera_motion_correction.input_from_frame(detected)
@@ -6070,16 +6063,11 @@ def iter_apply_sequence(
                 )
             if not frame_count:
                 raise MediaError("No detectable frames were produced")
-            frame_spool.seek(0)
         except BaseException:
             frame_spool.close()
             raise
 
-        def source_frames():
-            for _index in range(frame_count):
-                yield pickle.load(frame_spool)
-
-        frame_iterator = source_frames()
+        frame_iterator = iter(frame_spool)
 
         if (
             camera_motion_settings

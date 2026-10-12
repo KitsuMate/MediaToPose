@@ -123,3 +123,21 @@ class FrameCodecTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FrameSpoolTests(unittest.TestCase):
+    def test_spool_round_trips_across_chunks_and_cleans_up(self) -> None:
+        from media_to_pose.core.cache.stream import FrameSpool
+
+        source = [sample_frame(index * 40) for index in range(7)]
+        with FrameSpool(chunk_frames=3) as spool:
+            for frame in source:
+                spool.append(frame)
+            self.assertEqual(len(spool), 7)
+            self.assertEqual(list(spool), source)
+            self.assertEqual(list(spool), source)
+            directory = spool.directory
+            self.assertEqual(len(list(directory.glob("chunk_*.npz"))), 3)
+        self.assertFalse(directory.exists())
+        with self.assertRaises(ValueError):
+            spool.append(source[0])
