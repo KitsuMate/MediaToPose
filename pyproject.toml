@@ -56,10 +56,12 @@ include = [
   "media_to_pose/core/media_io.py",
   "media_to_pose/core/motion/rohm_format.py",
   "media_to_pose/core/paths.py",
+  "media_to_pose/core/report.py",
   "media_to_pose/core/requests.py",
   "media_to_pose/core/scene.py",
   "media_to_pose/core/types.py",
   "media_to_pose/providers/base.py",
+  "media_to_pose/session/results.py",
 ]
 
 [tool.pytest.ini_options]

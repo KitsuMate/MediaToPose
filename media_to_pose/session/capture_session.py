@@ -63,6 +63,7 @@ from .progress import (
     sequence_progress_status,
 )
 from .readiness import enabled_capture_scope, face_output_warning, mapping_scope_issues
+from .results import part_confidence
 from .transaction import CaptureTransaction
 from .worker import DetectionJob, run_detection
 
@@ -201,6 +202,9 @@ class CaptureSession:
         self.report = CaptureReport(
             source_frame_offset=frame_range[0] if frame_range else 0
         )
+        # Per applied frame: source frame, timeline frame and part confidence.
+        self.frame_confidence: list[dict] = []
+        self.timeline_frames: tuple[float, float] | None = None
         self.state = SessionState.PREPARED
         self.status = ""
         self.status_kind = "PROGRESS"
@@ -692,6 +696,21 @@ class CaptureSession:
             self._request_preview("schedule")
         return self._finish(cancelled=False)
 
+    def _observe_frame(self, frame: CanonicalFrame, source_frame: int) -> None:
+        timeline = self.request.start_frame
+        if self.request.mode != CaptureMode.POSE:
+            timeline += int(frame.timestamp_ms) * self.scene_context.fps / 1000.0
+        timeline = round(float(timeline), 4)
+        self.frame_confidence.append(
+            {
+                "source_frame": int(source_frame),
+                "timeline_frame": timeline,
+                **part_confidence(frame),
+            }
+        )
+        first = self.timeline_frames[0] if self.timeline_frames else timeline
+        self.timeline_frames = (first, timeline)
+
     def _observe_camera(self, frame: CanonicalFrame) -> None:
         if frame.camera is not None and frame.camera.valid:
             self.outcome.camera_vertical_fov = float(frame.camera.vertical_fov)
@@ -707,6 +726,7 @@ class CaptureSession:
             )
         self._pose_frame = detected
         self._observe_camera(detected)
+        self._observe_frame(detected, self.request.source_frame_index)
         self.outcome.cached = bool(cached)
         self._pose_iterator = iter_apply_frame(
             armature,
@@ -792,9 +812,12 @@ class CaptureSession:
             first, end = self.request.frame_range
             frames = itertools.islice(frames, first, end)
 
+        offset = self.report.source_frame_offset
+
         def observed_frames():
-            for detected in frames:
+            for index, detected in enumerate(frames):
                 self._observe_camera(detected)
+                self._observe_frame(detected, offset + index)
                 self._sequence_warnings.update(detected.warnings)
                 yield detected
                 self._sequence_warnings.update(detected.warnings)

@@ -89,6 +89,13 @@ class BackendError(MtpError, RuntimeError):
     exit_code = 8
 
 
+class CaptureFailed(MtpError, RuntimeError):
+    """A capture started but did not finish; Blender data was rolled back."""
+
+    code = "CAPTURE_FAILED"
+    exit_code = 9
+
+
 ERROR_CLASSES: tuple[type[MtpError], ...] = (
     MtpError,
     InvalidRequest,
@@ -99,6 +106,7 @@ ERROR_CLASSES: tuple[type[MtpError], ...] = (
     OperationBusy,
     Cancelled,
     BackendError,
+    CaptureFailed,
 )
 
 
@@ -106,6 +114,7 @@ __all__ = [
     "ERROR_CLASSES",
     "BackendError",
     "Cancelled",
+    "CaptureFailed",
     "DependencyMissing",
     "InvalidRequest",
     "MappingIncomplete",

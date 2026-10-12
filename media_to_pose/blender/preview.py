@@ -14,7 +14,7 @@ import bpy
 import bpy.utils.previews
 
 from ..core.cache import store as cache_store
-from ..core.constants import HAND_LANDMARK_NAMES
+from ..core.constants import BODY_CONNECTIONS, HAND_CONNECTIONS, HAND_LANDMARK_NAMES
 from ..core.log import get_logger
 from ..core.media_io import (
     decode_image,
@@ -71,55 +71,6 @@ class _PreviewResult:
     media_kind: str = ""
     frame_count: int = 0
 
-
-BODY_CONNECTIONS = (
-    ("LEFT_EAR", "LEFT_EYE"),
-    ("LEFT_EYE", "NOSE"),
-    ("NOSE", "RIGHT_EYE"),
-    ("RIGHT_EYE", "RIGHT_EAR"),
-    ("LEFT_SHOULDER", "RIGHT_SHOULDER"),
-    ("LEFT_SHOULDER", "LEFT_ELBOW"),
-    ("LEFT_ELBOW", "LEFT_WRIST"),
-    ("RIGHT_SHOULDER", "RIGHT_ELBOW"),
-    ("RIGHT_ELBOW", "RIGHT_WRIST"),
-    ("LEFT_SHOULDER", "LEFT_HIP"),
-    ("RIGHT_SHOULDER", "RIGHT_HIP"),
-    ("LEFT_HIP", "RIGHT_HIP"),
-    ("LEFT_HIP", "LEFT_KNEE"),
-    ("LEFT_KNEE", "LEFT_ANKLE"),
-    ("LEFT_ANKLE", "LEFT_HEEL"),
-    ("LEFT_ANKLE", "LEFT_FOOT_INDEX"),
-    ("RIGHT_HIP", "RIGHT_KNEE"),
-    ("RIGHT_KNEE", "RIGHT_ANKLE"),
-    ("RIGHT_ANKLE", "RIGHT_HEEL"),
-    ("RIGHT_ANKLE", "RIGHT_FOOT_INDEX"),
-)
-
-HAND_CONNECTIONS = (
-    ("WRIST", "THUMB_CMC"),
-    ("THUMB_CMC", "THUMB_MCP"),
-    ("THUMB_MCP", "THUMB_IP"),
-    ("THUMB_IP", "THUMB_TIP"),
-    ("WRIST", "INDEX_FINGER_MCP"),
-    ("INDEX_FINGER_MCP", "INDEX_FINGER_PIP"),
-    ("INDEX_FINGER_PIP", "INDEX_FINGER_DIP"),
-    ("INDEX_FINGER_DIP", "INDEX_FINGER_TIP"),
-    ("WRIST", "MIDDLE_FINGER_MCP"),
-    ("MIDDLE_FINGER_MCP", "MIDDLE_FINGER_PIP"),
-    ("MIDDLE_FINGER_PIP", "MIDDLE_FINGER_DIP"),
-    ("MIDDLE_FINGER_DIP", "MIDDLE_FINGER_TIP"),
-    ("WRIST", "RING_FINGER_MCP"),
-    ("RING_FINGER_MCP", "RING_FINGER_PIP"),
-    ("RING_FINGER_PIP", "RING_FINGER_DIP"),
-    ("RING_FINGER_DIP", "RING_FINGER_TIP"),
-    ("WRIST", "PINKY_MCP"),
-    ("PINKY_MCP", "PINKY_PIP"),
-    ("PINKY_PIP", "PINKY_DIP"),
-    ("PINKY_DIP", "PINKY_TIP"),
-    ("INDEX_FINGER_MCP", "MIDDLE_FINGER_MCP"),
-    ("MIDDLE_FINGER_MCP", "RING_FINGER_MCP"),
-    ("RING_FINGER_MCP", "PINKY_MCP"),
-)
 
 # MediaPipe Face Mesh contours. Drawing a small subset keeps the overlay
 # readable in a narrow sidebar while the cached payload remains 2D-only.
