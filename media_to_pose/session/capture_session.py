@@ -269,7 +269,7 @@ class CaptureSession:
         notices: list[tuple[str, str]] = []
         if not analysis_only:
             prepare_limb_ownership(armature)
-            mapping.validate_mapping(armature)
+            mapping.validate_mapping(armature, settings=settings)
             errors = mapping_scope_issues(armature, settings)
             if errors:
                 raise MappingIncomplete(errors[0])

@@ -77,7 +77,7 @@ class GenericMappingTests(unittest.TestCase):
         pelvis.manual_lock = True
         pelvis.source = "MANUAL"
         stale = entries["CHEST"]
-        with self.addon.properties.suppress_manual_locks():
+        with self.mapping.suppress_manual_locks():
             stale.target_name = "StaleAutomaticTarget"
             stale.source = "HEURISTIC"
 
@@ -166,7 +166,7 @@ class GenericMappingTests(unittest.TestCase):
         entry = self.mapping.mapping_by_id(self.armature.mtp_rig_config)[
             "FACE_JAW_OPEN"
         ]
-        with self.addon.properties.suppress_manual_locks():
+        with self.mapping.suppress_manual_locks():
             entry.target_name = "MissingJawControl"
 
         settings.use_face = False
@@ -895,7 +895,7 @@ class VrmMetadataTests(unittest.TestCase):
             mock.patch.object(self.mapping, "auto_map") as auto_map,
         ):
             self.assertTrue(self.mapping.refresh_auto_mapping(armature))
-        auto_map.assert_called_once_with(armature)
+        auto_map.assert_called_once_with(armature, settings=None)
 
 
 if __name__ == "__main__":

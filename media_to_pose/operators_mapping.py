@@ -10,7 +10,7 @@ from bpy.props import EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-from . import mapping, properties
+from . import mapping
 from .operation import COORDINATOR
 from .registration import register_classes, unregister_classes
 
@@ -146,7 +146,11 @@ class MTP_OT_auto_map(_IdleMutationMixin, Operator):
             return {"CANCELLED"}
         if not self.force_profile:
             mapping.clear_unlocked_automatic_mappings(armature)
-        profile = mapping.auto_map(armature, force_profile=self.force_profile)
+        profile = mapping.auto_map(
+            armature,
+            force_profile=self.force_profile,
+            settings=context.scene.mtp_settings,
+        )
         context.scene.mtp_settings.target_armature = armature
         self.report({"INFO"}, f"Mapped {armature.name} as {profile}")
         return {"FINISHED"}
@@ -165,7 +169,9 @@ class MTP_OT_restore_profile(_IdleMutationMixin, Operator):
         armature = active_armature(context)
         if not armature:
             return {"CANCELLED"}
-        mapping.auto_map(armature, force_profile=True)
+        mapping.auto_map(
+            armature, force_profile=True, settings=context.scene.mtp_settings
+        )
         self.report({"INFO"}, "Profile defaults restored")
         return {"FINISHED"}
 
@@ -185,13 +191,13 @@ class MTP_OT_use_selected_bone(_IdleMutationMixin, Operator):
         if not pose_bone or not entry:
             self.report({"ERROR"}, "Select a pose bone and mapping row")
             return {"CANCELLED"}
-        with properties.suppress_manual_locks():
+        with mapping.suppress_manual_locks():
             entry.target_kind = "BONE"
             entry.target_name = pose_bone.name
             entry.source = "MANUAL"
             entry.manual_lock = True
             entry.confidence = 1.0
-        mapping.validate_mapping(armature)
+        mapping.validate_mapping(armature, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -216,7 +222,7 @@ class MTP_OT_use_active_shape_key(_IdleMutationMixin, Operator):
                 f"Selected key is {scheme or 'unclassified'}, expected {entry.shape_scheme}",
             )
             return {"CANCELLED"}
-        with properties.suppress_manual_locks():
+        with mapping.suppress_manual_locks():
             entry.target_kind = "SHAPE_KEY"
             if entry.target_object in {"", "*"} and entry.target_name:
                 override = mapping.shape_override_for_object(entry, obj.name)
@@ -234,7 +240,7 @@ class MTP_OT_use_active_shape_key(_IdleMutationMixin, Operator):
             entry.source = "MANUAL"
             entry.manual_lock = True
             entry.confidence = 1.0
-        mapping.validate_mapping(armature)
+        mapping.validate_mapping(armature, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -315,7 +321,7 @@ class MTP_OT_add_shape_override(_IdleMutationMixin, Operator):
         entry.source = "MANUAL"
         entry.manual_lock = True
         entry.confidence = 1.0
-        mapping.validate_mapping(armature)
+        mapping.validate_mapping(armature, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -345,7 +351,7 @@ class MTP_OT_remove_shape_override(_IdleMutationMixin, Operator):
         )
         entry.source = "MANUAL"
         entry.manual_lock = True
-        mapping.validate_mapping(armature)
+        mapping.validate_mapping(armature, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -522,7 +528,7 @@ class MTP_OT_clear_overrides(_IdleMutationMixin, Operator):
             entry.manual_lock = False
             if entry.source == "MANUAL":
                 entry.source = "NONE"
-        mapping.auto_map(armature)
+        mapping.auto_map(armature, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -560,11 +566,11 @@ class MTP_OT_reset_section(_IdleMutationMixin, Operator):
                 "leg_ik_pole_bone_r",
                 "leg_ik_toe_bone_r",
             )
-            with properties.suppress_manual_locks():
+            with mapping.suppress_manual_locks():
                 for field in properties_to_clear:
                     setattr(armature.mtp_rig_config, field, "")
                 armature.mtp_rig_config.fk_switches_manual = False
-        with properties.suppress_manual_locks():
+        with mapping.suppress_manual_locks():
             for entry in armature.mtp_rig_config.mappings:
                 if entry.section != section:
                     continue
@@ -579,7 +585,7 @@ class MTP_OT_reset_section(_IdleMutationMixin, Operator):
                 entry.manual_lock = False
                 entry.source = "NONE"
                 entry.status = "MISSING" if entry.required else "OPTIONAL"
-        mapping.auto_map(armature)
+        mapping.auto_map(armature, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -619,7 +625,7 @@ class MTP_OT_mirror_mapping(_IdleMutationMixin, Operator):
             ("_L", "_R") if self.direction == "L_TO_R" else ("_R", "_L")
         )
         copied = 0
-        with properties.suppress_manual_locks():
+        with mapping.suppress_manual_locks():
             for semantic_id, source in entries.items():
                 if not semantic_id.endswith(source_suffix):
                     continue
@@ -645,7 +651,7 @@ class MTP_OT_mirror_mapping(_IdleMutationMixin, Operator):
                 target.manual_lock = True
                 target.confidence = 1.0
                 copied += 1
-        mapping.validate_mapping(armature)
+        mapping.validate_mapping(armature, settings=context.scene.mtp_settings)
         self.report({"INFO"}, f"Mirrored {copied} mappings")
         return {"FINISHED"}
 
@@ -679,7 +685,9 @@ class MTP_OT_import_preset(_IdleMutationMixin, Operator, ImportHelper):
         if not armature:
             return {"CANCELLED"}
         try:
-            mapping.load_json(self.filepath, armature)
+            mapping.load_json(
+                self.filepath, armature, settings=context.scene.mtp_settings
+            )
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
@@ -706,7 +714,7 @@ class MTP_OT_duplicate_mapping(_IdleMutationMixin, Operator):
         if not target or not source or source.type != "ARMATURE" or source == target:
             self.report({"ERROR"}, "Choose a different source armature")
             return {"CANCELLED"}
-        mapping.copy_section(source, target)
+        mapping.copy_section(source, target, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -742,6 +750,7 @@ class MTP_OT_duplicate_post_processing(_IdleMutationMixin, Operator):
             source,
             target,
             section="POST_PROCESSING",
+            settings=context.scene.mtp_settings,
         )
         return {"FINISHED"}
 

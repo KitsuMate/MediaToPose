@@ -74,7 +74,9 @@ def _reset_scene_state(data=None) -> bool:
                 settings.status_kind = "READY"
                 settings.progress = 0.0
                 clear_unrecoverable_media_selection(settings)
-                mapping.refresh_auto_mapping(settings.target_armature)
+                mapping.refresh_auto_mapping(
+                    settings.target_armature, settings=settings
+                )
     except (AttributeError, ReferenceError, RuntimeError):
         _scene_state_pending = True
         return False

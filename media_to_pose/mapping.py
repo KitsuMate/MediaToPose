@@ -6,11 +6,12 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Sequence
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 import bpy
 
-from . import properties
 from .constants import (
     ALL_ROLES,
     FACE_BLENDSHAPES,
@@ -24,6 +25,27 @@ from .constants import (
 )
 from .core.errors import InvalidRequest
 from .core.fs import atomic_json
+
+_MANUAL_LOCK_SUPPRESSED = ContextVar(
+    "media_to_pose_manual_lock_suppressed",
+    default=False,
+)
+
+
+@contextmanager
+def suppress_manual_locks():
+    """Prevent programmatic edits from becoming user-locked mappings."""
+    token = _MANUAL_LOCK_SUPPRESSED.set(True)
+    try:
+        yield
+    finally:
+        _MANUAL_LOCK_SUPPRESSED.reset(token)
+
+
+def manual_locks_suppressed() -> bool:
+    """Whether mapping edits are currently programmatic."""
+    return _MANUAL_LOCK_SUPPRESSED.get()
+
 
 _ARKIT_NORMALIZED = {
     normalize
@@ -868,7 +890,7 @@ def configure_fk_switches(
     values = PROFILE_FK_SWITCHES.get(profile)
     if not values or (config.fk_switches_manual and not force):
         return
-    with properties.suppress_manual_locks():
+    with suppress_manual_locks():
         for field, value in values.items():
             setattr(config, field, value)
         if force:
@@ -920,7 +942,7 @@ def fk_switch_issues(
 
 def _add_entry(config, section: str, role: Sequence) -> None:
     semantic_id, label, required = role
-    with properties.suppress_manual_locks():
+    with suppress_manual_locks():
         entry = config.mappings.add()
         entry.semantic_id = semantic_id
         entry.label = label
@@ -965,7 +987,7 @@ def ensure_mapping_entries(armature: bpy.types.Object) -> None:
     # Labels and structural metadata are defined by the current role catalog,
     # not by mutable data stored in a .blend. This keeps the Mapping tab exact
     # even after entries have been edited or copied between armatures.
-    with properties.suppress_manual_locks():
+    with suppress_manual_locks():
         for entry in config.mappings:
             section, label, required = canonical_roles[entry.semantic_id]
             entry.label = label
@@ -984,7 +1006,7 @@ def mapping_by_id(config) -> dict[str, object]:
 def clear_unlocked_automatic_mappings(armature: bpy.types.Object) -> None:
     """Discard generated assignments before applying another mapping method."""
     ensure_mapping_entries(armature)
-    with properties.suppress_manual_locks():
+    with suppress_manual_locks():
         for entry in armature.mtp_rig_config.mappings:
             if entry.manual_lock:
                 continue
@@ -1029,7 +1051,7 @@ def _set_mapping(
 ) -> bool:
     if entry.manual_lock and entry.source == "MANUAL" and not force:
         return False
-    with properties.suppress_manual_locks():
+    with suppress_manual_locks():
         entry.target_kind = target_kind
         entry.target_name = target
         entry.target_object = target_object
@@ -1450,7 +1472,12 @@ def _find_first_bone(armature, candidates: Iterable[str]) -> str:
     return ""
 
 
-def auto_map(armature: bpy.types.Object, *, force_profile: bool = False) -> str:
+def auto_map(
+    armature: bpy.types.Object,
+    *,
+    force_profile: bool = False,
+    settings=None,
+) -> str:
     ensure_mapping_entries(armature)
     config = armature.mtp_rig_config
     detected = detect_profile(armature)
@@ -1674,14 +1701,14 @@ def auto_map(armature: bpy.types.Object, *, force_profile: bool = False) -> str:
                 force=force_profile,
             )
 
-    validate_mapping(armature)
+    validate_mapping(armature, settings=settings)
     from .postprocess import validate_modules
 
     validate_modules(armature)
     return profile
 
 
-def refresh_auto_mapping(armature: bpy.types.Object) -> bool:
+def refresh_auto_mapping(armature: bpy.types.Object, *, settings=None) -> bool:
     """Refresh an Automatic mapping when its rig identity or profile changed.
 
     VRM importers can populate humanoid metadata after the armature object is
@@ -1721,7 +1748,7 @@ def refresh_auto_mapping(armature: bpy.types.Object) -> bool:
         and not metadata_changed
     ):
         return False
-    auto_map(armature)
+    auto_map(armature, settings=settings)
     return True
 
 
@@ -1732,9 +1759,6 @@ def validate_mapping(
 ) -> tuple[int, int, int]:
     config = armature.mtp_rig_config
     ensure_mapping_entries(armature)
-    if settings is None:
-        scene = getattr(bpy.context, "scene", None)
-        settings = getattr(scene, "mtp_settings", None)
     if settings is None:
         face_enabled = True
     else:
@@ -2051,7 +2075,7 @@ def serialize_config(armature: bpy.types.Object) -> dict:
     }
 
 
-def load_config(armature: bpy.types.Object, payload: dict) -> None:
+def load_config(armature: bpy.types.Object, payload: dict, *, settings=None) -> None:
     schema_version = int(payload.get("schema_version", 0))
     if schema_version != SCHEMA_VERSION:
         raise InvalidRequest(
@@ -2059,7 +2083,7 @@ def load_config(armature: bpy.types.Object, payload: dict) -> None:
         )
     ensure_mapping_entries(armature)
     entries = mapping_by_id(armature.mtp_rig_config)
-    with properties.suppress_manual_locks():
+    with suppress_manual_locks():
         profile = payload.get("profile")
         if profile in {
             "AUTO",
@@ -2100,17 +2124,21 @@ def load_config(armature: bpy.types.Object, payload: dict) -> None:
                     override.object_name = str(override_data.get("object_name", ""))
                     override.target_name = str(override_data.get("target_name", ""))
                     override.enabled = bool(override_data.get("enabled", True))
-    validate_mapping(armature)
+    validate_mapping(armature, settings=settings)
 
 
 def copy_section(
-    source: bpy.types.Object, target: bpy.types.Object, section: str | None = None
+    source: bpy.types.Object,
+    target: bpy.types.Object,
+    section: str | None = None,
+    *,
+    settings=None,
 ) -> None:
     ensure_mapping_entries(source)
     ensure_mapping_entries(target)
     source_entries = mapping_by_id(source.mtp_rig_config)
     target_entries = mapping_by_id(target.mtp_rig_config)
-    with properties.suppress_manual_locks():
+    with suppress_manual_locks():
         if section in {None, "POST_PROCESSING"}:
             from .postprocess import (
                 load_module_configs,
@@ -2163,7 +2191,7 @@ def copy_section(
             target_entry.source = "MANUAL"
             target_entry.manual_lock = True
             target_entry.confidence = 1.0
-    validate_mapping(target)
+    validate_mapping(target, settings=settings)
 
 
 def save_json(filepath: str, armature: bpy.types.Object) -> None:
@@ -2175,6 +2203,6 @@ def save_json(filepath: str, armature: bpy.types.Object) -> None:
     )
 
 
-def load_json(filepath: str, armature: bpy.types.Object) -> None:
+def load_json(filepath: str, armature: bpy.types.Object, *, settings=None) -> None:
     with Path(filepath).open(encoding="utf8") as handle:
-        load_config(armature, json.load(handle))
+        load_config(armature, json.load(handle), settings=settings)

@@ -88,8 +88,6 @@ LEGACY_LAYERS: dict[str, str] = {
 # (module, rule, detail) tuples for known violations.
 ALLOWLIST: set[tuple[str, str, str]] = {
     ("cache_preview", "reads-bpy-context", "bpy.context"),
-    ("mapping", "imports-blender", "properties"),
-    ("mapping", "reads-bpy-context", "bpy.context"),
     ("ui", "reads-bpy-context", "bpy.context"),
 }
 

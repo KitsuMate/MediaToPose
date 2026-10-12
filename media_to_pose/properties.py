@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from contextvars import ContextVar
-
 import bpy
 from bpy.props import (
     BoolProperty,
@@ -24,28 +21,14 @@ from .constants import (
     PROFILE_AUTO,
     SECTIONS,
 )
+from .mapping import manual_locks_suppressed
 from .operation import COORDINATOR
 from .postprocess import settings_schema
 from .registration import register_classes, unregister_classes
 
-_MANUAL_LOCK_SUPPRESSED = ContextVar(
-    "media_to_pose_manual_lock_suppressed",
-    default=False,
-)
-
-
-@contextmanager
-def suppress_manual_locks():
-    """Prevent programmatic edits from becoming user-locked mappings."""
-    token = _MANUAL_LOCK_SUPPRESSED.set(True)
-    try:
-        yield
-    finally:
-        _MANUAL_LOCK_SUPPRESSED.reset(token)
-
 
 def _mapping_edited(self, context) -> None:
-    if _MANUAL_LOCK_SUPPRESSED.get():
+    if manual_locks_suppressed():
         return
     self.manual_lock = True
     self.source = "MANUAL"
@@ -63,7 +46,7 @@ def _mapping_edited(self, context) -> None:
 
 
 def _fk_switch_edited(self, context) -> None:
-    if not _MANUAL_LOCK_SUPPRESSED.get():
+    if not manual_locks_suppressed():
         self.fk_switches_manual = True
         settings = getattr(getattr(context, "scene", None), "mtp_settings", None)
         armature = getattr(settings, "target_armature", None) if settings else None
@@ -76,7 +59,7 @@ def _fk_switch_edited(self, context) -> None:
 
 
 def _shape_override_edited(self, context) -> None:
-    if _MANUAL_LOCK_SUPPRESSED.get() or not context or not self.semantic_id:
+    if manual_locks_suppressed() or not context or not self.semantic_id:
         return
     settings = getattr(context.scene, "mtp_settings", None)
     armature = settings.target_armature if settings else None
@@ -97,7 +80,7 @@ def _shape_override_edited(self, context) -> None:
     entry.confidence = 1.0
     from . import mapping
 
-    mapping.validate_mapping(armature)
+    mapping.validate_mapping(armature, settings=settings)
     from .postprocess import validate_modules
 
     validate_modules(armature)
@@ -114,7 +97,7 @@ def _target_armature_changed(self, _context) -> None:
     try:
         from . import mapping
 
-        mapping.refresh_auto_mapping(armature)
+        mapping.refresh_auto_mapping(armature, settings=self)
     except (AttributeError, ReferenceError, RuntimeError):
         pass
 
