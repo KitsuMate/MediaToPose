@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "provider": "MEDIAPIPE",
+  "description": "What each face still visibly shows, as checks on MediaPipe blendshape coefficients. Left and Right are the subject's sides (ARKit convention). Thresholds leave margin below the values measured when the stills were added; they encode the visible expression, not exact detector output.",
+  "stills": {
+    "face_neutral": {
+      "visible": "Relaxed face, mouth closed, eyes open. The arched brows read as raised (about 0.8) although the face is at rest: a resting-level bias for neutral calibration to remove.",
+      "checks": [
+        ["jawOpen", "<=", 0.2],
+        ["mouthSmileLeft", "<=", 0.3],
+        ["mouthSmileRight", "<=", 0.3],
+        ["eyeBlinkLeft", "<=", 0.35],
+        ["eyeBlinkRight", "<=", 0.35],
+        ["mouthFrownLeft", "<=", 0.3],
+        ["mouthFrownRight", "<=", 0.3]
+      ]
+    },
+    "face_smirk_brows_down": {
+      "visible": "Closed-mouth smile with lowered brows.",
+      "checks": [
+        ["browDownLeft", ">=", 0.3],
+        ["browDownRight", ">=", 0.25],
+        ["mouthSmileLeft", ">=", 0.3],
+        ["mouthSmileRight", ">=", 0.3],
+        ["jawOpen", "<=", 0.2]
+      ]
+    },
+    "face_smile_open": {
+      "visible": "Broad open smile showing teeth.",
+      "checks": [
+        ["mouthSmileLeft", ">=", 0.7],
+        ["mouthSmileRight", ">=", 0.7]
+      ]
+    },
+    "face_laugh_jaw_open": {
+      "visible": "Laughing with the jaw dropped.",
+      "checks": [
+        ["mouthSmileLeft", ">=", 0.7],
+        ["mouthSmileRight", ">=", 0.7],
+        ["jawOpen", ">=", 0.3]
+      ]
+    },
+    "face_eyes_closed": {
+      "visible": "Both eyes closed, head tilted back slightly, mouth closed.",
+      "checks": [
+        ["eyeBlinkLeft", ">=", 0.5],
+        ["eyeBlinkRight", ">=", 0.5],
+        ["jawOpen", "<=", 0.2]
+      ]
+    },
+    "face_surprise": {
+      "visible": "Delighted surprise: jaw open, brows raised, looking down at a gift.",
+      "checks": [
+        ["jawOpen", ">=", 0.35],
+        ["browOuterUpLeft", ">=", 0.6]
+      ]
+    },
+    "face_grin_wide_eyes": {
+      "visible": "Closed-lip grin with wide eyes and raised brows.",
+      "checks": [
+        ["browOuterUpLeft", ">=", 0.3],
+        ["eyeWideRight", ">=", 0.25],
+        ["mouthSmileLeft", ">=", 0.2],
+        ["eyeBlinkLeft", "<=", 0.2],
+        ["eyeBlinkRight", "<=", 0.2]
+      ]
+    },
+    "face_frown": {
+      "visible": "Mouth corners pulled down in a frown.",
+      "checks": [
+        ["mouthFrownLeft", ">=", 0.3],
+        ["mouthFrownRight", ">=", 0.3],
+        ["mouthSmileLeft", "<=", 0.2],
+        ["mouthSmileRight", "<=", 0.2]
+      ]
+    },
+    "face_wink_left": {
+      "visible": "Winking the left eye with a smile. MediaPipe reports the wink as a stronger left squint, not as a blink.",
+      "checks": [
+        ["eyeSquintLeft", ">=", 0.7],
+        ["eyeSquintLeft - eyeSquintRight", ">=", 0.08],
+        ["mouthSmileLeft", ">=", 0.3]
+      ]
+    },
+    "face_gaze_side": {
+      "visible": "Head turned, eyes turned towards the subject's right.",
+      "checks": [
+        ["eyeLookInLeft", ">=", 0.6],
+        ["eyeLookOutRight", ">=", 0.6]
+      ]
+    },
+    "face_gaze_up": {
+      "visible": "Looking up from under the brows with a pout.",
+      "checks": [
+        ["eyeLookUpLeft", ">=", 0.35],
+        ["eyeLookUpRight", ">=", 0.3],
+        ["mouthPucker", ">=", 0.3]
+      ]
+    },
+    "face_head_turned": {
+      "visible": "Head turned about 30 degrees with a slight smile; detection must still find the face.",
+      "checks": [
+        ["jawOpen", "<=", 0.2],
+        ["eyeBlinkLeft", "<=", 0.4],
+        ["eyeBlinkRight", "<=", 0.4]
+      ]
+    },
+    "face_closeup_scream": {
+      "visible": "Child shouting with the jaw wide open, eyes nearly shut, novelty glasses.",
+      "checks": [
+        ["jawOpen", ">=", 0.3]
+      ],
+      "known_issue": "The landmarker fits the face onto the open mouth (it reads a smile, jawOpen about 0.0). Padding the image by half its size recovers jawOpen of about 0.4. Fixed by 0.2.1 Phase 1 or kept as a documented limitation."
+    }
+  }
+}

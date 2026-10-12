@@ -28,6 +28,7 @@ TEST_MODULES = (
     "tests.test_capture_operations",
     "tests.test_capture_session",
     "tests.test_api",
+    "tests.test_face_detection",
     "tests.test_registration",
     "tests.test_settings_schema",
     "tests.test_anycalib_backend",
