@@ -79,8 +79,7 @@ class RohmBackendTests(unittest.TestCase):
             upstream_revision="57ba22cde1595285276ddb88c8c82b25bf0d9722",
         )
         session = SimpleNamespace(diagnostics=diagnostic)
-        with self.backend._STATE_LOCK:
-            self.backend._SESSION = session
+        self.backend.BACKEND.set_session(session)
         snapshot = self.backend.backend_snapshot("AUTO")
         self.assertEqual(snapshot.actual_ep, "WebGpuExecutionProvider")
         self.assertEqual(snapshot.precision, "fp32")

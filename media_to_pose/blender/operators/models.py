@@ -12,7 +12,7 @@ import bpy
 from bpy.props import StringProperty
 from bpy.types import Operator
 
-from ... import anycalib_backend
+from ... import anycalib_backend, rohm_backend
 from ...backends.lifecycle import BackgroundJob, JobKind, ModelBackend
 from ...core.errors import MtpError, OperationBusy
 from ...core.log import get_logger
@@ -243,20 +243,150 @@ class MTP_OT_anycalib_uninstall(Operator):
         return _run_exclusive(self, anycalib_backend.uninstall)
 
 
+# --------------------------------------------------------------------------
+# RoHM
+
+
+class MTP_OT_rohm_install(ModelJobModal, Operator):
+    bl_idname = "mtp.rohm_install"
+    bl_label = "Install AI Motion Repair"
+    bl_description = "Download, verify, repair, or move the RoHM model"
+
+    backend = rohm_backend.BACKEND
+    cancel_status = "Cancelling AI motion model download"
+    stopped_message = "AI motion model installation stopped"
+
+    model_storage_directory: StringProperty(
+        name="Model Storage Parent",
+        subtype="DIR_PATH",
+        default="",
+    )
+
+    @classmethod
+    def poll(cls, _context):
+        if rohm_backend.install_status_snapshot().running:
+            cls.poll_message_set("AI motion model installation is already running")
+            return False
+        if COORDINATOR.is_busy():
+            cls.poll_message_set(BUSY)
+            return False
+        return True
+
+    def invoke(self, context, _event):
+        if rohm_backend.install_status_snapshot().running or COORDINATOR.is_busy():
+            message = (
+                "AI motion model installation is already running"
+                if rohm_backend.install_status_snapshot().running
+                else BUSY
+            )
+            _set_status(context, message, "WARNING")
+            self.report({"WARNING"}, message)
+            return {"CANCELLED"}
+        self.model_storage_directory = str(rohm_backend.configured_storage_parent())
+        return context.window_manager.invoke_props_dialog(self, width=540)
+
+    def draw(self, _context):
+        layout = self.layout
+        spec = rohm_backend.MODEL_SPEC
+        size = int(spec["download_bytes"])
+        layout.label(
+            text=f"Download: {size / (1024**2):.0f} MiB · processing remains local",
+            icon="IMPORT",
+        )
+        layout.label(text=f"Source: {spec['repo']}", icon="WORLD")
+        layout.label(text=f"Preferred revision: {spec['revision']}", icon="LOCKED")
+        layout.prop(self, "model_storage_directory")
+
+    def execute(self, context):
+        if rohm_backend.install_status_snapshot().running or COORDINATOR.is_busy():
+            self.report({"WARNING"}, "Media to Pose is busy")
+            return {"CANCELLED"}
+        try:
+            job = rohm_backend.start_install(self.model_storage_directory)
+        except OperationBusy:
+            self.report({"WARNING"}, "Media to Pose is busy")
+            return {"CANCELLED"}
+        except (MtpError, OSError) as exc:
+            self.report({"ERROR"}, f"Could not start AI motion model download: {exc}")
+            return {"CANCELLED"}
+        return self._watch(context, job, "Starting AI motion model download")
+
+
+class MTP_OT_rohm_cancel_install(Operator):
+    bl_idname = "mtp.rohm_cancel_install"
+    bl_label = "Cancel RoHM Download"
+
+    def execute(self, _context):
+        return {"FINISHED"} if rohm_backend.cancel_install() else {"CANCELLED"}
+
+
+class MTP_OT_rohm_load(Operator):
+    bl_idname = "mtp.rohm_load"
+    bl_label = "Load RoHM"
+
+    def execute(self, context):
+        try:
+            rohm_backend.start_load(context.scene.mtp_settings.rohm_device)
+        except OperationBusy:
+            self.report({"ERROR"}, "Media to Pose is busy")
+            return {"CANCELLED"}
+        except (MtpError, OSError) as exc:
+            self.report({"ERROR"}, f"Could not start AI motion model load: {exc}")
+            return {"CANCELLED"}
+        return {"FINISHED"}
+
+
+class MTP_OT_rohm_unload(Operator):
+    bl_idname = "mtp.rohm_unload"
+    bl_label = "Unload RoHM"
+
+    def execute(self, _context):
+        return _run_exclusive(self, rohm_backend.unload)
+
+
+class MTP_OT_rohm_verify(Operator):
+    bl_idname = "mtp.rohm_verify"
+    bl_label = "Verify RoHM"
+
+    def execute(self, context):
+        device = context.scene.mtp_settings.rohm_device
+        return _run_exclusive(self, lambda: rohm_backend.verify(device))
+
+
+class MTP_OT_rohm_uninstall(Operator):
+    bl_idname = "mtp.rohm_uninstall"
+    bl_label = "Uninstall RoHM"
+    bl_options = {"INTERNAL"}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, _context):
+        return _run_exclusive(self, rohm_backend.uninstall)
+
+
 CLASSES = (
     MTP_OT_anycalib_install,
     MTP_OT_anycalib_cancel_install,
     MTP_OT_anycalib_load,
     MTP_OT_anycalib_unload,
     MTP_OT_anycalib_uninstall,
+    MTP_OT_rohm_install,
+    MTP_OT_rohm_cancel_install,
+    MTP_OT_rohm_load,
+    MTP_OT_rohm_unload,
+    MTP_OT_rohm_verify,
+    MTP_OT_rohm_uninstall,
 )
 
 
 def register() -> None:
     anycalib_backend.invalidate_backend_snapshot()
+    rohm_backend.invalidate_backend_snapshot()
     register_classes(CLASSES)
 
 
 def unregister() -> None:
     anycalib_backend.shutdown()
+    rohm_backend.shutdown()
     unregister_classes(CLASSES)

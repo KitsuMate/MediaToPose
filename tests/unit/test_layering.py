@@ -117,8 +117,6 @@ ALLOWLIST: set[tuple[str, str, str]] = {
     ("operators_capture", "reads-bpy-context", "bpy.context"),
     ("pose_translation_solver", "reads-bpy-context", "bpy.context"),
     ("retarget", "reads-bpy-context", "bpy.context"),
-    ("rohm_backend", "imports-blender", "registration"),
-    ("rohm_backend", "backend-bpy-api", "bpy.data"),
     ("rohm_correction", "upward-import", "rohm_ort_runtime"),
     ("sam3d_backend", "imports-blender", "registration"),
     ("sam3d_backend", "backend-bpy-api", "bpy.data"),
