@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import bpy
 from mathutils import Matrix, Vector
@@ -20,7 +20,7 @@ class TranslationSolveResult:
 class PoseTranslationSolver:
     """Place several controls while reusing one Jacobian per control/frame."""
 
-    def __init__(self, update: Optional[Callable[[], None]] = None):
+    def __init__(self, update: Callable[[], None] | None = None):
         self._update = update or bpy.context.view_layer.update
         self._jacobians: dict[int, Matrix] = {}
         self.dependency_updates = 0
@@ -50,7 +50,7 @@ class PoseTranslationSolver:
         normalized_volume = abs(float(jacobian.determinant())) / scale
         return normalized_volume >= 1.0e-4
 
-    def _jacobian(self, bone, current: Vector) -> Optional[Matrix]:
+    def _jacobian(self, bone, current: Vector) -> Matrix | None:
         basis_location, basis_rotation, basis_scale = bone.matrix_basis.decompose()
         epsilon = max(float(bone.length) * 1.0e-4, 1.0e-5)
         columns = []

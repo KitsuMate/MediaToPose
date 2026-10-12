@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable, Mapping, Optional, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from .models import CameraIntrinsicsObservation
 
@@ -158,7 +158,7 @@ def consensus(
     *,
     minimum: int = 1,
     maximum_fov_range: float = 8.0,
-) -> Optional[CameraIntrinsicsObservation]:
+) -> CameraIntrinsicsObservation | None:
     accepted = [value for value in values if value.valid and value.source == "ANYCALIB"]
     if len(accepted) < int(minimum):
         return None
@@ -203,7 +203,7 @@ def image_consensus(
     values: Sequence[CameraIntrinsicsObservation],
     *,
     maximum_primary_deviation: float = 1.5,
-) -> Optional[CameraIntrinsicsObservation]:
+) -> CameraIntrinsicsObservation | None:
     """Use transformed views only when they corroborate the unmodified image."""
 
     accepted = [value for value in values if value.valid and value.source == "ANYCALIB"]

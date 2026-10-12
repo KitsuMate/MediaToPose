@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Tuple
+from collections.abc import Iterable
 
 import bpy
 
@@ -11,11 +11,10 @@ def _registered_type(cls):
     # Most dynamically registered add-on types are intentionally not exposed
     # as attributes on ``bpy.types``. RNA's subclass registry is authoritative
     # for PropertyGroup, Operator, Panel, Menu, and UIList alike.
-    existing = bpy.types.bpy_struct.bl_rna_get_subclass_py(
+    return bpy.types.bpy_struct.bl_rna_get_subclass_py(
         cls.__name__,
         None,
     )
-    return existing
 
 
 def unregister_classes(classes: Iterable[type]) -> None:
@@ -32,7 +31,7 @@ def unregister_classes(classes: Iterable[type]) -> None:
                 raise
 
 
-def register_classes(classes: Iterable[type]) -> Tuple[type, ...]:
+def register_classes(classes: Iterable[type]) -> tuple[type, ...]:
     """Replace stale matching types and register all classes atomically."""
     classes = tuple(classes)
     unregister_classes(classes)

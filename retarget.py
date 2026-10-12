@@ -5,9 +5,9 @@ from __future__ import annotations
 import math
 import pickle
 import tempfile
+from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 import bpy
 from mathutils import Euler, Matrix, Quaternion, Vector
@@ -58,7 +58,7 @@ class _BakedBoneSample:
     key_rotation: bool = False
     semantic_id: str = ""
     confidence: float = 1.0
-    properties: Dict[str, float] = field(default_factory=dict)
+    properties: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -70,30 +70,30 @@ class _BakedShapeSample:
 @dataclass
 class _BakedFrameSample:
     destination: float
-    warning_sink: List[str]
+    warning_sink: list[str]
     timestamp_seconds: float = 0.0
-    bones: Dict[str, _BakedBoneSample] = field(default_factory=dict)
-    shapes: Dict[Tuple[int, str], _BakedShapeSample] = field(default_factory=dict)
-    root_object: Optional[Tuple[Vector, Quaternion, Vector]] = None
-    grounding: Optional[grounded_cleanup.GroundFrame] = None
-    ik_legs: Dict[str, Dict] = field(default_factory=dict)
+    bones: dict[str, _BakedBoneSample] = field(default_factory=dict)
+    shapes: dict[tuple[int, str], _BakedShapeSample] = field(default_factory=dict)
+    root_object: tuple[Vector, Quaternion, Vector] | None = None
+    grounding: grounded_cleanup.GroundFrame | None = None
+    ik_legs: dict[str, dict] = field(default_factory=dict)
     body_height: float = 0.0
-    camera_motion_input: Optional[camera_motion_correction.CameraMotionInput] = None
-    rohm_joint_offsets: Dict[str, Vector] = field(default_factory=dict)
-    rohm_rotations: Dict[str, Quaternion] = field(default_factory=dict)
-    rohm_confidence: Dict[str, float] = field(default_factory=dict)
+    camera_motion_input: camera_motion_correction.CameraMotionInput | None = None
+    rohm_joint_offsets: dict[str, Vector] = field(default_factory=dict)
+    rohm_rotations: dict[str, Quaternion] = field(default_factory=dict)
+    rohm_confidence: dict[str, float] = field(default_factory=dict)
     rohm_root_confidence: float = 0.0
-    source_body_3d: Dict[str, Vector] = field(default_factory=dict)
-    source_body_2d: Dict[str, Vector] = field(default_factory=dict)
+    source_body_3d: dict[str, Vector] = field(default_factory=dict)
+    source_body_2d: dict[str, Vector] = field(default_factory=dict)
 
 
 @dataclass
 class _RohmFrameInput:
     """Pre-postprocess semantic motion in target-independent anatomy space."""
 
-    joint_offsets: Dict[str, Vector] = field(default_factory=dict)
-    global_rotations: Dict[str, Quaternion] = field(default_factory=dict)
-    confidence: Dict[str, float] = field(default_factory=dict)
+    joint_offsets: dict[str, Vector] = field(default_factory=dict)
+    global_rotations: dict[str, Quaternion] = field(default_factory=dict)
+    confidence: dict[str, float] = field(default_factory=dict)
     body_height: float = 0.0
 
 
@@ -109,8 +109,8 @@ class _RootMotionSample:
 class _KeyframeWriteState:
     armature: object
     action: object = None
-    previous_rotations: Dict[Tuple[str, str], List[float]] = field(default_factory=dict)
-    previous_object_rotation: Optional[List[float]] = None
+    previous_rotations: dict[tuple[str, str], list[float]] = field(default_factory=dict)
+    previous_object_rotation: list[float] | None = None
     total_bones: int = 0
     total_shapes: int = 0
 
@@ -189,9 +189,9 @@ _PROFILE_OUTPUT_BONES = {
 
 
 def _average(
-    *landmarks: Optional[Landmark],
+    *landmarks: Landmark | None,
     minimum_valid: int = 1,
-) -> Optional[Landmark]:
+) -> Landmark | None:
     valid = [item for item in landmarks if item and item.valid]
     if len(valid) < minimum_valid:
         return None
@@ -223,10 +223,10 @@ def _bounded_parent_relative_direction_delta(
     parent_delta: Quaternion,
     maximum_articulation: float,
     *,
-    bend_reference: Optional[Vector] = None,
+    bend_reference: Vector | None = None,
     maximum_off_plane: float = math.radians(25.0),
-    flexion_bounds: Optional[Tuple[float, float]] = None,
-) -> Tuple[Quaternion, bool]:
+    flexion_bounds: tuple[float, float] | None = None,
+) -> tuple[Quaternion, bool]:
     """Transport a parent, then add a bounded child-local swing.
 
     Landmark positions contain a reliable segment direction but no axial-roll
@@ -305,7 +305,7 @@ _FINGER_ARTICULATION_LIMITS = {
 }
 
 
-def body_points(frame: CanonicalFrame) -> Dict[str, Landmark]:
+def body_points(frame: CanonicalFrame) -> dict[str, Landmark]:
     points = dict(frame.body)
     # Optional provider observations stay outside the canonical body mapping.
     # MHR70's NECK is a single surface/joint position, not a complete segment;
@@ -383,7 +383,7 @@ def normalized_arm_positions(
     side: str,
     *,
     world_space: bool = False,
-) -> Tuple[Dict[str, Vector], Dict[str, Vector]]:
+) -> tuple[dict[str, Vector], dict[str, Vector]]:
     """Build comparable detected and evaluated arm joint positions.
 
     The detected arm is normalized to the evaluated target shoulder position
@@ -458,7 +458,7 @@ def normalized_arm_position_errors(
     side: str,
     *,
     world_space: bool = False,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Return normalized joint-position errors for an evaluated arm pose."""
     detected, evaluated = normalized_arm_positions(
         armature,
@@ -483,7 +483,7 @@ def normalized_leg_positions(
     side: str,
     *,
     world_space: bool = False,
-) -> Tuple[Dict[str, Vector], Dict[str, Vector]]:
+) -> tuple[dict[str, Vector], dict[str, Vector]]:
     """Build comparable normalized source and evaluated leg positions."""
     side = side.upper()
     if side not in {"L", "R"}:
@@ -549,7 +549,7 @@ def normalized_leg_position_errors(
     side: str,
     *,
     world_space: bool = False,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Return normalized joint-position errors for an evaluated leg pose."""
     detected, evaluated = normalized_leg_positions(
         armature,
@@ -573,7 +573,7 @@ def normalized_leg_position_errors(
 def normalized_head_position_errors(
     armature,
     frame: CanonicalFrame,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Compare evaluated cranial orientation with normalized detections.
 
     The diagnostic intentionally measures positions after dependency-graph
@@ -588,7 +588,7 @@ def normalized_head_position_errors(
         raise ValueError("Detected head center is missing")
     source_space = source_root_basis(frame)
     target_space = target_basis(armature, entries)
-    errors: Dict[str, float] = {}
+    errors: dict[str, float] = {}
 
     head = evaluated_semantic_bone(armature, entries, "HEAD")
     # The evaluated pose uses the compact MHR127 skull frame whenever SAM
@@ -716,7 +716,7 @@ def target_basis(
     armature,
     entries,
     *,
-    rest_basis: Optional[Matrix] = None,
+    rest_basis: Matrix | None = None,
 ) -> Matrix:
     """Return the character root frame including its current root control."""
     rest_frame = (
@@ -756,7 +756,7 @@ def _joint_frame_target_delta(
     name: str,
     source_basis: Matrix,
     target_basis: Matrix,
-) -> Optional[Quaternion]:
+) -> Quaternion | None:
     """Express a neutral-relative provider joint rotation in target space."""
     observation = frame.joint_frames.get(name)
     if observation is None or not observation.valid:
@@ -791,7 +791,7 @@ def _joint_frame_target_delta(
 
 def _clamp_rotation(
     rotation: Quaternion, maximum_angle: float
-) -> Tuple[Quaternion, bool]:
+) -> tuple[Quaternion, bool]:
     """Limit a shortest-arc rotation without changing its axis."""
     rotation = rotation.normalized()
     if rotation.w < 0.0:
@@ -822,7 +822,7 @@ _BODY_CHILD_ROLE = {
 }
 
 
-def _rest_head(armature, entries, semantic_id: str) -> Optional[Vector]:
+def _rest_head(armature, entries, semantic_id: str) -> Vector | None:
     bone = _mapped_bone(armature, entries, semantic_id)
     return bone.bone.head_local.copy() if bone else None
 
@@ -833,7 +833,7 @@ def _finger_role(finger: str, segment: int, side: str) -> str:
 
 def _target_palm_vectors(
     armature, entries, side: str
-) -> Tuple[Optional[Vector], Optional[Vector]]:
+) -> tuple[Vector | None, Vector | None]:
     hand = _rest_head(armature, entries, f"HAND_{side}")
     finger_heads = [
         _rest_head(armature, entries, _finger_role(finger, 1, side))
@@ -852,9 +852,9 @@ def _target_palm_vectors(
 
 
 def _orthonormal_palm_basis(
-    primary: Optional[Vector],
-    lateral: Optional[Vector],
-) -> Optional[Matrix]:
+    primary: Vector | None,
+    lateral: Vector | None,
+) -> Matrix | None:
     """Return a right-handed palm-local frame with axes stored as columns."""
     if (
         primary is None
@@ -875,7 +875,7 @@ def _orthonormal_palm_basis(
     return Matrix((forward, across, normal)).transposed()
 
 
-def _detected_palm_basis(hand) -> Optional[Matrix]:
+def _detected_palm_basis(hand) -> Matrix | None:
     wrist = hand.get("WRIST")
     palm_points = [
         hand.get("INDEX_FINGER_MCP"),
@@ -906,7 +906,7 @@ def _detected_palm_basis(hand) -> Optional[Matrix]:
     )
 
 
-def _target_body_direction(armature, entries, semantic_id: str) -> Optional[Vector]:
+def _target_body_direction(armature, entries, semantic_id: str) -> Vector | None:
     start = _rest_head(armature, entries, semantic_id)
     child_id = _BODY_CHILD_ROLE.get(semantic_id)
     end = _rest_head(armature, entries, child_id) if child_id else None
@@ -922,9 +922,7 @@ def _target_body_direction(armature, entries, semantic_id: str) -> Optional[Vect
     return None
 
 
-def _target_torso_vectors(
-    armature, entries
-) -> Tuple[Optional[Vector], Optional[Vector]]:
+def _target_torso_vectors(armature, entries) -> tuple[Vector | None, Vector | None]:
     left = _rest_head(armature, entries, "UPPER_ARM_L")
     right = _rest_head(armature, entries, "UPPER_ARM_R")
     pelvis = _rest_head(armature, entries, "PELVIS")
@@ -934,7 +932,7 @@ def _target_torso_vectors(
     return lateral, up
 
 
-def _target_body_reference(armature, entries, semantic_id: str) -> Optional[Vector]:
+def _target_body_reference(armature, entries, semantic_id: str) -> Vector | None:
     lateral, up = _target_torso_vectors(armature, entries)
     if semantic_id in {
         "SPINE_01",
@@ -970,7 +968,7 @@ def _target_body_reference(armature, entries, semantic_id: str) -> Optional[Vect
     return None
 
 
-def _source_direction(points, start: str, end: str) -> Optional[Vector]:
+def _source_direction(points, start: str, end: str) -> Vector | None:
     first, second = points.get(start), points.get(end)
     if not first or not second or not first.valid or not second.valid:
         return None
@@ -978,7 +976,7 @@ def _source_direction(points, start: str, end: str) -> Optional[Vector]:
     return direction if direction.length > 1.0e-8 else None
 
 
-def _source_body_reference(points, semantic_id: str) -> Optional[Vector]:
+def _source_body_reference(points, semantic_id: str) -> Vector | None:
     if semantic_id in {
         "SPINE_01",
         "SPINE_02",
@@ -1011,7 +1009,7 @@ def _source_body_reference(points, semantic_id: str) -> Optional[Vector]:
 
 def _source_head_orientation(
     points,
-) -> Optional[Tuple[Vector, Vector]]:
+) -> tuple[Vector, Vector] | None:
     """Return provider-space head-up and lateral vectors from positions.
 
     Head roll and yaw are observable from the relative eye/ear positions.
@@ -1069,7 +1067,7 @@ def _source_head_orientation(
 
 def _source_mhr_head_orientation(
     frame: CanonicalFrame,
-) -> Optional[Tuple[Vector, Vector]]:
+) -> tuple[Vector, Vector] | None:
     """Build the SAM skull-up frame from articulated MHR127 positions.
 
     ``c_head_null`` is the end-site extension parented to ``c_head``.  Its
@@ -1135,7 +1133,7 @@ def _apply_body(
     source_basis,
     target_basis,
     target_pose: TargetPose,
-) -> Set[bpy.types.PoseBone]:
+) -> set[bpy.types.PoseBone]:
     changed = set()
     points = body_points(frame)
     # Root and pelvis are placement controls and remain unchanged. Segment
@@ -1426,7 +1424,7 @@ def _apply_hands(
     source_basis,
     target_basis,
     target_pose: TargetPose,
-) -> Set[bpy.types.PoseBone]:
+) -> set[bpy.types.PoseBone]:
     changed = set()
     profile = mapping.profile_identifier(armature.mtp_rig_config)
     for side_name, side_suffix in (("LEFT", "L"), ("RIGHT", "R")):
@@ -1606,7 +1604,7 @@ def finger_world_position_errors(
     armature,
     entries,
     frame: CanonicalFrame,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Return normalized evaluated endpoint errors for mapped phalanges.
 
     Rotation values are intentionally ignored: generated rigs can assign
@@ -1682,7 +1680,7 @@ def finger_palm_roll_errors(
     armature,
     entries,
     frame: CanonicalFrame,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Return axial-roll error relative to parent-transported rest roll.
 
     Joint positions constrain each phalanx direction but not its roll. This
@@ -1759,14 +1757,14 @@ def palm_lateral_errors(
     armature,
     entries,
     frame: CanonicalFrame,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """Return evaluated index-to-pinky palm-axis errors in radians.
 
     Unlike a finger endpoint check, this observes the signed palm frame and
     therefore exposes a whole-hand 180-degree roll even when every joint
     position is otherwise exact.
     """
-    errors: Dict[str, float] = {}
+    errors: dict[str, float] = {}
     source_basis = source_root_basis(frame)
     rig_basis = target_basis(armature, entries)
     for side_name, side_suffix in (("LEFT", "L"), ("RIGHT", "R")):
@@ -1841,7 +1839,7 @@ def _expression_value(entry, raw_value: float) -> float:
     return min(max(value, entry.clamp_min), entry.clamp_max)
 
 
-def facs_values(blendshapes: Dict[str, float]) -> Dict[str, float]:
+def facs_values(blendshapes: dict[str, float]) -> dict[str, float]:
     """Approximate FACS AU intensities from MediaPipe blendshape coefficients.
 
     MediaPipe Face Landmarker emits ARKit-style expression coefficients rather
@@ -1873,7 +1871,7 @@ def facs_values(blendshapes: Dict[str, float]) -> Dict[str, float]:
         "AU23": ("mouthPressLeft", "mouthPressRight"),
         "AU45": ("eyeBlinkLeft", "eyeBlinkRight"),
     }
-    values: Dict[str, float] = {}
+    values: dict[str, float] = {}
     for action_unit, (left_source, right_source) in bilateral_sources.items():
         left = get(left_source)
         right = get(right_source)
@@ -1950,7 +1948,7 @@ def _signed_face_value(entry, value: float) -> float:
     return result * entry.influence
 
 
-def _face_control_values(blendshapes: Dict[str, float]) -> Dict[str, float]:
+def _face_control_values(blendshapes: dict[str, float]) -> dict[str, float]:
     def get(name: str) -> float:
         return _finite_float(blendshapes.get(name, 0.0))
 
@@ -1977,7 +1975,7 @@ def _face_control_values(blendshapes: Dict[str, float]) -> Dict[str, float]:
     }
 
 
-def _eye_gaze(blendshapes: Dict[str, float], side: str) -> Tuple[float, float]:
+def _eye_gaze(blendshapes: dict[str, float], side: str) -> tuple[float, float]:
     def get(name: str) -> float:
         return _finite_float(blendshapes.get(name, 0.0))
 
@@ -1995,7 +1993,7 @@ def _apply_eye_gaze(
     entries,
     frame,
     target_pose: TargetPose,
-) -> Set[bpy.types.PoseBone]:
+) -> set[bpy.types.PoseBone]:
     changed = set()
     for semantic_id, side in (("EYE_L", "L"), ("EYE_R", "R")):
         entry = entries.get(semantic_id)
@@ -2042,7 +2040,7 @@ def _apply_face_controls(
     entries,
     frame,
     target_pose: TargetPose,
-) -> Set[bpy.types.PoseBone]:
+) -> set[bpy.types.PoseBone]:
     changed = set()
     values = _face_control_values(frame.blendshapes)
     rotation_groups = {}
@@ -2133,7 +2131,7 @@ def _previous_key_values(
     data_path: str,
     frame: float,
     size: int,
-) -> Optional[List[float]]:
+) -> list[float] | None:
     animation = pose_bone.id_data.animation_data
     action = animation.action if animation else None
     if action is None:
@@ -2207,8 +2205,8 @@ def _make_rotation_key_compatible(
 def _rotation_values_compatible_with(
     pose_bone,
     data_path: str,
-    previous: Optional[Sequence[float]],
-) -> List[float]:
+    previous: Sequence[float] | None,
+) -> list[float]:
     """Make a rotation continuous using an in-memory preceding sample."""
     if data_path == "rotation_quaternion":
         current = pose_bone.rotation_quaternion.copy()
@@ -2253,7 +2251,7 @@ def _key_bone_from_sample(
     *,
     location: bool,
     rotation: bool,
-    previous_rotations: Dict[Tuple[str, str], List[float]],
+    previous_rotations: dict[tuple[str, str], list[float]],
 ) -> None:
     """Insert one pre-solved sample without rescanning the growing action."""
     if location:
@@ -2386,7 +2384,7 @@ def _key_object_transform(obj, frame: float) -> None:
 
 def _remove_keys_in_interval(
     action,
-    data_paths: Set[str],
+    data_paths: set[str],
     start_frame: float,
     end_frame: float,
 ) -> None:
@@ -2431,7 +2429,7 @@ def prepare_limb_ownership(armature) -> None:
     )
 
 
-def limb_ownership(armature) -> Dict[Tuple[str, str], Dict]:
+def limb_ownership(armature) -> dict[tuple[str, str], dict]:
     """Snapshot current per-limb FK/IK ownership without changing the rig."""
     config = armature.mtp_rig_config
     result = {}
@@ -2506,7 +2504,7 @@ def validate_limb_switch_interval(
     armature,
     start: float,
     end: float,
-) -> Optional[str]:
+) -> str | None:
     """Reject a bake interval containing an existing ownership transition."""
     if end <= start:
         return None
@@ -2668,7 +2666,7 @@ def _rest_relative_effector_rotation(
     return (desired_lower.normalized() @ relative).normalized()
 
 
-def _prepare_ik_output(target_pose: TargetPose) -> List[Dict]:
+def _prepare_ik_output(target_pose: TargetPose) -> list[dict]:
     """Convert processed virtual FK chains into profile IK proposals."""
     proposals = []
     ownership = limb_ownership(target_pose.armature)
@@ -2911,7 +2909,7 @@ def _set_pose_translation_preserve_basis_rotation(
     target_translation: Vector,
     *,
     attempts: int = 3,
-    solver: Optional[PoseTranslationSolver] = None,
+    solver: PoseTranslationSolver | None = None,
 ) -> None:
     """Place a control in evaluated pose space while preserving rotation."""
     (solver or PoseTranslationSolver()).solve(
@@ -2921,7 +2919,7 @@ def _set_pose_translation_preserve_basis_rotation(
     )
 
 
-def _commit_ik_output(proposals: List[Dict]) -> Set[object]:
+def _commit_ik_output(proposals: list[dict]) -> set[object]:
     changed = set()
     translation_solver = PoseTranslationSolver()
     for proposal in proposals:
@@ -3123,8 +3121,8 @@ def _commit_ik_output(proposals: List[Dict]) -> Set[object]:
 
 def _iter_commit_target_pose(
     target_pose: TargetPose,
-    ik_proposals: List[Dict],
-) -> Iterator[Tuple[str, int, int]]:
+    ik_proposals: list[dict],
+) -> Iterator[tuple[str, int, int]]:
     """Commit FK/body and IK channels as one cooperative transaction.
 
     Blender may redraw between dependency-safe batches. Snapshot only channels
@@ -3221,8 +3219,8 @@ def _iter_commit_target_pose(
 
 def _commit_target_pose(
     target_pose: TargetPose,
-    ik_proposals: List[Dict],
-) -> Tuple[Set[object], List[Tuple[object, object]]]:
+    ik_proposals: list[dict],
+) -> tuple[set[object], list[tuple[object, object]]]:
     iterator = _iter_commit_target_pose(target_pose, ik_proposals)
     while True:
         try:
@@ -3254,10 +3252,10 @@ def build_target_pose(
     settings,
     *,
     post_process: bool = True,
-    session: Optional[PostProcessingSession] = None,
-    module_filter: Optional[Set[str]] = None,
+    session: PostProcessingSession | None = None,
+    module_filter: set[str] | None = None,
     postprocess_config=None,
-    rig_plan: Optional[rig_planning.RigSolvePlan] = None,
+    rig_plan: rig_planning.RigSolvePlan | None = None,
 ) -> TargetPose:
     """Create a complete target pose without mutating Blender data."""
     config = armature.mtp_rig_config
@@ -3348,8 +3346,8 @@ def iter_apply_frame(
     keyframe: bool = False,
     scene_frame: float = 0.0,
     post_process: bool = True,
-    session: Optional[PostProcessingSession] = None,
-    module_filter: Optional[Set[str]] = None,
+    session: PostProcessingSession | None = None,
+    module_filter: set[str] | None = None,
     postprocess_config=None,
 ) -> Iterator[SequenceApplyProgress]:
     """Apply one frame cooperatively so Blender can redraw between stages."""
@@ -3453,9 +3451,9 @@ def apply_frame(
     keyframe: bool = False,
     scene_frame: float = 0.0,
     post_process: bool = True,
-    session: Optional[PostProcessingSession] = None,
-    module_filter: Optional[Set[str]] = None,
-) -> Tuple[int, int]:
+    session: PostProcessingSession | None = None,
+    module_filter: set[str] | None = None,
+) -> tuple[int, int]:
     iterator = iter_apply_frame(
         armature,
         frame,
@@ -3485,7 +3483,7 @@ def _shape_blocks_for_config(armature):
         yield from mapping.matching_shape_blocks(armature, entry)
 
 
-def _sequence_state(armature) -> Dict:
+def _sequence_state(armature) -> dict:
     properties = {}
     for bone in armature.pose.bones:
         properties[bone.name] = {
@@ -3508,7 +3506,7 @@ def _sequence_state(armature) -> Dict:
     }
 
 
-def _restore_sequence_state(armature, state: Dict) -> None:
+def _restore_sequence_state(armature, state: dict) -> None:
     frame, subframe = state["frame"]
     bpy.context.scene.frame_set(frame, subframe=subframe)
     armature.matrix_world = state["world"]
@@ -3544,7 +3542,7 @@ def _reset_root_location(root_target) -> None:
 def _source_body_height(frame: CanonicalFrame) -> float:
     points = body_points(frame)
 
-    def midpoint(first: str, second: str) -> Optional[Vector]:
+    def midpoint(first: str, second: str) -> Vector | None:
         left, right = points.get(first), points.get(second)
         if not left or not right or not left.valid or not right.valid:
             return None
@@ -3606,7 +3604,7 @@ def _root_motion_deltas(
     entries,
     samples: Sequence[_RootMotionSample],
     mode: str,
-) -> Tuple[List[Vector], List[float], str, List[str]]:
+) -> tuple[list[Vector], list[float], str, list[str]]:
     zeros = [Vector() for _sample in samples]
     yaws = [0.0 for _sample in samples]
     if mode != "AUTOMATIC":
@@ -3723,7 +3721,7 @@ def _set_root_pose(
     bpy.context.view_layer.update()
 
 
-def _grounding_landmark(frame: CanonicalFrame, *names: str) -> Optional[Landmark]:
+def _grounding_landmark(frame: CanonicalFrame, *names: str) -> Landmark | None:
     points = body_points(frame)
     for name in names:
         point = points.get(name)
@@ -3829,7 +3827,7 @@ def _capture_grounding_frame(
     )
 
 
-def _ik_bone_confidences(ik_proposals: Sequence[Dict]) -> Dict[object, float]:
+def _ik_bone_confidences(ik_proposals: Sequence[dict]) -> dict[object, float]:
     """Carry detector confidence onto generated IK controls.
 
     IK targets and poles are not ordinary TargetPose channels, so they used to
@@ -3838,7 +3836,7 @@ def _ik_bone_confidences(ik_proposals: Sequence[Dict]) -> Dict[object, float]:
     which it was built.
     """
 
-    result: Dict[object, float] = {}
+    result: dict[object, float] = {}
     for proposal in ik_proposals:
         confidence = min(max(float(proposal.get("confidence", 1.0)), 0.0), 1.0)
         for key in ("target", "pole", "rotation_bend", "toe"):
@@ -3907,12 +3905,12 @@ def _baked_frame_from_target(
     root_kind: str,
     root_target,
     root_enabled: bool,
-    warning_sink: List[str],
+    warning_sink: list[str],
     target_pose: TargetPose,
     rohm_input: _RohmFrameInput,
-    ik_proposals: List[Dict],
-    changed_bones: Set[object],
-    changed_shapes: List[Tuple[object, object]],
+    ik_proposals: list[dict],
+    changed_bones: set[object],
+    changed_shapes: list[tuple[object, object]],
 ) -> _BakedFrameSample:
     sample = _BakedFrameSample(
         destination,
@@ -4039,9 +4037,9 @@ def _iter_capture_baked_frame(
     root_enabled: bool,
     postprocess_config,
     rig_plan: rig_planning.RigSolvePlan,
-    warning_sink: List[str],
+    warning_sink: list[str],
     capture_rohm_input: bool,
-) -> Iterator[Tuple[str, int, int]]:
+) -> Iterator[tuple[str, int, int]]:
     """Solve one frame in independently cancellable main-thread units."""
     frame_module_ids = {
         "SPINE_CORRECTION",
@@ -4113,14 +4111,14 @@ def _iter_capture_baked_frame(
     )
 
 
-def _sequence_timestamps(samples: Sequence[_BakedFrameSample]) -> List[float]:
+def _sequence_timestamps(samples: Sequence[_BakedFrameSample]) -> list[float]:
     return [float(sample.timestamp_seconds) for sample in samples]
 
 
 def _continuous_runs(
     indices: Sequence[int],
     timestamps: Sequence[float],
-) -> List[List[int]]:
+) -> list[list[int]]:
     intervals = [
         timestamps[right] - timestamps[left]
         for left, right in zip(
@@ -4129,7 +4127,7 @@ def _continuous_runs(
         if timestamps[right] > timestamps[left]
     ]
     normal = float(sorted(intervals)[len(intervals) // 2]) if intervals else 0.0
-    runs: List[List[int]] = []
+    runs: list[list[int]] = []
     for index in indices:
         discontinuity = not runs or index != runs[-1][-1] + 1
         if not discontinuity:
@@ -4143,7 +4141,7 @@ def _continuous_runs(
 
 
 def _fill_short_bone_gaps(
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     timestamps: Sequence[float],
 ) -> None:
     names = {name for sample in samples for name in sample.bones}
@@ -4208,7 +4206,7 @@ def _continuous_property(name: str) -> bool:
 
 def _project_temporal_finger_hinges(
     armature,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
 ) -> int:
     """Reapply anatomical finger limits after independent channel filtering."""
 
@@ -4314,7 +4312,7 @@ def _project_temporal_finger_hinges(
 
 def _iter_temporal_channels(
     armature,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     settings,
 ) -> Iterator[SequenceApplyProgress]:
     timestamps = _sequence_timestamps(samples)
@@ -4550,7 +4548,7 @@ def _store_bone_basis(sample: _BakedFrameSample, bone) -> None:
 def _contact_targets(
     result: grounded_cleanup.GroundingResult,
     timestamps: Sequence[float],
-) -> List[Dict[str, Tuple[Vector, float]]]:
+) -> list[dict[str, tuple[Vector, float]]]:
     targets = [dict() for _ in timestamps]
     for segment in result.segments:
         duration = max(timestamps[segment.end] - timestamps[segment.start], 1.0e-4)
@@ -4593,7 +4591,7 @@ def _analytic_two_bone_joint(
     upper_length: float,
     lower_length: float,
     target_up: Vector,
-) -> Tuple[Optional[Vector], Vector, bool]:
+) -> tuple[Vector | None, Vector, bool]:
     axis = desired - hip
     if axis.length < 1.0e-7 or upper_length <= 0.0 or lower_length <= 0.0:
         return None, desired.copy(), False
@@ -4682,7 +4680,7 @@ def _append_bake_warning(
 def _iter_ground_contacts(
     armature,
     entries,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     strength: float,
     effective_mode: str,
     root_kind: str,
@@ -4706,7 +4704,7 @@ def _iter_ground_contacts(
 def _iter_ground_contacts_run(
     armature,
     entries,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     strength: float,
     effective_mode: str,
     root_kind: str,
@@ -4992,7 +4990,7 @@ def _translate_grounding(frame, delta: Vector) -> None:
 
 def _iter_camera_motion_correction(
     armature,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     settings,
     effective_mode: str,
     root_kind: str,
@@ -5000,7 +4998,7 @@ def _iter_camera_motion_correction(
     target_lateral: Vector,
     object_delta_basis: Matrix,
     source_to_target_scale: float,
-    track: Optional[camera_motion_correction.CameraMotionTrack],
+    track: camera_motion_correction.CameraMotionTrack | None,
     ui_settings,
     track_status: str,
     is_video: bool,
@@ -5174,8 +5172,8 @@ def _iter_apply_rohm_root_deltas(
 def _merge_rohm_pose_into_sample(
     sample: _BakedFrameSample,
     target_pose: TargetPose,
-    ik_proposals: Sequence[Dict],
-    changed_bones: Set[object],
+    ik_proposals: Sequence[dict],
+    changed_bones: set[object],
 ) -> None:
     channels = {channel.bone: channel for channel in target_pose.bones.values()}
     ik_confidences = _ik_bone_confidences(ik_proposals)
@@ -5243,7 +5241,7 @@ def _iter_apply_rohm_pose(
     entries,
     rig_plan: rig_planning.RigSolvePlan,
     samples: Sequence[_BakedFrameSample],
-    pose_global_rotations: Sequence[Dict[str, Quaternion]],
+    pose_global_rotations: Sequence[dict[str, Quaternion]],
 ) -> Iterator[SequenceApplyProgress]:
     """Rest-align RoHM globals and resolve them through the control rig."""
     if len(pose_global_rotations) != len(samples):
@@ -5320,7 +5318,7 @@ def _iter_rohm_correction(
     armature,
     entries,
     rig_plan: rig_planning.RigSolvePlan,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     settings,
     effective_mode: str,
     root_kind: str,
@@ -5524,7 +5522,7 @@ def _repair_root_gaps_without_ai(
 
 
 def _iter_detection_filter(
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     settings,
     *,
     rohm_settings=None,
@@ -5607,7 +5605,7 @@ def _iter_detection_filter(
 def _iter_temporal_correction(
     armature,
     entries,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     settings,
     effective_mode: str,
     root_kind: str,
@@ -5643,7 +5641,7 @@ def _iter_temporal_correction(
         )
 
 
-def _root_data_paths(root_kind: str, root_target) -> Set[str]:
+def _root_data_paths(root_kind: str, root_target) -> set[str]:
     if root_kind == "BONE":
         return {
             root_target.path_from_id("location"),
@@ -5745,7 +5743,7 @@ def _iter_write_baked_sample(
 def _finish_keyframe_stream(
     state: _KeyframeWriteState,
     final_frame: float,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     state.attach()
     _scene_set_float(bpy.context.scene, final_frame)
     state.armature.update_tag(refresh={"OBJECT"})
@@ -5755,7 +5753,7 @@ def _finish_keyframe_stream(
 
 def _iter_commit_baked_samples(
     armature,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     root_kind: str,
     root_target,
     root_enabled: bool,
@@ -5763,7 +5761,7 @@ def _iter_commit_baked_samples(
     action = _ensure_action(armature)
     start_frame = samples[0].destination
     end_frame = samples[-1].destination
-    replacement_paths: Set[str] = set()
+    replacement_paths: set[str] = set()
     for sample in samples:
         for channel in sample.bones.values():
             if channel.key_location:
@@ -5784,7 +5782,7 @@ def _iter_commit_baked_samples(
         replacement_paths.update(_root_data_paths(root_kind, root_target))
     _remove_keys_in_interval(action, replacement_paths, start_frame, end_frame)
 
-    shape_paths_by_data: Dict[object, Set[str]] = {}
+    shape_paths_by_data: dict[object, set[str]] = {}
     for sample in samples:
         for shape in sample.shapes.values():
             shape_paths_by_data.setdefault(shape.block.id_data, set()).add(
@@ -5832,11 +5830,11 @@ def _iter_commit_baked_samples(
 
 def _commit_baked_samples(
     armature,
-    samples: List[_BakedFrameSample],
+    samples: list[_BakedFrameSample],
     root_kind: str,
     root_target,
     root_enabled: bool,
-) -> Tuple[int, int]:
+) -> tuple[int, int]:
     return _drain(
         _iter_commit_baked_samples(
             armature, samples, root_kind, root_target, root_enabled
@@ -5929,8 +5927,8 @@ def iter_apply_sequence(
     scene = bpy.context.scene
     scene_fps = scene.render.fps / scene.render.fps_base
     state = _sequence_state(armature)
-    samples: List[_BakedFrameSample] = []
-    warning_sink: List[str] = []
+    samples: list[_BakedFrameSample] = []
+    warning_sink: list[str] = []
     config = armature.mtp_rig_config
     postprocess_config = getattr(
         settings, "postprocess_config", None
@@ -6025,14 +6023,14 @@ def iter_apply_sequence(
         )
     )
     frame_spool = None
-    root_samples: List[_RootMotionSample] = []
-    planned_deltas: List[Vector] = []
-    planned_yaws: List[float] = []
+    root_samples: list[_RootMotionSample] = []
+    planned_deltas: list[Vector] = []
+    planned_yaws: list[float] = []
     effective_mode = requested_mode
     frame_count = 0
     previous_timestamp_ms = None
-    camera_inputs: List[camera_motion_correction.CameraMotionInput] = []
-    camera_track: Optional[camera_motion_correction.CameraMotionTrack] = None
+    camera_inputs: list[camera_motion_correction.CameraMotionInput] = []
+    camera_track: camera_motion_correction.CameraMotionTrack | None = None
     camera_track_status = "Not Prepared"
     camera_preflight_warning = ""
     target_lateral = Vector((1.0, 0.0, 0.0))
@@ -6333,6 +6331,6 @@ def apply_sequence(
     frames: Iterable[CanonicalFrame],
     settings,
     start_frame: float,
-) -> Tuple[int, int, int, Tuple[str, ...]]:
+) -> tuple[int, int, int, tuple[str, ...]]:
     """Synchronous API retained for scripts, tests, and single-shot callers."""
     return _drain(iter_apply_sequence(armature, frames, settings, start_frame))

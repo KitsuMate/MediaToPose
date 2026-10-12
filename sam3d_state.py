@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 from enum import Enum
-from typing import Optional
 
 from .operation import COORDINATOR
 
@@ -35,7 +34,7 @@ class SamJobRegistry:
             self._jobs[slot] = job
             return True
 
-    def current(self, slot: SamJobSlot) -> Optional[object]:
+    def current(self, slot: SamJobSlot) -> object | None:
         with self._lock:
             return self._jobs.get(slot)
 

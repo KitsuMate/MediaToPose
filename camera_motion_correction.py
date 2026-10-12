@@ -10,12 +10,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 import tempfile
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
-from typing import Iterator, Optional, Sequence, Tuple
 
 TRACK_SCHEMA_VERSION = 1
 ALGORITHM_VERSION = "tier1-camera-motion-v1"
@@ -33,9 +32,9 @@ SMOOTHING_RADIUS_SECONDS = 0.075
 @dataclass(frozen=True)
 class CameraMotionInput:
     timestamp_ms: int
-    root_translation: Optional[Tuple[float, float, float]] = None
+    root_translation: tuple[float, float, float] | None = None
     focal_length: float = 0.0
-    person_points: Tuple[Tuple[float, float], ...] = ()
+    person_points: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -57,12 +56,12 @@ class CameraTrackFrame:
 class CameraMotionTrack:
     width: int
     height: int
-    frames: Tuple[CameraTrackFrame, ...]
+    frames: tuple[CameraTrackFrame, ...]
 
 
 @dataclass(frozen=True)
 class CameraCorrectionResult:
-    offsets_x: Tuple[float, ...]
+    offsets_x: tuple[float, ...]
     corrected_intervals: int
     corrected_frames: int
     tracked_frames: int
@@ -145,7 +144,7 @@ def _payload_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
-def load_sidecar(directory: Path, expected_key: str, np) -> Optional[CameraMotionTrack]:
+def load_sidecar(directory: Path, expected_key: str, np) -> CameraMotionTrack | None:
     try:
         manifest = json.loads((directory / "manifest.json").read_text(encoding="utf8"))
         payload = directory / str(manifest["payload"])
@@ -237,12 +236,12 @@ def store_sidecar(directory: Path, key: str, track: CameraMotionTrack, np) -> No
         if previous.exists():
             _remove_tree(previous)
         if directory.exists():
-            os.replace(directory, previous)
+            Path(directory).replace(previous)
         try:
-            os.replace(staging, directory)
+            Path(staging).replace(directory)
         except OSError:
             if previous.exists() and not directory.exists():
-                os.replace(previous, directory)
+                Path(previous).replace(directory)
             raise
         if previous.exists():
             _remove_tree(previous)
@@ -436,7 +435,7 @@ def iter_estimate_track(
     inputs: Sequence[CameraMotionInput],
     cv2,
     np,
-) -> Iterator[Tuple[str, int, int]]:
+) -> Iterator[tuple[str, int, int]]:
     """Yield cooperative progress and return a complete timestamped track."""
     capture = cv2.VideoCapture(path)
     if not capture.isOpened():

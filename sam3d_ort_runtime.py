@@ -15,10 +15,11 @@ import os
 import re
 import sys
 import threading
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any
 
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_CONTRACT = "media-to-pose.sam3d.raw.v1"
@@ -176,7 +177,7 @@ def is_immutable_revision(value: object) -> bool:
     return bool(_IMMUTABLE_REVISION.fullmatch(str(value or "")))
 
 
-def _gpu_candidates(sys_platform: Optional[str] = None) -> tuple[str, ...]:
+def _gpu_candidates(sys_platform: str | None = None) -> tuple[str, ...]:
     platform_name = sys_platform or sys.platform
     if platform_name == "darwin":
         return (*_COREML_PROVIDERS, *_WEBGPU_PROVIDERS)
@@ -189,7 +190,7 @@ def select_execution_provider(
     requested_mode: object,
     available_providers: Sequence[str],
     *,
-    sys_platform: Optional[str] = None,
+    sys_platform: str | None = None,
 ) -> tuple[str, str, bool]:
     """Choose one accelerator deterministically, with an explicit CPU fallback."""
     mode = normalize_mode(requested_mode)
@@ -280,7 +281,7 @@ def _bundle_file(value: object, label: str) -> BundleFile:
     if not isinstance(path_value, str):
         raise BundleContractError(f"Bundle {label} path must be a string")
     path = path_value
-    _resolved_member(Path("."), path)
+    _resolved_member(Path(), path)
     digest_value = value.get("sha256")
     digest = digest_value if isinstance(digest_value, str) else ""
     byte_value = value.get("bytes")
@@ -642,7 +643,7 @@ def probe_runtime(
     requested_mode: object,
     *,
     ort_module=None,
-    sys_platform: Optional[str] = None,
+    sys_platform: str | None = None,
 ) -> RuntimeDiagnostics:
     available = available_execution_providers(ort_module)
     provider, device, fallback = select_execution_provider(
@@ -671,7 +672,7 @@ def create_estimator(
     *,
     ort_module=None,
     session_factory=None,
-    sys_platform: Optional[str] = None,
+    sys_platform: str | None = None,
     verify_accelerator_execution: bool = False,
 ):
     """Create the model-specific estimator declared by the bundle runner."""

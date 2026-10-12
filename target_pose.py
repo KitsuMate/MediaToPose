@@ -9,8 +9,8 @@ depending on any particular correction implementation.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from mathutils import Euler, Matrix, Quaternion, Vector
 
@@ -19,7 +19,7 @@ def _finite_vector(value: Vector) -> bool:
     return all(math.isfinite(float(component)) for component in value)
 
 
-def orientation_frame(primary: Vector, reference: Optional[Vector]) -> Optional[Matrix]:
+def orientation_frame(primary: Vector, reference: Vector | None) -> Matrix | None:
     if primary.length < 1.0e-8:
         return None
     y_axis = primary.normalized()
@@ -40,11 +40,11 @@ def orientation_frame(primary: Vector, reference: Optional[Vector]) -> Optional[
 def stable_orientation_delta(
     rest_primary: Vector,
     desired_primary: Vector,
-    rest_reference: Optional[Vector],
-    desired_reference: Optional[Vector],
+    rest_reference: Vector | None,
+    desired_reference: Vector | None,
     *,
     reference_is_oriented: bool = False,
-) -> Optional[Quaternion]:
+) -> Quaternion | None:
     """Solve swing plus a continuous, hemisphere-safe reference roll.
 
     A secondary reference becomes unreliable as it approaches the primary
@@ -140,19 +140,19 @@ def signed_twist_angle(rotation: Quaternion, axis: Vector) -> float:
 class BoneChannel:
     semantic_id: str
     bone: object
-    desired_rotation: Optional[Matrix] = None
-    direct_basis_rotation: Optional[Quaternion] = None
-    location: Optional[Vector] = None
-    correction: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    rest_direction: Optional[Vector] = None
-    desired_direction: Optional[Vector] = None
-    rest_reference: Optional[Vector] = None
-    desired_reference: Optional[Vector] = None
+    desired_rotation: Matrix | None = None
+    direct_basis_rotation: Quaternion | None = None
+    location: Vector | None = None
+    correction: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rest_direction: Vector | None = None
+    desired_direction: Vector | None = None
+    rest_reference: Vector | None = None
+    desired_reference: Vector | None = None
     confidence: float = 1.0
     influence: float = 1.0
-    hinge_axis_local: Optional[Vector] = None
+    hinge_axis_local: Vector | None = None
     owner: str = "RETARGET"
-    properties: Dict[str, float] = field(default_factory=dict)
+    properties: dict[str, float] = field(default_factory=dict)
     commit_priority: int = 100
 
 
@@ -183,13 +183,13 @@ class TargetPose:
         self.source_basis = source_basis.copy()
         self.target_basis = target_basis.copy()
         self.rig_plan = rig_plan
-        self.bones: Dict[str, BoneChannel] = {}
-        self.semantic_bones: Dict[str, str] = {}
-        self.shapes: Dict[Tuple[int, str], ShapeChannel] = {}
-        self.warnings: List[str] = []
-        self.applied_modules: List[str] = []
-        self._resolved_basis: Dict[str, Matrix] = {}
-        self._resolved_pose: Dict[str, Matrix] = {}
+        self.bones: dict[str, BoneChannel] = {}
+        self.semantic_bones: dict[str, str] = {}
+        self.shapes: dict[tuple[int, str], ShapeChannel] = {}
+        self.warnings: list[str] = []
+        self.applied_modules: list[str] = []
+        self._resolved_basis: dict[str, Matrix] = {}
+        self._resolved_pose: dict[str, Matrix] = {}
         self._revision = 0
         self._resolved_revision = -1
         self.diagnostic_mode = False
@@ -215,7 +215,7 @@ class TargetPose:
         result = self.target_basis @ relative
         return result.normalized() if result.length > 1.0e-8 else result
 
-    def channel_for(self, semantic_id: str) -> Optional[BoneChannel]:
+    def channel_for(self, semantic_id: str) -> BoneChannel | None:
         name = self.semantic_bones.get(semantic_id)
         return self.bones.get(name) if name else None
 
@@ -256,9 +256,9 @@ class TargetPose:
         bone,
         desired_direction: Vector,
         *,
-        rest_direction: Optional[Vector] = None,
-        desired_reference: Optional[Vector] = None,
-        rest_reference: Optional[Vector] = None,
+        rest_direction: Vector | None = None,
+        desired_reference: Vector | None = None,
+        rest_reference: Vector | None = None,
         correction: Sequence[float] = (0.0, 0.0, 0.0),
         confidence: float = 1.0,
         influence: float = 1.0,
@@ -314,7 +314,7 @@ class TargetPose:
         correction: Sequence[float] = (0.0, 0.0, 0.0),
         additive: bool = False,
         owner: str = "RETARGET",
-        priority: Optional[int] = None,
+        priority: int | None = None,
     ) -> None:
         channel = self._channel(semantic_id, bone)
         if additive:
@@ -526,7 +526,7 @@ class TargetPose:
         self.bones, self.semantic_bones = snapshot
         self.invalidate()
 
-    def restore_channel_names(self, snapshot, names: Set[str]) -> None:
+    def restore_channel_names(self, snapshot, names: set[str]) -> None:
         """Restore selected channels while preserving independent corrections."""
         snapshot_bones, snapshot_semantics = snapshot
         for name in names:
@@ -536,7 +536,7 @@ class TargetPose:
         self.semantic_bones.update(snapshot_semantics)
         self.invalidate()
 
-    def semantic_endpoints(self) -> Dict[str, Tuple[Vector, Vector, float]]:
+    def semantic_endpoints(self) -> dict[str, tuple[Vector, Vector, float]]:
         """Return virtual head/tail positions for every mapped pose channel."""
         self.resolve()
         result = {}
@@ -693,7 +693,7 @@ class TargetPose:
             ),
         )
 
-        def dependency_group(channel: BoneChannel) -> Tuple[int, int, int]:
+        def dependency_group(channel: BoneChannel) -> tuple[int, int, int]:
             return (
                 generated_commit_stage(channel),
                 len(channel.bone.parent_recursive),
@@ -768,7 +768,7 @@ class TargetPose:
             changed_shapes.append((shape.obj, shape.block))
         return changed, changed_shapes
 
-    def commit(self) -> Tuple[Set[object], List[Tuple[object, object]]]:
+    def commit(self) -> tuple[set[object], list[tuple[object, object]]]:
         """Commit the resolved channels to Blender pose and shape-key data."""
         iterator = self.iter_commit()
         while True:

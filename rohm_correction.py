@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import bisect
 import math
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Iterator, Optional, Sequence
 
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
@@ -302,7 +302,7 @@ def build_representation(
     body_rotations: np.ndarray,
     *,
     body_height: float,
-    global_rotations: Optional[np.ndarray] = None,
+    global_rotations: np.ndarray | None = None,
 ) -> tuple[np.ndarray, RepresentationContext]:
     """Build RoHM's 294-channel, 30 FPS representation without a body model."""
     canonical, context = _canonicalize(joints, body_height)
@@ -354,7 +354,7 @@ def build_representation(
 
 
 def recover_joints(
-    representation: np.ndarray, context: Optional[RepresentationContext] = None
+    representation: np.ndarray, context: RepresentationContext | None = None
 ) -> np.ndarray:
     """Recover 22 semantic joints using only the joint trajectory channels."""
     value = np.asarray(representation, dtype=np.float64)
@@ -487,7 +487,7 @@ def iter_correct_window(
     correct_pose: bool = True,
     correct_root: bool = True,
     seed: int = 10,
-    root_observed: Optional[np.ndarray] = None,
+    root_observed: np.ndarray | None = None,
 ) -> Iterator[tuple[str, int, int]]:
     """Run one RoHM window while yielding after every ONNX invocation."""
     source = np.asarray(representation, dtype=np.float32)
@@ -599,7 +599,7 @@ def correct_window(
     correct_pose: bool = True,
     correct_root: bool = True,
     seed: int = 10,
-    root_observed: Optional[np.ndarray] = None,
+    root_observed: np.ndarray | None = None,
 ) -> CorrectionResult:
     """Synchronous one-window API retained for tests and scripts."""
     iterator = iter_correct_window(

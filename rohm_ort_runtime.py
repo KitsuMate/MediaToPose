@@ -5,9 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Iterator, Optional, Sequence
 
 import numpy as np
 
@@ -303,7 +303,7 @@ class RohmSession:
         condition: np.ndarray,
         rng: np.random.RandomState,
         *,
-        control_condition: Optional[np.ndarray] = None,
+        control_condition: np.ndarray | None = None,
         control_gate: float = 0.0,
     ) -> Iterator[tuple[int, int]]:
         """Run one diffusion sample and release Blender after every ONNX call."""
@@ -351,7 +351,7 @@ class RohmSession:
         condition: np.ndarray,
         rng: np.random.RandomState,
         *,
-        control_condition: Optional[np.ndarray] = None,
+        control_condition: np.ndarray | None = None,
         control_gate: float = 0.0,
     ) -> np.ndarray:
         iterator = RohmSession._iter_sample(

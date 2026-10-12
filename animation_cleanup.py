@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import statistics
 from bisect import bisect_left, bisect_right
-from typing import Iterable, List, Sequence, Tuple
+from collections.abc import Iterable, Sequence
 
 from mathutils import Quaternion, Vector
 
@@ -19,13 +19,13 @@ def _median(values: Iterable[float]) -> float:
     return float(statistics.median(values)) if values else 0.0
 
 
-def _mad(values: Sequence[float]) -> Tuple[float, float]:
+def _mad(values: Sequence[float]) -> tuple[float, float]:
     center = _median(values)
     spread = 1.4826 * _median(abs(float(value) - center) for value in values)
     return center, max(spread, 1.0e-8)
 
 
-def _quiet_mad(values: Sequence[float]) -> Tuple[float, float]:
+def _quiet_mad(values: Sequence[float]) -> tuple[float, float]:
     """Estimate ordinary motion without allowing a spike to mask itself."""
     ordered = sorted(float(value) for value in values)
     quiet = ordered[: max(2, (len(ordered) + 1) // 2)]
@@ -42,8 +42,8 @@ def _interpolation_factor(times: Sequence[float], index: int) -> float:
     )
 
 
-def _continuous_quaternions(values: Sequence[Quaternion]) -> List[Quaternion]:
-    result: List[Quaternion] = []
+def _continuous_quaternions(values: Sequence[Quaternion]) -> list[Quaternion]:
+    result: list[Quaternion] = []
     for value in values:
         current = value.normalized()
         if result and current.dot(result[-1]) < 0.0:
@@ -69,7 +69,7 @@ def _vector_quaternion(value: Vector) -> Quaternion:
     return Quaternion(value / angle, angle)
 
 
-def _solve_linear(matrix: List[List[float]], vector: List[float]) -> List[float]:
+def _solve_linear(matrix: list[list[float]], vector: list[float]) -> list[float]:
     """Solve a tiny dense system with partial pivoting."""
     size = len(vector)
     augmented = [
@@ -97,7 +97,7 @@ def _polynomial_fit(
     values: Sequence[float],
     weights: Sequence[float],
     degree: int,
-) -> List[float]:
+) -> list[float]:
     degree = min(int(degree), len(values) - 1)
     while degree >= 0:
         size = degree + 1
@@ -121,12 +121,12 @@ def _polynomial_fit(
 
 
 def _local_fit_components(
-    values: Sequence[Tuple[float, ...]],
+    values: Sequence[tuple[float, ...]],
     times: Sequence[float],
     confidences: Sequence[float],
     index: int,
     half_width: float,
-) -> Tuple[float, ...]:
+) -> tuple[float, ...]:
     center_time = float(times[index])
     selected = _window_indices(times, index, half_width)
     offsets = [float(times[item]) - center_time for item in selected]
@@ -144,7 +144,7 @@ def _window_indices(
     times: Sequence[float],
     index: int,
     half_width: float,
-) -> List[int]:
+) -> list[int]:
     center_time = float(times[index])
     left = bisect_left(times, center_time - half_width - 1.0e-9)
     right = bisect_right(times, center_time + half_width + 1.0e-9)
@@ -163,11 +163,11 @@ def _window_indices(
 
 
 def _fit_selected_components(
-    samples: Sequence[Tuple[float, ...]],
+    samples: Sequence[tuple[float, ...]],
     offsets: Sequence[float],
     confidences: Sequence[float],
     half_width: float,
-) -> Tuple[float, ...]:
+) -> tuple[float, ...]:
     base_weights = []
     for confidence, offset in zip(confidences, offsets, strict=True):
         distance = min(abs(offset) / max(half_width, 1.0e-8), 1.0)
@@ -176,7 +176,7 @@ def _fit_selected_components(
             max(tricube, 1.0e-4) * max(min(float(confidence), 1.0), 0.02)
         )
     weights = base_weights[:]
-    coefficients: List[List[float]] = []
+    coefficients: list[list[float]] = []
     # Initial quadratic fit followed by two Huber reweighting passes.
     for iteration in range(3):
         coefficients = [
@@ -229,8 +229,8 @@ def _half_width(times: Sequence[float], strength: float) -> float:
     )
 
 
-def _weak_runs(confidences: Sequence[float], threshold: float) -> List[Tuple[int, int]]:
-    runs: List[Tuple[int, int]] = []
+def _weak_runs(confidences: Sequence[float], threshold: float) -> list[tuple[int, int]]:
+    runs: list[tuple[int, int]] = []
     start = None
     for index, confidence in enumerate(confidences):
         weak = float(confidence) < threshold
@@ -268,7 +268,7 @@ def bridge_low_confidence_vectors(
     times: Sequence[float],
     confidences: Sequence[float],
     threshold: float = 0.35,
-) -> List[Vector]:
+) -> list[Vector]:
     """Bridge weak runs without ever falling back to a default vector."""
 
     result = [value.copy() for value in values]
@@ -299,7 +299,7 @@ def bridge_low_confidence_quaternions(
     times: Sequence[float],
     confidences: Sequence[float],
     threshold: float = 0.35,
-) -> List[Quaternion]:
+) -> list[Quaternion]:
     """Bridge weak rotation runs using hemisphere-safe interpolation/holds."""
 
     continuous = _continuous_quaternions(values)
@@ -334,7 +334,7 @@ def reduce_scalar_outliers(
     values: Sequence[float],
     times: Sequence[float],
     confidences: Sequence[float] | None = None,
-) -> Tuple[List[float], int]:
+) -> tuple[list[float], int]:
     if len(values) < 3:
         return [float(value) for value in values], 0
     confidences = confidences or [1.0] * len(values)
@@ -367,7 +367,7 @@ def reduce_vector_outliers(
     values: Sequence[Vector],
     times: Sequence[float],
     confidences: Sequence[float] | None = None,
-) -> Tuple[List[Vector], int]:
+) -> tuple[list[Vector], int]:
     if len(values) < 3:
         return [value.copy() for value in values], 0
     confidences = confidences or [1.0] * len(values)
@@ -399,7 +399,7 @@ def reduce_quaternion_outliers(
     values: Sequence[Quaternion],
     times: Sequence[float],
     confidences: Sequence[float] | None = None,
-) -> Tuple[List[Quaternion], int]:
+) -> tuple[list[Quaternion], int]:
     continuous = _continuous_quaternions(values)
     if len(values) < 3:
         return continuous, 0
@@ -439,7 +439,7 @@ def reduce_short_quaternion_bursts(
     *,
     maximum_duration: float = 0.3,
     minimum_excursion: float = math.radians(35.0),
-) -> Tuple[List[Quaternion], int]:
+) -> tuple[list[Quaternion], int]:
     """Bridge short rotation excursions whose clean boundaries agree.
 
     The ordinary outlier pass compares one sample with its immediate
@@ -523,7 +523,7 @@ def stabilize_quaternion_jumps(
     *,
     reacquire_seconds: float = 0.8,
     candidate_tolerance: float = math.radians(12.0),
-) -> Tuple[List[Quaternion], int]:
+) -> tuple[list[Quaternion], int]:
     """Hold implausible rotation jumps until the new pose proves stable.
 
     MediaPipe hand landmarks have no per-joint visibility score, so a malformed
@@ -583,7 +583,7 @@ def limit_quaternion_speed(
     values: Sequence[Quaternion],
     times: Sequence[float],
     maximum_speed: float,
-) -> Tuple[List[Quaternion], int]:
+) -> tuple[list[Quaternion], int]:
     """Clamp physically implausible angular steps without changing direction."""
 
     continuous = _continuous_quaternions(values)
@@ -612,7 +612,7 @@ def smooth_scalars(
     times: Sequence[float],
     confidences: Sequence[float] | None,
     strength: float,
-) -> List[float]:
+) -> list[float]:
     influence = min(max(float(strength), 0.0), 1.0)
     if len(values) < 3 or influence <= 0.0:
         return [float(value) for value in values]
@@ -634,7 +634,7 @@ def smooth_vectors(
     times: Sequence[float],
     confidences: Sequence[float] | None,
     strength: float,
-) -> List[Vector]:
+) -> list[Vector]:
     influence = min(max(float(strength), 0.0), 1.0)
     if len(values) < 3 or influence <= 0.0:
         return [value.copy() for value in values]
@@ -656,7 +656,7 @@ def smooth_quaternions(
     times: Sequence[float],
     confidences: Sequence[float] | None,
     strength: float,
-) -> List[Quaternion]:
+) -> list[Quaternion]:
     influence = min(max(float(strength), 0.0), 1.0)
     continuous = _continuous_quaternions(values)
     if len(values) < 3 or influence <= 0.0:
@@ -690,7 +690,7 @@ def smooth_quaternions_bounded(
     times: Sequence[float],
     confidences: Sequence[float] | None,
     strength: float,
-) -> List[Quaternion]:
+) -> list[Quaternion]:
     """Smooth rotations without quadratic extrapolation outside the window.
 
     Finger and wrist channels are particularly sensitive to a small tangent-

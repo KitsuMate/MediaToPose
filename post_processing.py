@@ -8,17 +8,10 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import (
     Any,
-    Callable,
-    Iterable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
 )
 
 from mathutils import Matrix, Quaternion, Vector
@@ -136,7 +129,7 @@ def module_config(config, module_id: str):
     )
 
 
-def ordered_module_configs(config) -> List[object]:
+def ordered_module_configs(config) -> list[object]:
     """Return existing settings in fixed order without mutating Blender IDs."""
     configured = {item.module_id: item for item in config.post_processing_modules}
     return [
@@ -173,7 +166,7 @@ def compile_postprocess_config(
     )
 
 
-def serialize_module_configs(config) -> List[dict]:
+def serialize_module_configs(config) -> list[dict]:
     ensure_module_configs(config)
     return [
         {
@@ -236,7 +229,7 @@ def _smoothstep(start: float, end: float, value: float) -> float:
 class PostProcessingSession:
     """Small continuity state shared by consecutive frame solves."""
 
-    _last_timestamp_ms: Optional[int] = None
+    _last_timestamp_ms: int | None = None
     _forearm_twist_phase: dict[str, float] = field(default_factory=dict)
 
     def reset(self) -> None:
@@ -269,9 +262,9 @@ class SequenceProcessingContext:
     timestamps: Sequence[float]
     root_motion_mode: str
     process_temporal: Callable[[Any], Iterator[Any]]
-    process_camera_motion: Optional[Callable[[Any], Iterator[Any]]] = None
-    process_detection_filter: Optional[Callable[[Any], Iterator[Any]]] = None
-    process_rohm: Optional[Callable[[Any], Iterator[Any]]] = None
+    process_camera_motion: Callable[[Any], Iterator[Any]] | None = None
+    process_detection_filter: Callable[[Any], Iterator[Any]] | None = None
+    process_rohm: Callable[[Any], Iterator[Any]] | None = None
 
 
 class CorrectionModule:
@@ -282,11 +275,11 @@ class CorrectionModule:
         PROFILE_RIGIFY,
         PROFILE_GENERIC,
     }
-    required_semantics: Tuple[str, ...] = ()
+    required_semantics: tuple[str, ...] = ()
     allows_endpoint_motion = False
     scope = "FRAME"
 
-    def validate(self, pose_or_armature, settings) -> List[str]:
+    def validate(self, pose_or_armature, settings) -> list[str]:
         return []
 
     def reset(self, session: PostProcessingSession) -> None:
@@ -297,7 +290,7 @@ class CorrectionModule:
         pose: TargetPose,
         settings,
         session: PostProcessingSession,
-    ) -> List[str]:
+    ) -> list[str]:
         raise NotImplementedError
 
     def process_sequence(
@@ -308,7 +301,7 @@ class CorrectionModule:
         raise NotImplementedError
 
 
-def _curve_sample(points: List[Vector], count: int = 65) -> List[Vector]:
+def _curve_sample(points: list[Vector], count: int = 65) -> list[Vector]:
     """Sample a C1 Catmull-Rom centerline through provider joints."""
     if len(points) < 2:
         return list(points)
@@ -340,7 +333,7 @@ def _hermite_sample(
     start_tangent: Vector,
     end_tangent: Vector,
     count: int = 65,
-) -> List[Vector]:
+) -> list[Vector]:
     result = []
     for index in range(count):
         t = index / max(count - 1, 1)
@@ -354,7 +347,7 @@ def _hermite_sample(
     return result
 
 
-def _arc_point(samples: List[Vector], fraction: float) -> Vector:
+def _arc_point(samples: list[Vector], fraction: float) -> Vector:
     if len(samples) < 2:
         return samples[0].copy()
     lengths = [0.0]
@@ -382,7 +375,7 @@ class SpineCorrection(CorrectionModule):
         ("UPPER_LEG_R", "LOWER_LEG_R", "FOOT_R"),
     )
 
-    def validate(self, armature, settings) -> List[str]:
+    def validate(self, armature, settings) -> list[str]:
         entries = {
             entry.semantic_id: entry for entry in armature.mtp_rig_config.mappings
         }
@@ -439,7 +432,7 @@ class SpineCorrection(CorrectionModule):
                 upper = observed
         return _hermite_sample(hip, shoulder, main, upper * main.length * 0.65), True
 
-    def process_frame(self, pose, settings, session) -> List[str]:
+    def process_frame(self, pose, settings, session) -> list[str]:
         samples, inferred = self._source_curve(pose)
         if not samples:
             return ["Spine Correction lacks usable torso observations"]
@@ -788,7 +781,7 @@ class ShoulderCorrection(CorrectionModule):
     allows_endpoint_motion = True
 
     @staticmethod
-    def _side_from_name(name: str) -> Optional[str]:
+    def _side_from_name(name: str) -> str | None:
         lowered = name.lower()
         tokens = [token for token in re.split(r"[^a-z0-9]+", lowered) if token]
         if "left" in tokens or "l" in tokens:
@@ -798,7 +791,7 @@ class ShoulderCorrection(CorrectionModule):
         return None
 
     @staticmethod
-    def _image_elbow_angle(frame, side: str) -> Optional[float]:
+    def _image_elbow_angle(frame, side: str) -> float | None:
         prefix = "LEFT" if side == "L" else "RIGHT"
         points = [
             frame.body.get(f"{prefix}_{joint}")
@@ -814,7 +807,7 @@ class ShoulderCorrection(CorrectionModule):
         angle = first.angle(second)
         return angle if math.isfinite(angle) else None
 
-    def _repair_arm_silhouette(self, pose, settings) -> List[str]:
+    def _repair_arm_silhouette(self, pose, settings) -> list[str]:
         """Bounded SAM 2D/3D reconciliation for visibly over-bent arms.
 
         A monocular image angle is not a complete 3D observation, so it is
@@ -953,7 +946,7 @@ class ShoulderCorrection(CorrectionModule):
             pose.resolve()
         return warnings
 
-    def validate(self, armature, settings) -> List[str]:
+    def validate(self, armature, settings) -> list[str]:
         entries = {
             entry.semantic_id: entry for entry in armature.mtp_rig_config.mappings
         }
@@ -969,7 +962,7 @@ class ShoulderCorrection(CorrectionModule):
                 warnings.append(f"{label} shoulder correction has no mapped shoulder")
         return warnings
 
-    def process_frame(self, pose, settings, session) -> List[str]:
+    def process_frame(self, pose, settings, session) -> list[str]:
         warnings = []
         rig_up = pose.target_basis @ Vector((0.0, 0.0, 1.0))
         auxiliary = pose.frame.auxiliary
@@ -1096,14 +1089,14 @@ class ShoulderCorrection(CorrectionModule):
 class _AxisCorrection(CorrectionModule):
     """Shared axial-twist and hinge mechanics for one limb family."""
 
-    _UPPER: Tuple[str, ...] = ()
-    _HINGES: Tuple[str, ...] = ()
+    _UPPER: tuple[str, ...] = ()
+    _HINGES: tuple[str, ...] = ()
     _TWIST_LIMIT_FIELD = ""
     _USES_ARM_SURFACE = False
     _USES_PALM_ROLL = False
 
     @staticmethod
-    def _hinge_axis(channel: BoneChannel) -> Optional[Vector]:
+    def _hinge_axis(channel: BoneChannel) -> Vector | None:
         bone = channel.bone
         unlocked = [
             axis
@@ -1137,7 +1130,7 @@ class _AxisCorrection(CorrectionModule):
         )[index]
         return axis if local[index] >= 0.0 else -axis
 
-    def validate(self, armature, settings) -> List[str]:
+    def validate(self, armature, settings) -> list[str]:
         entries = {
             entry.semantic_id: entry for entry in armature.mtp_rig_config.mappings
         }
@@ -1158,7 +1151,7 @@ class _AxisCorrection(CorrectionModule):
         side: str,
         settings,
         session: PostProcessingSession,
-    ) -> Optional[Tuple[float, float]]:
+    ) -> tuple[float, float] | None:
         # Forearm roll is part of the body chain.  Keep it in the same
         # observation frame as the body-owned wrist/hand solve; the dedicated
         # hand detector is allowed to drive fingers only.  Mixing the body
@@ -1255,7 +1248,7 @@ class _AxisCorrection(CorrectionModule):
         )
         channel.owner = self.module_id
 
-    def process_frame(self, pose, settings, session) -> List[str]:
+    def process_frame(self, pose, settings, session) -> list[str]:
         warnings = []
         # MHR70 observes both the posterior olecranon and anterior cubital
         # fossa. Their vector is much stronger axial-roll evidence than a
@@ -1455,7 +1448,7 @@ CORRECTION_REGISTRY = {
 }
 
 
-def validate_modules(armature) -> List[str]:
+def validate_modules(armature) -> list[str]:
     config = armature.mtp_rig_config
     ensure_module_configs(config)
     warnings = []
@@ -1484,9 +1477,9 @@ def iter_pipeline(
     pose: TargetPose,
     config,
     *,
-    session: Optional[PostProcessingSession] = None,
-    module_filter: Optional[Set[str]] = None,
-) -> Iterator[Tuple[str, int, int]]:
+    session: PostProcessingSession | None = None,
+    module_filter: set[str] | None = None,
+) -> Iterator[tuple[str, int, int]]:
     """Apply enabled modules cooperatively, yielding before every module."""
     compiled = compile_postprocess_config(config)
     pose.diagnostic_mode = compiled.diagnostic_mode
@@ -1559,9 +1552,9 @@ def run_pipeline(
     pose: TargetPose,
     config,
     *,
-    session: Optional[PostProcessingSession] = None,
-    module_filter: Optional[Set[str]] = None,
-) -> List[str]:
+    session: PostProcessingSession | None = None,
+    module_filter: set[str] | None = None,
+) -> list[str]:
     """Apply the complete pipeline synchronously."""
     iterator = iter_pipeline(
         pose,

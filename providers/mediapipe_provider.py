@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from itertools import permutations
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
-from typing import Iterable, Optional, Tuple
 
 from .. import camera_calibration
 from ..constants import (
@@ -46,7 +46,7 @@ _ROOT_MOTION_LANDMARKS = (
 )
 
 
-def dependency_status(_options=None) -> Tuple[bool, str]:
+def dependency_status(_options=None) -> tuple[bool, str]:
     snapshot = dependency_snapshot()
     if not snapshot.checked:
         return False, snapshot.message
@@ -263,7 +263,7 @@ class MediaPipeProvider:
         self._fallback_face = None
         self._face_crop = None
         self._fallback_face_crop = None
-        self._previous: Optional[CanonicalFrame] = None
+        self._previous: CanonicalFrame | None = None
         self._trusted_hands = {}
         self._create_tasks()
 
@@ -403,7 +403,7 @@ class MediaPipeProvider:
         result,
         frame: CanonicalFrame,
         *,
-        landmark_threshold: Optional[float] = None,
+        landmark_threshold: float | None = None,
     ) -> None:
         if not result or not result.pose_world_landmarks:
             frame.warnings.append("No body pose detected")
@@ -598,7 +598,7 @@ class MediaPipeProvider:
             frame.warnings.append(warning)
 
     @staticmethod
-    def _normalized_dot(first, second) -> Optional[float]:
+    def _normalized_dot(first, second) -> float | None:
         first_length = math.hypot(*first)
         second_length = math.hypot(*second)
         if min(first_length, second_length) <= 1.0e-8:
@@ -613,7 +613,7 @@ class MediaPipeProvider:
         side: str,
         hand,
         frame: CanonicalFrame,
-    ) -> Optional[float]:
+    ) -> float | None:
         required_hand = ("WRIST", "INDEX_FINGER_MCP", "PINKY_MCP")
         required_pose = (f"{side}_WRIST", f"{side}_INDEX", f"{side}_PINKY")
         if any(name not in hand or not hand[name].valid for name in required_hand):
@@ -1093,7 +1093,7 @@ class MediaPipeProvider:
         )
 
     @staticmethod
-    def _face_bounds(face) -> Tuple[float, float, float, float]:
+    def _face_bounds(face) -> tuple[float, float, float, float]:
         xs = [float(point.x) for point in face]
         ys = [float(point.y) for point in face]
         return min(xs), min(ys), max(xs), max(ys)

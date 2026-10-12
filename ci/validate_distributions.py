@@ -199,9 +199,7 @@ def _compatible_wheel(filename: str, platform: str) -> bool:
         return value.endswith("-win_amd64.whl")
     if platform == "linux_x64":
         return "manylinux" in value and value.endswith("_x86_64.whl")
-    return "macosx" in value and (
-        value.endswith("_arm64.whl") or value.endswith("_universal2.whl")
-    )
+    return "macosx" in value and (value.endswith(("_arm64.whl", "_universal2.whl")))
 
 
 def _validate_member(name: str) -> str:

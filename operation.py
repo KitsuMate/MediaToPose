@@ -10,10 +10,11 @@ from __future__ import annotations
 import subprocess
 import threading
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any
 
 PROCESS_TERMINATE_GRACE_SECONDS = 2.0
 
@@ -77,12 +78,12 @@ class CaptureRequest:
     target_pointer: int = 0
     action_name: str = ""
     object_mode: str = "OBJECT"
-    selected_object_names: Tuple[str, ...] = ()
+    selected_object_names: tuple[str, ...] = ()
     analysis_path: str = ""
     source_identity: Mapping[str, Any] = field(default_factory=dict)
     options: Mapping[str, Any] = field(default_factory=dict)
     mapping_entries: Mapping[str, Any] = field(default_factory=dict)
-    postprocess_config: Optional["PostProcessConfig"] = None
+    postprocess_config: PostProcessConfig | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -122,11 +123,11 @@ class PostProcessModuleConfig:
 @dataclass(frozen=True)
 class PostProcessConfig:
     detected_profile: str
-    modules: Tuple[PostProcessModuleConfig, ...]
+    modules: tuple[PostProcessModuleConfig, ...]
     diagnostic_mode: bool = False
 
     @property
-    def post_processing_modules(self) -> Tuple[PostProcessModuleConfig, ...]:
+    def post_processing_modules(self) -> tuple[PostProcessModuleConfig, ...]:
         return self.modules
 
 
@@ -182,7 +183,7 @@ class OperationCoordinator:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._generation = 0
-        self._token: Optional[OperationToken] = None
+        self._token: OperationToken | None = None
         self._state = OperationState.CANCELLED
         self._phase = ""
         self._status = ""
@@ -193,7 +194,7 @@ class OperationCoordinator:
         self._step_total = 0
         self._step_progress = 0.0
         self._step_started_monotonic = 0.0
-        self._worker: Optional[threading.Thread] = None
+        self._worker: threading.Thread | None = None
         self._process = None
         self._cancel_escalation_started = False
 
@@ -252,7 +253,7 @@ class OperationCoordinator:
         target_name: str = "",
         target_pointer: int = 0,
         status: str = "Starting",
-    ) -> Optional[OperationToken]:
+    ) -> OperationToken | None:
         with self._lock:
             self._reap_locked()
             if self._token is not None:
@@ -294,13 +295,13 @@ class OperationCoordinator:
             raise OperationBusyError(f"Media to Pose is busy: {label}")
         return token
 
-    def owns(self, token: Optional[OperationToken]) -> bool:
+    def owns(self, token: OperationToken | None) -> bool:
         if token is None:
             return False
         with self._lock:
             return self._owns_locked(token)
 
-    def active_token(self) -> Optional[OperationToken]:
+    def active_token(self) -> OperationToken | None:
         with self._lock:
             self._reap_locked()
             return self._token
@@ -309,7 +310,7 @@ class OperationCoordinator:
         self,
         token: OperationToken,
         *,
-        thread: Optional[threading.Thread] = None,
+        thread: threading.Thread | None = None,
         process=None,
     ) -> bool:
         process_to_cancel = None
@@ -361,14 +362,14 @@ class OperationCoordinator:
         self,
         token: OperationToken,
         *,
-        status: Optional[str] = None,
-        phase: Optional[str] = None,
-        progress: Optional[float] = None,
-        frame_current: Optional[int] = None,
-        frame_total: Optional[int] = None,
-        step_current: Optional[int] = None,
-        step_total: Optional[int] = None,
-        step_progress: Optional[float] = None,
+        status: str | None = None,
+        phase: str | None = None,
+        progress: float | None = None,
+        frame_current: int | None = None,
+        frame_total: int | None = None,
+        step_current: int | None = None,
+        step_total: int | None = None,
+        step_progress: float | None = None,
     ) -> bool:
         with self._lock:
             if not self._owns_locked(token):
@@ -411,7 +412,7 @@ class OperationCoordinator:
 
     def request_cancel(
         self,
-        token: Optional[OperationToken] = None,
+        token: OperationToken | None = None,
         *,
         status: str = "Cancelling",
     ) -> bool:

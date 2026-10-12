@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
-Vec3 = Tuple[float, float, float]
-Vec2 = Tuple[float, float]
-Mat3 = Tuple[float, float, float, float, float, float, float, float, float]
+Vec3 = tuple[float, float, float]
+Vec2 = tuple[float, float]
+Mat3 = tuple[float, float, float, float, float, float, float, float, float]
 
 
 @dataclass(slots=True)
@@ -82,7 +81,7 @@ class RootMotionObservation:
     """
 
     translation: Vec3
-    rotation_matrix: Optional[Mat3] = None
+    rotation_matrix: Mat3 | None = None
     focal_length: float = 0.0
     scale: float = 1.0
     confidence: float = 1.0
@@ -118,21 +117,21 @@ class Landmark:
 @dataclass(slots=True)
 class CanonicalFrame:
     timestamp_ms: int
-    body: Dict[str, Landmark] = field(default_factory=dict)
-    hands: Dict[str, Dict[str, Landmark]] = field(default_factory=dict)
+    body: dict[str, Landmark] = field(default_factory=dict)
+    hands: dict[str, dict[str, Landmark]] = field(default_factory=dict)
     # Provider-specific observations that improve post-processing without
     # becoming rig mappings. Keys use stable anatomical names.
-    auxiliary: Dict[str, Landmark] = field(default_factory=dict)
-    joint_frames: Dict[str, JointFrameObservation] = field(default_factory=dict)
-    face_landmarks: List[Landmark] = field(default_factory=list)
+    auxiliary: dict[str, Landmark] = field(default_factory=dict)
+    joint_frames: dict[str, JointFrameObservation] = field(default_factory=dict)
+    face_landmarks: list[Landmark] = field(default_factory=list)
     # Image-space face points used only by the lightweight media preview.
     # Retargeting uses blendshapes and therefore does not need to persist the
     # much larger 3D face mesh.
-    face_overlay: List[Vec2] = field(default_factory=list)
-    blendshapes: Dict[str, float] = field(default_factory=dict)
-    camera: Optional[CameraIntrinsicsObservation] = None
-    root_motion: Optional[RootMotionObservation] = None
-    warnings: List[str] = field(default_factory=list)
+    face_overlay: list[Vec2] = field(default_factory=list)
+    blendshapes: dict[str, float] = field(default_factory=dict)
+    camera: CameraIntrinsicsObservation | None = None
+    root_motion: RootMotionObservation | None = None
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

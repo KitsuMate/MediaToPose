@@ -20,11 +20,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
-from typing import Dict, Mapping, Optional, Tuple
 
 import bpy
 from bpy.props import StringProperty
@@ -66,7 +66,7 @@ MODEL_VARIANTS = {
     }
 }
 
-_DEVICE_ENUM_ITEMS: Tuple[Tuple[str, str, str], ...] = (
+_DEVICE_ENUM_ITEMS: tuple[tuple[str, str, str], ...] = (
     (
         "AUTO",
         "Auto",
@@ -105,7 +105,7 @@ class InstallStatusSnapshot:
     status: str = ""
     outcome: str = ""
     error: str = ""
-    logs: Tuple[str, ...] = ()
+    logs: tuple[str, ...] = ()
     log_path: str = ""
 
 
@@ -119,8 +119,8 @@ class _InstallLayout:
     model_staging: Path
     model_current: Path
     model_backup: Path
-    previous_storage_root: Optional[Path]
-    storage_config: Optional[Path] = None
+    previous_storage_root: Path | None
+    storage_config: Path | None = None
 
 
 class BackgroundJob:
@@ -128,8 +128,8 @@ class BackgroundJob:
         self,
         label: str,
         *,
-        token: Optional[OperationToken] = None,
-        request: Optional[SamSetupRequest] = None,
+        token: OperationToken | None = None,
+        request: SamSetupRequest | None = None,
     ):
         self.label = label
         self.token = token
@@ -156,7 +156,7 @@ class BackgroundJob:
             if previous.exists():
                 previous.unlink()
             if path.exists():
-                os.replace(path, previous)
+                Path(path).replace(previous)
             path.write_text("", encoding="utf8")
             self.log_path = str(path)
         except OSError as exc:
@@ -254,13 +254,11 @@ class BackgroundJob:
 
 
 def _redact(value: object) -> str:
-    text = str(value or "")
-    text = re.sub(
+    return re.sub(
         r"(?i)\b(?:hf|api_org)_[A-Za-z0-9._-]{6,}\b",
         "[redacted]",
-        text,
+        str(value or ""),
     )
-    return text
 
 
 def _safe_metadata(value: object, *, limit: int = 160) -> str:
@@ -309,14 +307,14 @@ def backend_present() -> bool:
     return manifest_path().is_file()
 
 
-def model_spec(variant: str) -> Dict:
+def model_spec(variant: str) -> dict:
     try:
         return MODEL_VARIANTS[str(variant)]
     except KeyError as exc:
         raise ValueError(f"Unknown SAM 3D Body model variant: {variant!r}") from exc
 
 
-def _read_json(path: Path) -> Optional[Dict]:
+def _read_json(path: Path) -> dict | None:
     try:
         value = json.loads(path.read_text(encoding="utf8"))
         return value if isinstance(value, dict) else None
@@ -324,7 +322,7 @@ def _read_json(path: Path) -> Optional[Dict]:
         return None
 
 
-def _atomic_json(path: Path, value: Dict) -> None:
+def _atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     file_descriptor, temporary = tempfile.mkstemp(
         prefix=f".{path.name}.",
@@ -339,11 +337,11 @@ def _atomic_json(path: Path, value: Dict) -> None:
         ) as handle:
             json.dump(value, handle, indent=2, sort_keys=True)
         with suppress(OSError):
-            os.chmod(temporary, stat.S_IRUSR | stat.S_IWUSR)
-        os.replace(temporary, path)
+            Path(temporary).chmod(stat.S_IRUSR | stat.S_IWUSR)
+        Path(temporary).replace(path)
     except Exception:
         with suppress(OSError):
-            os.unlink(temporary)
+            Path(temporary).unlink()
         raise
 
 
@@ -353,7 +351,7 @@ def model_storage_config_path(*, create_root: bool = True) -> Path:
 
 def _normalize_storage_parent(value: str = "") -> Path:
     if value:
-        expanded = os.path.expandvars(os.path.expanduser(value.strip()))
+        expanded = os.path.expandvars(str(Path(value.strip()).expanduser()))
         selected = Path(bpy.path.abspath(expanded))
     else:
         selected = backend_root(create=True)
@@ -433,7 +431,7 @@ def _verified_model_storage_root(root: Path) -> Path:
     return resolved
 
 
-def installed_model_directory(manifest: Optional[Dict] = None) -> Path:
+def installed_model_directory(manifest: dict | None = None) -> Path:
     manifest = manifest if manifest is not None else (_read_json(manifest_path()) or {})
     configured = str(manifest.get("model_directory") or "")
     if configured:
@@ -442,8 +440,8 @@ def installed_model_directory(manifest: Optional[Dict] = None) -> Path:
 
 
 def installed_model_storage_root(
-    manifest: Optional[Dict] = None,
-) -> Optional[Path]:
+    manifest: dict | None = None,
+) -> Path | None:
     model = installed_model_directory(manifest)
     parent = model.parent
     if (
@@ -496,7 +494,7 @@ def sam_backend_ready(settings) -> bool:
     ).installed
 
 
-def sam3d_device_enum_items() -> Tuple[Tuple[str, str, str], ...]:
+def sam3d_device_enum_items() -> tuple[tuple[str, str, str], ...]:
     """Return the stable backend-agnostic AUTO/GPU/CPU choices."""
     return _DEVICE_ENUM_ITEMS
 
@@ -659,7 +657,7 @@ def invalidate_backend_snapshot() -> None:
     backend_snapshot.cache_clear()
 
 
-def runtime_paths() -> Dict[str, str]:
+def runtime_paths() -> dict[str, str]:
     active = active_directory(create_root=False)
     manifest = _read_json(manifest_path()) or {}
     model = installed_model_directory(manifest)
@@ -688,7 +686,7 @@ def resolve_device_name(requested: str) -> str:
         return "cpu" if mode == "CPU" else "gpu"
 
 
-def provider_options_from_settings(settings) -> Dict:
+def provider_options_from_settings(settings) -> dict:
     options = {
         "model_directory": str(Path(__file__).parent / "assets" / "models"),
         "use_body": bool(settings.use_body),
@@ -704,7 +702,7 @@ def provider_options_from_settings(settings) -> Dict:
     return options
 
 
-def runtime_diagnostics(variant: str, device: str) -> Dict:
+def runtime_diagnostics(variant: str, device: str) -> dict:
     """Return stable requested/actual runtime facts for UI and bug reports."""
     try:
         from .providers.sam3d_body_provider import runtime_diagnostics as loaded_state
@@ -796,7 +794,7 @@ def _download_file(
             and digest.hexdigest().casefold() != expected_sha256.casefold()
         ):
             raise RuntimeError(f"{label} failed SHA-256 verification")
-        os.replace(partial, destination)
+        Path(partial).replace(destination)
     except Exception:
         with suppress(OSError):
             partial.unlink()
@@ -930,17 +928,17 @@ def _activate_staged_install(
     model_activated = False
     try:
         if runtime_had_current:
-            os.replace(runtime_current, runtime_backup)
+            Path(runtime_current).replace(runtime_backup)
             runtime_backed_up = True
         if model_had_current:
-            os.replace(model_current, model_backup)
+            Path(model_current).replace(model_backup)
             model_backed_up = True
-        os.replace(runtime_staging, runtime_current)
+        Path(runtime_staging).replace(runtime_current)
         runtime_activated = True
         # Move the large model bundle last. Every operation after this point is
         # non-failing cleanup, so an earlier Windows file-lock error leaves the
         # verified download cache in model_staging for the next retry.
-        os.replace(model_staging, model_current)
+        Path(model_staging).replace(model_current)
         model_activated = True
     except Exception as activation_error:
         rollback_errors = []
@@ -958,7 +956,7 @@ def _activate_staged_install(
             )
         if runtime_backed_up and runtime_backup.exists():
             rollback(
-                lambda: os.replace(runtime_backup, runtime_current),
+                lambda: Path(runtime_backup).replace(runtime_current),
                 "restore previous runtime",
             )
         if model_activated and model_current.exists():
@@ -968,7 +966,7 @@ def _activate_staged_install(
             )
         if model_backed_up and model_backup.exists():
             rollback(
-                lambda: os.replace(model_backup, model_current),
+                lambda: Path(model_backup).replace(model_current),
                 "restore previous model",
             )
         if rollback_errors:
@@ -1135,7 +1133,7 @@ def _prepare_ort_staging(layout: _InstallLayout) -> None:
     layout.model_staging.mkdir(parents=True, exist_ok=True)
 
 
-def _preferred_bundle_revision(specification: Dict) -> str:
+def _preferred_bundle_revision(specification: dict) -> str:
     revision = str(specification.get("revision") or "")
     return revision if sam3d_ort_runtime.is_immutable_revision(revision) else "main"
 
@@ -1151,7 +1149,7 @@ def _check_bundle_storage(
         sum(int(item.bytes) for item in bundle.files if item.path not in cached_paths)
         + MODEL_DOWNLOAD_HEADROOM_BYTES
     )
-    same_volume = os.stat(runtime_disk).st_dev == os.stat(model_disk).st_dev
+    same_volume = Path(runtime_disk).stat().st_dev == Path(model_disk).stat().st_dev
     runtime_free = shutil.disk_usage(runtime_disk).free
     model_free = shutil.disk_usage(model_disk).free
     if same_volume:
@@ -1166,7 +1164,7 @@ def _download_ort_bundle(
     job: BackgroundJob,
     layout: _InstallLayout,
     variant: str,
-    specification: Dict,
+    specification: dict,
 ):
     repository = str(specification["repo"])
     revision = _preferred_bundle_revision(specification)
@@ -1307,7 +1305,7 @@ def _self_test_ort_bundle(job: BackgroundJob, bundle, requested_device: str):
 def _write_ort_install_manifest(
     layout: _InstallLayout,
     variant: str,
-    specification: Dict,
+    specification: dict,
     diagnostics,
 ) -> None:
     _atomic_json(
@@ -1684,8 +1682,7 @@ class MTP_OT_sam3d_install(_ModalJobOperator, Operator):
         settings.progress = 0.0
         settings.status = "Starting SAM 3D Body installation"
         settings.status_kind = "PROGRESS"
-        result = self._begin_modal(context, job)
-        return result
+        return self._begin_modal(context, job)
 
     def modal(self, context, event):
         scene = (

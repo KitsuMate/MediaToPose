@@ -9,9 +9,9 @@ import tempfile
 import threading
 import time
 import traceback
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Optional
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
@@ -193,7 +193,7 @@ def _set_status(settings, message: str, kind: str = "INFO") -> None:
 def _sequence_progress_percent(
     progress,
     previous: float = 0.0,
-    plan: Optional[_CaptureProgressPlan] = None,
+    plan: _CaptureProgressPlan | None = None,
 ) -> float:
     """Map local phase counters onto one monotonic video-bake progress bar."""
     total = max(int(getattr(progress, "total", 0) or 0), 1)
@@ -484,7 +484,7 @@ class _CaptureTransaction:
             )
 
 
-def _capture_job(token: Optional[OperationToken] = None):
+def _capture_job(token: OperationToken | None = None):
     token = token or COORDINATOR.active_token()
     if token is None or token.kind not in {
         OperationKind.CAPTURE,
@@ -556,7 +556,7 @@ def _begin_capture_operation(
     request: CaptureRequest,
     *,
     cached: bool,
-) -> Optional[CaptureJob]:
+) -> CaptureJob | None:
     token = COORDINATOR.acquire(
         OperationKind.CACHE_APPLY if cached else OperationKind.CAPTURE,
         f"capture:{request.mode.casefold()}",
@@ -577,7 +577,7 @@ def _remove_worker_temp_file(job) -> None:
     if not job.temp_path or not Path(job.temp_path).is_file():
         return
     try:
-        os.unlink(job.temp_path)
+        Path(job.temp_path).unlink()
     except OSError as exc:
         print(
             "[Media to Pose] Could not remove temporary capture file "
@@ -708,7 +708,7 @@ def _worker(
         os.close(file_descriptor)
         job.temp_path = temp_path
         count = 0
-        with open(temp_path, "wb") as handle:
+        with Path(temp_path).open("wb") as handle:
             for detected in provider.iter_video(
                 media_info.path, job.cancel, job.progress
             ):
@@ -740,7 +740,7 @@ def _worker(
 
 
 def _read_cache(path):
-    with open(path, "rb") as handle:
+    with Path(path).open("rb") as handle:
         while True:
             try:
                 yield pickle.load(handle)
@@ -1469,10 +1469,10 @@ class MTP_OT_apply_capture(Operator):
             if kind == "FRAME":
                 self._begin_pose(context, armature, payload)
                 return {"RUNNING_MODAL"}
-            elif kind == "FRAMES":
+            if kind == "FRAMES":
                 self._begin_sequence(context, armature, payload)
                 return {"RUNNING_MODAL"}
-            elif kind in {"CACHE", "CACHE_DIR"}:
+            if kind in {"CACHE", "CACHE_DIR"}:
                 if kind == "CACHE":
                     path, _count = payload
                     source_frames = _read_cache(path)
@@ -1481,8 +1481,7 @@ class MTP_OT_apply_capture(Operator):
                     source_frames = detection_cache.iter_directory(path)
                 self._begin_sequence(context, armature, source_frames)
                 return {"RUNNING_MODAL"}
-            else:
-                raise RuntimeError(f"Unexpected worker result: {kind}")
+            raise RuntimeError(f"Unexpected worker result: {kind}")
         except Exception as exc:
             traceback.print_exc()
             self.report({"ERROR"}, str(exc))
@@ -1544,7 +1543,7 @@ class MTP_OT_apply_capture(Operator):
                 if path.is_dir():
                     detection_cache.discard_temporary(str(path))
                 else:
-                    os.unlink(path)
+                    Path(path).unlink()
             except (OSError, ValueError):
                 print(
                     f"[Media to Pose] Could not remove temporary capture data: {path}"

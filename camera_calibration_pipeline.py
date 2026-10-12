@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Mapping
+from collections.abc import Mapping
 
 from . import anycalib_backend, camera_calibration
 from .dependency_bootstrap import import_runtime_dependencies

@@ -5,10 +5,10 @@ from __future__ import annotations
 import gc
 import math
 import threading
+from collections.abc import Iterable
 from contextlib import suppress
 from pathlib import Path
 from threading import Event
-from typing import Dict, Iterable, Optional
 
 from .. import camera_calibration, sam3d_backend, sam3d_ort_runtime
 from ..constants import HAND_LANDMARK_NAMES
@@ -115,7 +115,7 @@ def cache_fingerprint(options):
 def _load_model(
     variant: str,
     requested_device: str,
-    paths: Dict[str, str],
+    paths: dict[str, str],
     *,
     verify_accelerator_execution: bool = False,
 ):
@@ -154,7 +154,7 @@ def _load_model(
 def load_model_cache(
     variant: str,
     requested_device: str,
-    paths: Optional[Dict[str, str]] = None,
+    paths: dict[str, str] | None = None,
     *,
     verify_accelerator_execution: bool = False,
 ) -> str:
@@ -224,7 +224,7 @@ class SAM3DBodyProvider:
             int(index): self.np.asarray(matrix, dtype=float).reshape(3, 3)
             for index, matrix in self.estimator.neutral_rotations.items()
         }
-        self._previous: Optional[CanonicalFrame] = None
+        self._previous: CanonicalFrame | None = None
         self._locator_fallback_used = False
         self._locator = self._create_locator()
 
@@ -340,7 +340,7 @@ class SAM3DBodyProvider:
             valid=first.valid and second.valid,
         )
 
-    def _hand(self, points, side: str) -> Dict[str, Landmark]:
+    def _hand(self, points, side: str) -> dict[str, Landmark]:
         wrist = points[62 if side == "LEFT" else 41]
         start = 42 if side == "LEFT" else 21
         result = {"WRIST": wrist}

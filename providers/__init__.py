@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Dict
-
 from .base import ProviderDescriptor
 from .mediapipe_provider import MediaPipeProvider
 from .mediapipe_provider import dependency_status as mp_status
@@ -25,7 +23,7 @@ def _mediapipe_fingerprint(_options):
     }
 
 
-DESCRIPTORS: Dict[str, ProviderDescriptor] = {
+DESCRIPTORS: dict[str, ProviderDescriptor] = {
     "MEDIAPIPE": ProviderDescriptor(
         identifier="MEDIAPIPE",
         label="MediaPipe",

@@ -15,9 +15,9 @@ import math
 import os
 import tempfile
 import threading
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Mapping, Sequence
 
 import numpy as np
 
@@ -1137,12 +1137,11 @@ class VithSplitRunner:
             padding=1.25,
             camera_intrinsics=camera_intrinsics,
         )
-        output = (
+        return (
             self._full_hand(image, body_batch)
             if include_hands
             else self._body_only(body_batch)
         )
-        return output
 
     def close(self) -> None:
         mhr = getattr(self, "mhr", None)
@@ -1667,13 +1666,12 @@ def run_bundle(
     )
     try:
         boxes = np.asarray(bboxes_xyxy, dtype=np.float32).reshape(-1, 4)
-        output = estimator._run_output(
+        return estimator._run_output(
             image_rgb,
             boxes,
             include_hands=bool(include_hands),
             camera_intrinsics=camera_intrinsics,
         )
-        return output
     finally:
         estimator.close()
 

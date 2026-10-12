@@ -15,7 +15,6 @@ from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
-from typing import Optional
 
 import bpy
 from bpy.props import StringProperty
@@ -74,7 +73,7 @@ class _Job:
         self.status = label
         self.outcome = ""
         self.error = ""
-        self.thread: Optional[threading.Thread] = None
+        self.thread: threading.Thread | None = None
         self._lock = threading.RLock()
 
     def update(self, progress: float, status: str, phase: str) -> None:
@@ -115,9 +114,9 @@ class _Job:
 
 
 _STATE_LOCK = threading.RLock()
-_INSTALL_JOB: Optional[_Job] = None
-_LOAD_JOB: Optional[_Job] = None
-_SESSION: Optional[rohm_ort_runtime.RohmSession] = None
+_INSTALL_JOB: _Job | None = None
+_LOAD_JOB: _Job | None = None
+_SESSION: rohm_ort_runtime.RohmSession | None = None
 _LAST_DIAGNOSTIC = ""
 
 
@@ -161,7 +160,7 @@ def _write_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True), encoding="utf8")
-    os.replace(temporary, path)
+    Path(temporary).replace(path)
 
 
 def configured_storage_parent() -> Path:
@@ -268,7 +267,7 @@ def _download(
             and digest.hexdigest().casefold() != expected_sha256.casefold()
         ):
             raise RuntimeError(f"{destination.name} failed SHA-256 verification")
-        os.replace(partial, destination)
+        Path(partial).replace(destination)
     except Exception:
         with suppress(OSError):
             partial.unlink()
@@ -353,12 +352,12 @@ def _install_worker(
         if backup.exists():
             shutil.rmtree(backup)
         if current.exists():
-            os.replace(current, backup)
+            Path(current).replace(backup)
         try:
-            os.replace(staging, current)
+            Path(staging).replace(current)
         except Exception:
             if backup.exists() and not current.exists():
-                os.replace(backup, current)
+                Path(backup).replace(current)
             raise
         shutil.rmtree(backup, ignore_errors=True)
         _write_json(Path(storage_config_path), {"storage_parent": str(root.parent)})

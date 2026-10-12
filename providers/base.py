@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from threading import Event
-from typing import Any, Callable, Dict, FrozenSet, Iterable, Protocol, Tuple, Type
+from typing import Any, Protocol
 
 from ..models import CanonicalFrame
 
 ProgressCallback = Callable[[int, int, str], None]
-DependencyStatus = Callable[[Dict[str, Any]], Tuple[bool, str]]
-CacheFingerprint = Callable[[Dict[str, Any]], Dict[str, Any]]
+DependencyStatus = Callable[[dict[str, Any]], tuple[bool, str]]
+CacheFingerprint = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class DetectionProvider(Protocol):
@@ -39,8 +40,8 @@ class ProviderDescriptor:
     identifier: str
     label: str
     description: str
-    capabilities: FrozenSet[str]
-    provider_class: Type[DetectionProvider]
+    capabilities: frozenset[str]
+    provider_class: type[DetectionProvider]
     loading_message: str
     dependency_status: DependencyStatus
     cache_fingerprint: CacheFingerprint

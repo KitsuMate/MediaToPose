@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from collections.abc import Iterable, Sequence
+from pathlib import Path
 
 import bpy
 
@@ -153,7 +154,7 @@ def _vrm_node_bone_name(value) -> str:
     return str(name or "")
 
 
-def _vrm_assigned_bones(armature: bpy.types.Object) -> Dict[str, str]:
+def _vrm_assigned_bones(armature: bpy.types.Object) -> dict[str, str]:
     """Return normalized VRM human-bone ids mapped to Blender bone names.
 
     This uses duck typing so Media to Pose neither depends on nor imports the
@@ -163,7 +164,7 @@ def _vrm_assigned_bones(armature: bpy.types.Object) -> Dict[str, str]:
     if extension is None:
         return {}
 
-    assigned: Dict[str, str] = {}
+    assigned: dict[str, str] = {}
     vrm1 = getattr(extension, "vrm1", None)
     humanoid = getattr(vrm1, "humanoid", None)
     human_bones = getattr(humanoid, "human_bones", None)
@@ -175,7 +176,7 @@ def _vrm_assigned_bones(armature: bpy.types.Object) -> Dict[str, str]:
     return assigned
 
 
-def vrm_humanoid_mapping(armature: bpy.types.Object) -> Dict[str, str]:
+def vrm_humanoid_mapping(armature: bpy.types.Object) -> dict[str, str]:
     """Translate VRM humanoid metadata to Media to Pose semantic roles."""
     assigned = _vrm_assigned_bones(armature)
     if not assigned:
@@ -269,7 +270,7 @@ def armature_signature(armature: bpy.types.Object) -> str:
     return hashlib.sha256("\n".join(parts).encode("utf8")).hexdigest()
 
 
-def associated_meshes(armature: bpy.types.Object) -> List[bpy.types.Object]:
+def associated_meshes(armature: bpy.types.Object) -> list[bpy.types.Object]:
     meshes = []
     for obj in bpy.data.objects:
         if obj.type != "MESH":
@@ -284,8 +285,8 @@ def associated_meshes(armature: bpy.types.Object) -> List[bpy.types.Object]:
     return meshes
 
 
-def find_shape_targets(armature: bpy.types.Object) -> Dict[str, List[Tuple[str, str]]]:
-    targets: Dict[str, List[Tuple[str, str]]] = {}
+def find_shape_targets(armature: bpy.types.Object) -> dict[str, list[tuple[str, str]]]:
+    targets: dict[str, list[tuple[str, str]]] = {}
     for obj in associated_meshes(armature):
         keys = obj.data.shape_keys
         if not keys:
@@ -309,7 +310,7 @@ def shape_override_for_object(entry, object_name: str):
     )
 
 
-def resolved_shape_name(entry, object_name: str) -> Optional[str]:
+def resolved_shape_name(entry, object_name: str) -> str | None:
     """Resolve a grouped shape mapping for one mesh.
 
     An enabled override replaces the shared target name. A disabled override
@@ -356,7 +357,7 @@ def shape_scheme(name: str) -> str:
     return "NONE"
 
 
-def _facs_aliases(action_unit: str) -> Tuple[str, ...]:
+def _facs_aliases(action_unit: str) -> tuple[str, ...]:
     """Return normalized-name-compatible aliases for common AU conventions."""
     match = re.match(r"AU0*(\d+)(?:_(L|R))?$", action_unit)
     if not match:
@@ -877,7 +878,7 @@ def fk_switch_issues(
     *,
     include_arms: bool = True,
     include_legs: bool = True,
-) -> List[str]:
+) -> list[str]:
     config = armature.mtp_rig_config
     issues = []
     for chain, side, label in (
@@ -974,7 +975,7 @@ def ensure_mapping_entries(armature: bpy.types.Object) -> None:
     ensure_module_configs(config)
 
 
-def mapping_by_id(config) -> Dict[str, object]:
+def mapping_by_id(config) -> dict[str, object]:
     return {entry.semantic_id: entry for entry in config.mappings}
 
 
@@ -1168,7 +1169,7 @@ def _bone_name_side(name: str) -> str:
     return "LEFT" if left else "RIGHT"
 
 
-def _generic_torso_mapping(armature) -> Dict[str, str]:
+def _generic_torso_mapping(armature) -> dict[str, str]:
     """Distribute the centerline spine/chest chain over torso semantics."""
     torso_bones = [
         pose_bone
@@ -1213,9 +1214,9 @@ def _best_generic_bone(
     armature,
     semantic_id: str,
     *,
-    mapped: Optional[Dict[str, str]] = None,
-    excluded: Optional[set] = None,
-) -> Tuple[str, float]:
+    mapped: dict[str, str] | None = None,
+    excluded: set | None = None,
+) -> tuple[str, float]:
     raw_aliases = GENERIC_ALIASES.get(semantic_id, ())
     if not raw_aliases:
         return "", 0.0
@@ -1287,9 +1288,9 @@ def _best_generic_bone(
 
 def _generic_structural_body_mapping(
     armature,
-    mapped: Dict[str, str],
+    mapped: dict[str, str],
     excluded: set,
-) -> Dict[str, Tuple[str, float]]:
+) -> dict[str, tuple[str, float]]:
     """Complete unnamed limb joints from already recognized child chains.
 
     Generic exporters often preserve humanoid parentage while adding an
@@ -1298,7 +1299,7 @@ def _generic_structural_body_mapping(
     toward the torso. It never crosses an already mapped anatomical joint or
     selects common generated-rig mechanism bones.
     """
-    suggestions: Dict[str, Tuple[str, float]] = {}
+    suggestions: dict[str, tuple[str, float]] = {}
     chains = (
         ("SHOULDER_L", "UPPER_ARM_L", ("CHEST", "SPINE_02", "SPINE_01")),
         ("UPPER_ARM_L", "LOWER_ARM_L", ("SHOULDER_L", "CHEST")),
@@ -1346,7 +1347,7 @@ def _generic_structural_body_mapping(
     return suggestions
 
 
-def _finger_candidates(profile: str, finger: str, segment: int, side: str) -> List[str]:
+def _finger_candidates(profile: str, finger: str, segment: int, side: str) -> list[str]:
     lower = side.lower()
     upper = side.upper()
     finger_lower = finger.lower()
@@ -1726,7 +1727,7 @@ def validate_mapping(
     armature: bpy.types.Object,
     *,
     settings=None,
-) -> Tuple[int, int, int]:
+) -> tuple[int, int, int]:
     config = armature.mtp_rig_config
     ensure_mapping_entries(armature)
     if settings is None:
@@ -1742,7 +1743,7 @@ def validate_mapping(
         )
     bone_names = set(armature.pose.bones.keys())
     associated = {obj.name: obj for obj in associated_meshes(armature)}
-    used: Dict[Tuple[str, ...], List[object]] = {}
+    used: dict[tuple[str, ...], list[object]] = {}
     errors = warnings = information = valid = 0
 
     section_counts = {
@@ -2101,7 +2102,7 @@ def load_config(armature: bpy.types.Object, payload: dict) -> None:
 
 
 def copy_section(
-    source: bpy.types.Object, target: bpy.types.Object, section: Optional[str] = None
+    source: bpy.types.Object, target: bpy.types.Object, section: str | None = None
 ) -> None:
     ensure_mapping_entries(source)
     ensure_mapping_entries(target)
@@ -2164,10 +2165,10 @@ def copy_section(
 
 
 def save_json(filepath: str, armature: bpy.types.Object) -> None:
-    with open(filepath, "w", encoding="utf8") as handle:
+    with Path(filepath).open("w", encoding="utf8") as handle:
         json.dump(serialize_config(armature), handle, indent=2, ensure_ascii=False)
 
 
 def load_json(filepath: str, armature: bpy.types.Object) -> None:
-    with open(filepath, "r", encoding="utf8") as handle:
+    with Path(filepath).open(encoding="utf8") as handle:
         load_config(armature, json.load(handle))

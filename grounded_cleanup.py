@@ -9,9 +9,9 @@ must remain planted.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from statistics import median
-from typing import Dict, Iterator, List, Sequence, Tuple
 
 from mathutils import Quaternion, Vector
 
@@ -34,10 +34,10 @@ class ContactPoint:
 class GroundFrame:
     timestamp: float
     root: Vector
-    points: Dict[str, ContactPoint] = field(default_factory=dict)
-    joints: Dict[str, Vector] = field(default_factory=dict)
-    orientations: Dict[str, Quaternion] = field(default_factory=dict)
-    joint_confidence: Dict[str, float] = field(default_factory=dict)
+    points: dict[str, ContactPoint] = field(default_factory=dict)
+    joints: dict[str, Vector] = field(default_factory=dict)
+    orientations: dict[str, Quaternion] = field(default_factory=dict)
+    joint_confidence: dict[str, float] = field(default_factory=dict)
     root_confidence: float = 0.0
 
 
@@ -47,16 +47,16 @@ class ContactSegment:
     start: int
     end: int
     anchor: Vector
-    weights: List[float]
+    weights: list[float]
 
 
 @dataclass
 class GroundingResult:
-    roots: List[Vector]
-    contacts: Dict[str, List[float]]
-    segments: List[ContactSegment]
+    roots: list[Vector]
+    contacts: dict[str, list[float]]
+    segments: list[ContactSegment]
     ground_height: float
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 def _project_horizontal(value: Vector, up: Vector) -> Vector:
@@ -75,7 +75,7 @@ def _percentile(values: Sequence[float], fraction: float) -> float:
     return ordered[lo] + (ordered[hi] - ordered[lo]) * (at - lo)
 
 
-def _bridge_and_prune(states: List[bool]) -> List[bool]:
+def _bridge_and_prune(states: list[bool]) -> list[bool]:
     result = states[:]
     index = 0
     while index < len(result):
@@ -104,7 +104,7 @@ def detect_contacts(
     frames: Sequence[GroundFrame],
     body_height: float,
     up: Vector,
-) -> Tuple[Dict[str, List[float]], float]:
+) -> tuple[dict[str, list[float]], float]:
     up = up.normalized()
     names = sorted({name for frame in frames for name in frame.points})
     low_samples = [
@@ -115,7 +115,7 @@ def detect_contacts(
     ]
     ground = _percentile(low_samples, 0.08)
     height = max(body_height, 1.0e-6)
-    contacts: Dict[str, List[float]] = {}
+    contacts: dict[str, list[float]] = {}
     for name in names:
         raw = [False] * len(frames)
         scores = [0.0] * len(frames)
@@ -210,11 +210,11 @@ def detect_contacts(
 
 def build_segments(
     frames: Sequence[GroundFrame],
-    contacts: Dict[str, List[float]],
+    contacts: dict[str, list[float]],
     ground_height: float | None = None,
     up: Vector | None = None,
-) -> List[ContactSegment]:
-    segments: List[ContactSegment] = []
+) -> list[ContactSegment]:
+    segments: list[ContactSegment] = []
     for name, weights in contacts.items():
         index = 0
         while index < len(weights):
@@ -244,14 +244,14 @@ def _smoothstep(value: float) -> float:
 
 def stabilize_root(
     frames: Sequence[GroundFrame],
-    contacts: Dict[str, List[float]],
+    contacts: dict[str, list[float]],
     segments: Sequence[ContactSegment],
     body_height: float,
     up: Vector,
     strength: float,
     *,
     iterations: int = 10,
-) -> Iterator[Tuple[int, List[Vector]]]:
+) -> Iterator[tuple[int, list[Vector]]]:
     """IRLS banded relaxation for root observations and plant constraints."""
     if not frames:
         return
@@ -260,7 +260,7 @@ def stabilize_root(
     timestamps = [frame.timestamp for frame in frames]
     confidence = [frame.root_confidence for frame in frames]
     roots = [value.copy() for value in raw]
-    contact_targets: List[List[Tuple[Vector, float]]] = [[] for _ in frames]
+    contact_targets: list[list[tuple[Vector, float]]] = [[] for _ in frames]
     for segment in segments:
         duration = max(
             timestamps[segment.end] - timestamps[segment.start],

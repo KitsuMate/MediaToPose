@@ -15,11 +15,11 @@ import shutil
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Tuple
 
 import bpy
 
@@ -41,7 +41,7 @@ CAMERA_MOTION_DIRECTORY = "camera_motion"
 MANIFEST_NAME = "manifest.json"
 _LOCK = threading.RLock()
 _UI_STATE_TTL_SECONDS = 0.5
-_UI_STATE_CACHE: Dict[Tuple, Tuple[float, "MediaSourceState", "CacheStatus"]] = {}
+_UI_STATE_CACHE: dict[tuple, tuple[float, MediaSourceState, CacheStatus]] = {}
 IMAGE_EXTENSIONS = {
     ".bmp",
     ".exr",
@@ -80,7 +80,7 @@ class MediaSourceState:
     state: str = "EMPTY"
     display_path: str = ""
     analysis_path: str = ""
-    source_media: Optional[Dict] = None
+    source_media: dict | None = None
     cache_key: str = ""
     cache_matches: bool = False
     message: str = "Choose an image or video"
@@ -135,7 +135,7 @@ def existing_media_path(value: str) -> str:
     return str(resolved) if resolved.is_file() else ""
 
 
-def _source_media(path: str) -> Dict:
+def _source_media(path: str) -> dict:
     resolved = Path(path).expanduser().resolve()
     stat = resolved.stat()
     return {
@@ -145,7 +145,7 @@ def _source_media(path: str) -> Dict:
     }
 
 
-def _stored_source_media(settings) -> Optional[Dict]:
+def _stored_source_media(settings) -> dict | None:
     try:
         value = json.loads(str(getattr(settings, "media_identity_json", "") or ""))
     except (TypeError, ValueError, json.JSONDecodeError):
@@ -168,7 +168,7 @@ def _stored_source_media(settings) -> Optional[Dict]:
         return None
 
 
-def _managed_source() -> Tuple[Optional[Dict], str]:
+def _managed_source() -> tuple[dict | None, str]:
     directory = managed_source_directory(create_root=False)
     try:
         manifest = json.loads((directory / MANIFEST_NAME).read_text(encoding="utf8"))
@@ -186,7 +186,7 @@ def _managed_source() -> Tuple[Optional[Dict], str]:
         return None, ""
 
 
-def _same_source(left: Optional[Dict], right: Optional[Dict]) -> bool:
+def _same_source(left: dict | None, right: dict | None) -> bool:
     if not left or not right:
         return False
     try:
@@ -232,12 +232,12 @@ def retain_still_source(settings, path: str) -> bool:
             if previous.exists():
                 _safe_remove(previous)
             if active.exists():
-                os.replace(active, previous)
+                Path(active).replace(previous)
             try:
-                os.replace(staging, active)
+                Path(staging).replace(active)
             except OSError:
                 if previous.exists() and not active.exists():
-                    os.replace(previous, active)
+                    Path(previous).replace(active)
                 raise
             if previous.exists():
                 _safe_remove(previous)
@@ -330,7 +330,7 @@ def resolve_media_source(settings) -> MediaSourceState:
     )
 
 
-def _ui_state_key(settings) -> Tuple:
+def _ui_state_key(settings) -> tuple:
     return (
         str(getattr(settings, "media_path", "") or ""),
         str(getattr(settings, "media_identity_json", "") or ""),
@@ -351,7 +351,7 @@ def invalidate_ui_state() -> None:
         _UI_STATE_CACHE.clear()
 
 
-def ui_state_for_settings(settings) -> Tuple[MediaSourceState, CacheStatus]:
+def ui_state_for_settings(settings) -> tuple[MediaSourceState, CacheStatus]:
     """Share bounded filesystem work between panels during redraw bursts."""
     key = _ui_state_key(settings)
     now = time.monotonic()
@@ -429,7 +429,7 @@ def discard_temporary(path: str) -> None:
         _safe_remove(candidate)
 
 
-def _atomic_json(path: Path, value: Dict) -> None:
+def _atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     file_descriptor, temporary = tempfile.mkstemp(
         prefix=f".{path.name}.",
@@ -443,14 +443,14 @@ def _atomic_json(path: Path, value: Dict) -> None:
             encoding="utf8",
         ) as handle:
             json.dump(value, handle, indent=2, sort_keys=True)
-        os.replace(temporary, path)
+        Path(temporary).replace(path)
     except (OSError, TypeError, ValueError):
         with suppress(OSError):
-            os.unlink(temporary)
+            Path(temporary).unlink()
         raise
 
 
-def _read_manifest(directory: Optional[Path] = None) -> Optional[Dict]:
+def _read_manifest(directory: Path | None = None) -> dict | None:
     path = (directory or current_directory(create_root=False)) / MANIFEST_NAME
     try:
         value = json.loads(path.read_text(encoding="utf8"))
@@ -475,7 +475,7 @@ def _path_size(path: Path) -> int:
 
 
 @lru_cache(maxsize=4)
-def _model_identity(model_directory: str) -> Tuple[Tuple[str, int, int], ...]:
+def _model_identity(model_directory: str) -> tuple[tuple[str, int, int], ...]:
     directory = Path(model_directory)
     result = []
     try:
@@ -491,8 +491,8 @@ def _model_identity(model_directory: str) -> Tuple[Tuple[str, int, int], ...]:
 def cache_identity(
     path: str,
     provider_id: str,
-    options: Dict,
-) -> Tuple[str, Dict]:
+    options: dict,
+) -> tuple[str, dict]:
     return cache_identity_from_media(
         _source_media(path),
         provider_id,
@@ -501,10 +501,10 @@ def cache_identity(
 
 
 def cache_identity_from_media(
-    media: Dict,
+    media: dict,
     provider_id: str,
-    options: Dict,
-) -> Tuple[str, Dict]:
+    options: dict,
+) -> tuple[str, dict]:
     from .providers import descriptor
 
     provider = descriptor(provider_id)
@@ -548,7 +548,7 @@ def cache_identity_from_media(
     return hashlib.sha256(encoded).hexdigest(), source
 
 
-def options_from_settings(settings) -> Dict:
+def options_from_settings(settings) -> dict:
     options = {
         "model_directory": str(Path(__file__).parent / "assets" / "models"),
         "use_body": bool(settings.use_body),
@@ -593,7 +593,7 @@ def options_from_settings(settings) -> Dict:
     return options
 
 
-def _identity_options_from_settings(settings) -> Dict:
+def _identity_options_from_settings(settings) -> dict:
     """Return only values that contribute to a detection-cache identity."""
     options = {
         "model_directory": str(Path(__file__).parent / "assets" / "models"),
@@ -637,8 +637,8 @@ def _identity_options_from_settings(settings) -> Dict:
 def identity_from_settings(
     settings,
     *,
-    media_source: Optional[MediaSourceState] = None,
-) -> Optional[Tuple[str, Dict]]:
+    media_source: MediaSourceState | None = None,
+) -> tuple[str, dict] | None:
     source = media_source or resolve_media_source(settings)
     if not source.source_media:
         return None
@@ -652,7 +652,7 @@ def identity_from_settings(
         return None
 
 
-def _configuration_label(identity: Dict) -> str:
+def _configuration_label(identity: dict) -> str:
     capture = identity.get("capture", {})
     enabled = [
         label
@@ -669,7 +669,7 @@ def _configuration_label(identity: Dict) -> str:
 def status_for_settings(
     settings,
     *,
-    media_source: Optional[MediaSourceState] = None,
+    media_source: MediaSourceState | None = None,
 ) -> CacheStatus:
     identity = identity_from_settings(settings, media_source=media_source)
     if identity is None:
@@ -693,7 +693,7 @@ def media_info_from_status(status: CacheStatus) -> MediaInfo:
     )
 
 
-def _status_from_manifest(manifest: Dict, *, matches: bool) -> CacheStatus:
+def _status_from_manifest(manifest: dict, *, matches: bool) -> CacheStatus:
     media = manifest.get("media_info", {})
     mode = manifest.get("mode", "POINTS")
     cached = (
@@ -721,7 +721,7 @@ def _status_from_manifest(manifest: Dict, *, matches: bool) -> CacheStatus:
     )
 
 
-def _media_dict(media_info: MediaInfo) -> Dict:
+def _media_dict(media_info: MediaInfo) -> dict:
     return {
         "path": media_info.path,
         "kind": media_info.kind,
@@ -753,7 +753,7 @@ def _compact_frame(frame: CanonicalFrame) -> CanonicalFrame:
     )
 
 
-def _landmark_to_plain(value: Landmark) -> Tuple:
+def _landmark_to_plain(value: Landmark) -> tuple:
     return (
         tuple(float(item) for item in value.position),
         tuple(float(item) for item in value.image),
@@ -762,7 +762,7 @@ def _landmark_to_plain(value: Landmark) -> Tuple:
     )
 
 
-def _landmark_from_plain(value: Tuple) -> Landmark:
+def _landmark_from_plain(value: tuple) -> Landmark:
     return Landmark(
         position=tuple(value[0]),
         image=tuple(value[1]),
@@ -771,7 +771,7 @@ def _landmark_from_plain(value: Tuple) -> Landmark:
     )
 
 
-def _frame_to_plain(frame: CanonicalFrame) -> Dict:
+def _frame_to_plain(frame: CanonicalFrame) -> dict:
     compact = _compact_frame(frame)
     return {
         "timestamp_ms": compact.timestamp_ms,
@@ -834,7 +834,7 @@ def _frame_to_plain(frame: CanonicalFrame) -> Dict:
     }
 
 
-def _frame_from_plain(value: Dict) -> CanonicalFrame:
+def _frame_from_plain(value: dict) -> CanonicalFrame:
     root_value = value.get("root_motion")
     camera_value = value.get("camera")
     return CanonicalFrame(
@@ -910,7 +910,7 @@ def _numpy():
     return importlib.import_module("numpy")
 
 
-def _write_chunk(path: Path, frames: List[CanonicalFrame]) -> None:
+def _write_chunk(path: Path, frames: list[CanonicalFrame]) -> None:
     np = _numpy()
     blobs = [
         json.dumps(
@@ -928,10 +928,10 @@ def _write_chunk(path: Path, frames: List[CanonicalFrame]) -> None:
     temporary = path.with_name(f".{path.name}.tmp")
     with temporary.open("wb") as handle:
         np.savez_compressed(handle, payload=payload, offsets=indices)
-    os.replace(temporary, path)
+    Path(temporary).replace(path)
 
 
-def _read_chunk(path: Path) -> List[CanonicalFrame]:
+def _read_chunk(path: Path) -> list[CanonicalFrame]:
     np = _numpy()
     with np.load(str(path), allow_pickle=False) as archive:
         payload = archive["payload"]
@@ -957,12 +957,12 @@ def _promote(staging: Path) -> None:
         if previous.exists():
             _safe_remove(previous)
         if current.exists():
-            os.replace(current, previous)
+            Path(current).replace(previous)
         try:
-            os.replace(staging, current)
+            Path(staging).replace(current)
         except OSError:
             if previous.exists() and not current.exists():
-                os.replace(previous, current)
+                Path(previous).replace(current)
             raise
         if previous.exists():
             _safe_remove(previous)
@@ -973,7 +973,7 @@ class SequenceWriter:
     def __init__(
         self,
         key: str,
-        identity: Dict,
+        identity: dict,
         media_info: MediaInfo,
         limit_bytes: int,
     ):
@@ -986,8 +986,8 @@ class SequenceWriter:
         self.retained_source_bytes = _path_size(
             managed_source_directory(create_root=False)
         )
-        self.buffer: List[CanonicalFrame] = []
-        self.chunks: List[Dict] = []
+        self.buffer: list[CanonicalFrame] = []
+        self.chunks: list[dict] = []
         self.count = 0
         self.written_bytes = 0
         self.overflow = bool(
@@ -1019,7 +1019,7 @@ class SequenceWriter:
         ):
             self.overflow = True
 
-    def finish(self) -> Tuple[Path, bool]:
+    def finish(self) -> tuple[Path, bool]:
         self._flush()
         if self.count == 0:
             self.discard()
@@ -1049,7 +1049,7 @@ class SequenceWriter:
 
 def store_point(
     key: str,
-    identity: Dict,
+    identity: dict,
     media_info: MediaInfo,
     source_index: int,
     frame: CanonicalFrame,
@@ -1103,7 +1103,7 @@ def store_point(
         invalidate_ui_state()
 
 
-def load_frame(key: str, source_index: int) -> Optional[CanonicalFrame]:
+def load_frame(key: str, source_index: int) -> CanonicalFrame | None:
     directory = current_directory(create_root=False)
     manifest = _read_manifest(directory)
     if not manifest or manifest.get("key") != key:
@@ -1132,7 +1132,7 @@ def load_frame(key: str, source_index: int) -> Optional[CanonicalFrame]:
         return None
 
 
-def iter_frames(key: str) -> Optional[Iterator[CanonicalFrame]]:
+def iter_frames(key: str) -> Iterator[CanonicalFrame] | None:
     directory = current_directory(create_root=False)
     manifest = _read_manifest(directory)
     if (

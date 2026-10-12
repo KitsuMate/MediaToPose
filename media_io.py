@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Tuple
 
 from .dependency_bootstrap import import_runtime_dependencies
 from .models import MediaInfo
@@ -43,7 +43,7 @@ def iter_video_frames(
     path: str,
     cancel_event,
     cv2,
-) -> Iterable[Tuple[int, int, int, object]]:
+) -> Iterable[tuple[int, int, int, object]]:
     """Yield index, monotonic timestamp, total count, and decoded BGR frame."""
     capture = cv2.VideoCapture(path)
     try:

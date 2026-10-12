@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 from . import detection_cache, mapping, sam3d_backend
 from .providers import descriptor
@@ -16,7 +15,7 @@ class CaptureReadiness:
     provider_ready: bool
     provider_issue: str
     enabled_scope: bool
-    mapping_issues: Tuple[str, ...]
+    mapping_issues: tuple[str, ...]
     media_source: detection_cache.MediaSourceState
 
 
@@ -28,7 +27,7 @@ def enabled_capture_scope(settings, capabilities) -> bool:
     )
 
 
-def mapping_scope_issues(armature, settings) -> Tuple[str, ...]:
+def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
     """Return current mapping blockers without mutating mapping status."""
     config = armature.mtp_rig_config
     if not config.mappings:

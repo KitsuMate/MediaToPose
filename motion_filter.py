@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import copy
 import math
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from statistics import median
-from typing import Iterable, Sequence
 
 from .rohm_correction import SMPLX_SEMANTICS
 

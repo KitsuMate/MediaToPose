@@ -9,7 +9,6 @@ import threading
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
 
 import bpy
 import bpy.utils.previews
@@ -41,7 +40,7 @@ _PREVIEW_MEDIA_KIND = ""
 _PREVIEW_FRAME_COUNT = 0
 _PREVIEW_COLLECTION = None
 _PREVIEW_ITEM = None
-_WORKER_THREAD: Optional[threading.Thread] = None
+_WORKER_THREAD: threading.Thread | None = None
 _STOP_WORKER = threading.Event()
 
 
@@ -61,7 +60,7 @@ class _PreviewResult:
     media_path: str
     source_index: int = -1
     timestamp_ms: int = 0
-    encoded: Optional[bytes] = None
+    encoded: bytes | None = None
     error: str = ""
     has_overlay: bool = False
     media_kind: str = ""
@@ -166,7 +165,7 @@ FACE_CONTOURS = (
 )
 
 
-def _point(landmark, width: int, height: int) -> Tuple[int, int]:
+def _point(landmark, width: int, height: int) -> tuple[int, int]:
     return (
         int(round(float(landmark.image[0]) * width)),
         int(round(float(landmark.image[1]) * height)),
@@ -383,12 +382,12 @@ def _begin_refresh():
     settings = getattr(scene, "mtp_settings", None) if scene else None
     if not settings:
         _PREVIEW_LOADING = False
-        return None
+        return
     source, status = detection_cache.ui_state_for_settings(settings)
     if not source.analysis_path:
         clear_preview()
         _PREVIEW_LOADING = False
-        return None
+        return
     key = status.key if status.matches and status.cached_frames else ""
     request = _PreviewRequest(
         generation=_REQUEST_VERSION,
@@ -405,7 +404,7 @@ def _begin_refresh():
             _poll_results
         )
         bpy.app.timers.register(_poll_results, first_interval=0.05)
-    return None
+    return
 
 
 def _poll_results():
@@ -479,13 +478,13 @@ def _poll_results():
     return None
 
 
-def get_preview_icon(key: Optional[str] = None):
+def get_preview_icon(key: str | None = None):
     if key is not None and key != _PREVIEW_KEY:
         return None
     return _PREVIEW_ITEM
 
 
-def preview_state(key: Optional[str] = None) -> Tuple[int, int, str]:
+def preview_state(key: str | None = None) -> tuple[int, int, str]:
     if key is not None and key != _PREVIEW_KEY:
         return -1, 0, ""
     return _PREVIEW_FRAME, _PREVIEW_TIMESTAMP_MS, _PREVIEW_ERROR
