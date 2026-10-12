@@ -128,7 +128,8 @@ current action, so versions sit side by side. Keep the best one with
 rig = api.describe_rig("Face")
 print(rig["completeness"]["arkit"], rig["shape_keys"], rig["face_bones"])
 result = api.capture("face.mp4", "Face", parts={"face"}, face_output="ARKIT")
-print(result.face_output_warning)
+print(result.face_output_warning, result.face["unmapped_expressions"])
+api.render_comparison("face.png", "Face", result=result, face=True)
 ```
 
 Use `face_output="ARKIT"` or `"FACS"` when the meshes have matching shape
@@ -228,7 +229,11 @@ context. `worst_frames` holds up to five timeline frames per problem.
 `{"MODULE_ID": {"setting": value}}`.
 
 Other introspection: `api.describe_rig(armature)` (mapping coverage per
-section, unmapped targets, detected profile, shape keys, face bones),
+section, unmapped targets, detected profile, shape keys per mesh and scheme,
+face bones, and a `face` block: mapped and unmapped expressions per scheme,
+the bone controls with their channel and axis, each eye bone with the bone
+that aims at it and its rest direction, and `face_scale`, the eye distance
+that sizes bone travel),
 `api.auto_map(armature)`, `api.list_providers()` and `api.model_status()`
 (optional model install state and download sizes).
 
@@ -248,7 +253,7 @@ the JSON document and `--save` to save the .blend afterwards.
 | `postprocessors [--armature A]` | `api.list_postprocessors` |
 | `providers`, `models` | `api.list_providers`, `api.model_status` |
 | `export-detections PATH`, `import-detections PATH` | `api.export_detections`, `api.import_detections` |
-| `render --armature A --result FILE --out PNG [--frames 10,20] [--count N] [--size PX] [--no-meshes]` | `api.render_comparison` |
+| `render --armature A --result FILE --out PNG [--frames 10,20] [--count N] [--size PX] [--no-meshes] [--face]` | `api.render_comparison` |
 
 ## Errors and exit codes
 

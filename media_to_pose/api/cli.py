@@ -184,6 +184,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--count", type=int, default=6)
     sub.add_argument("--size", type=int, default=384)
     sub.add_argument("--no-meshes", action="store_true", help="skip mesh rendering")
+    sub.add_argument(
+        "--face", action="store_true", help="face close-ups with an expression chart"
+    )
     _common(sub)
     return parser
 
@@ -261,6 +264,7 @@ def run(args) -> Any:
             count=args.count,
             size=args.size,
             render_meshes=not args.no_meshes,
+            face=args.face,
         )
     else:  # argparse rejects unknown commands first
         raise InvalidRequest(f"Unknown command {command}")

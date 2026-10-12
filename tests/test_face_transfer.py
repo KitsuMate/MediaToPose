@@ -7,7 +7,9 @@ so the numbers below encode what the visual review of the fixture showed.
 from __future__ import annotations
 
 import math
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 import bpy
@@ -71,6 +73,22 @@ class FaceTransferTests(unittest.TestCase):
         self.assertEqual(described["detected_profile"], "AUTO_RIG_PRO")
         face = described["sections"]["FACE_RIG"]
         self.assertEqual(face["mapped"], face["enabled"])
+
+    def test_describe_rig_face_block(self) -> None:
+        described = self.addon.api.describe_rig(self.rig.name)
+        face = described["face"]
+        # The FaceFX mesh has every ARKit key except a lower lip shrug.
+        self.assertEqual(face["expressions"]["ARKIT"]["unmapped"], ["mouthShrugLower"])
+        self.assertEqual(len(face["expressions"]["ARKIT"]["mapped"]), 50)
+        self.assertEqual(face["controls"]["FACE_LID_L"]["channel"], "LOCATION")
+        self.assertEqual(face["unmapped_controls"], [])
+        eye = face["eyes"]["EYE_L"]
+        self.assertTrue(eye["look_at_target"])
+        self.assertEqual(eye["tracked_by"], "c_eye.l")
+        self.assertAlmostEqual(face["face_scale"], 0.0591, delta=0.002)
+        self.assertGreater(
+            described["shape_keys"]["FaceFX"]["keys_per_scheme"]["ARKIT"], 50
+        )
 
     def test_face_completeness_is_null_when_face_capture_is_off(self) -> None:
         settings = bpy.context.scene.mtp_settings
@@ -436,6 +454,33 @@ class FaceCaptureResultTests(unittest.TestCase):
         )
         self.assertIn("mouthSmileRight", result.face["unmapped_expressions"])
         self.assertNotIn("mouthSmileRight", result.face["expressions"])
+
+    def test_face_comparison_sheet_has_source_rig_and_chart(self) -> None:
+        result = self.addon.api.capture(
+            str(fixture_path("face_surprise")),
+            self.rig.name,
+            parts={"face"},
+            face_output="ARKIT",
+            keep_cache=True,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            written = self.addon.api.render_comparison(
+                str(Path(temporary) / "face.png"),
+                self.rig.name,
+                result=result,
+                face=True,
+                size=128,
+            )
+            image = bpy.data.images.load(written["path"])
+            try:
+                self.assertEqual(tuple(image.size), (3 * 128, 128))
+            finally:
+                bpy.data.images.remove(image)
+        without_face = result.to_dict() | {"face": {}}
+        with self.assertRaises(self.addon.core.errors.InvalidRequest):
+            self.addon.api.render_comparison(
+                "unused.png", self.rig.name, result=without_face, face=True
+            )
 
 
 if __name__ == "__main__":

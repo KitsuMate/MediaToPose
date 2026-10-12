@@ -133,12 +133,16 @@ def render_comparison(
     count: int = 6,
     size: int = 384,
     render_meshes: bool = True,
+    face: bool = False,
     scene=None,
 ) -> dict[str, Any]:
     """Write a PNG contact sheet comparing source, detections and the rig.
 
     ``frames`` are timeline frames from the capture; by default ``count``
-    frames are spread evenly over it. Returns the path and the frames used.
+    frames are spread evenly over it. ``face=True`` renders face close-ups
+    with a chart of the strongest expressions, detected and on the rig; it
+    needs a result that captured the face. Returns the path and the frames
+    used.
     """
     target = resolve_armature(armature)
     context = scene_context(scene)
@@ -164,6 +168,13 @@ def render_comparison(
         raise InvalidRequest(
             f"Frames {missing} were not keyed by this capture", parameter="frames"
         )
+    face_output = None
+    if face:
+        face_output = data.get("face", {}).get("output")
+        if not face_output:
+            raise InvalidRequest(
+                "face=True needs a result that captured the face", parameter="face"
+            )
     detections = _detections(data)
     rows = [
         (
@@ -187,6 +198,7 @@ def render_comparison(
         mirror=bool(media.get("mirror", False)),
         size=int(size),
         render_still=_render_still if render_meshes else None,
+        face_output=face_output,
     )
     return {"path": str(written), "frames": list(frames)}
 
