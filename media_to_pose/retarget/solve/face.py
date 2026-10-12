@@ -78,13 +78,15 @@ def facs_values(blendshapes: dict[str, float]) -> dict[str, float]:
             "AU18": get("mouthPucker"),
             "AU22": get("mouthFunnel"),
             "AU24": max(left_press, right_press),
-            "AU25": jaw_open,
-            "AU26": jaw_open,
-            "AU27": max(
+            # AU25 lips part (also with the jaw closed), AU26 jaw drop, AU27
+            # mouth stretched wide open: only the far end of jawOpen.
+            "AU25": max(
                 jaw_open,
-                get("mouthStretchLeft"),
-                get("mouthStretchRight"),
+                (get("mouthUpperUpLeft") + get("mouthUpperUpRight")) / 2.0,
+                (get("mouthLowerDownLeft") + get("mouthLowerDownRight")) / 2.0,
             ),
+            "AU26": jaw_open,
+            "AU27": min(max((jaw_open - 0.6) / 0.4, 0.0), 1.0),
             "AU28": max(get("mouthRollUpper"), get("mouthRollLower")),
         }
     )

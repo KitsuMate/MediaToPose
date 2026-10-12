@@ -117,6 +117,17 @@ class FaceTransferTests(unittest.TestCase):
                 )
             )
 
+    def test_facs_jaw_action_units_follow_their_definitions(self) -> None:
+        facs = self.face.facs_values
+        parted = facs({"mouthLowerDownLeft": 0.8, "mouthLowerDownRight": 0.8})
+        self.assertAlmostEqual(parted["AU25"], 0.8)
+        self.assertEqual(parted["AU26"], 0.0)
+        half = facs({"jawOpen": 0.5})
+        self.assertEqual((half["AU26"], half["AU27"]), (0.5, 0.0))
+        wide = facs({"jawOpen": 1.0, "mouthStretchLeft": 1.0})
+        self.assertEqual(wide["AU27"], 1.0)
+        self.assertEqual(facs({"mouthStretchLeft": 1.0})["AU27"], 0.0)
+
     def test_face_frame_measures_the_eyes_not_their_targets(self) -> None:
         frame = self.face.face_frame(self.rig, self.entries)
         self.assertAlmostEqual(frame.scale, 0.0591, delta=0.002)
