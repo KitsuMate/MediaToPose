@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "media_to_pose"
-version = "0.1.0"
+version = "0.2.0"
 name = "Media to Pose"
 tagline = "Retarget body, hand, and facial motion from images and videos"
 maintainer = "Media to Pose contributors"
