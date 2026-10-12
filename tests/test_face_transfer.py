@@ -1,0 +1,155 @@
+"""Face transfer onto the FaceFX fixture: shape keys, face bones and gaze.
+
+Each test applies synthetic blendshape coefficients and checks what moved,
+so the numbers below encode what the visual review of the fixture showed.
+"""
+
+from __future__ import annotations
+
+import math
+import unittest
+from types import SimpleNamespace
+
+import bpy
+
+from tests.blender_test_support import fixture_path, register_addon, scene_context
+
+
+class FaceTransferTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.addon = register_addon()
+        bpy.ops.wm.open_mainfile(filepath=str(fixture_path("facefx_face_rig")))
+        cls.addon.register()
+        settings = bpy.context.scene.mtp_settings
+        settings.use_face = True
+        settings.use_body = False
+        settings.use_hands = False
+        cls.rig = bpy.data.objects["FaceFX.Rig"]
+        settings.target_armature = cls.rig
+        cls.addon.api.auto_map(cls.rig.name)
+        cls.entries = cls.addon.rig.mapping.mapping_by_id(cls.rig.mtp_rig_config)
+        cls.face = cls.addon.retarget.solve.face
+        cls.meshes = [
+            obj
+            for obj in bpy.data.objects
+            if obj.type == "MESH" and obj.data.shape_keys is not None
+        ]
+
+    def setUp(self) -> None:
+        for obj in self.meshes:
+            for block in obj.data.shape_keys.key_blocks:
+                block.value = 0.0
+        for bone in self.rig.pose.bones:
+            bone.matrix_basis.identity()
+        bpy.context.view_layer.update()
+
+    def _apply(self, blendshapes: dict[str, float], face_output: str) -> None:
+        frame = self.addon.core.types.CanonicalFrame(
+            timestamp_ms=0, blendshapes=dict(blendshapes)
+        )
+        settings = SimpleNamespace(
+            provider="MEDIAPIPE",
+            use_body=False,
+            use_hands=False,
+            use_face=True,
+            face_output=face_output,
+        )
+        self.addon.retarget.apply_frame(
+            self.rig, frame, settings, post_process=False, scene_context=scene_context()
+        )
+        bpy.context.view_layer.update()
+
+    def _world_offset(self, bone_name: str):
+        bone = self.rig.pose.bones[bone_name]
+        return self.rig.matrix_world.to_3x3() @ (
+            bone.matrix.translation - bone.bone.matrix_local.translation
+        )
+
+    def test_detected_as_auto_rig_pro_with_every_face_control(self) -> None:
+        described = self.addon.api.describe_rig(self.rig.name)
+        self.assertEqual(described["detected_profile"], "AUTO_RIG_PRO")
+        face = described["sections"]["FACE_RIG"]
+        self.assertEqual(face["mapped"], face["enabled"])
+
+    def test_prefixed_arkit_names_and_correctives(self) -> None:
+        scheme = self.addon.rig.face_schemes.shape_scheme
+        self.assertEqual(scheme("facs_bs_EyeBlinkLeft"), "ARKIT")
+        self.assertEqual(scheme("arkit_EyeBlinkLeft"), "ARKIT")
+        self.assertEqual(scheme("facs_ctrl_MouthPucker"), "ARKIT")
+        self.assertEqual(scheme("facs_cbs_EyeFullCompressionLeft"), "NONE")
+        self.assertEqual(scheme("facs_ctrl_vAA"), "NONE")
+        self.assertEqual(scheme("AU12_L"), "FACS")
+
+    def test_blink_drives_one_key_on_every_mesh_that_has_one(self) -> None:
+        self._apply({"eyeBlinkLeft": 1.0}, "ARKIT")
+        normalize = self.addon.rig.names.normalize_name
+        for obj in self.meshes:
+            blocks = obj.data.shape_keys.key_blocks
+            blink = [
+                b for b in blocks if normalize(b.name, shape=True) == "eyeblinkleft"
+            ]
+            driven = [b.name for b in blink if b.value > 0.5]
+            with self.subTest(mesh=obj.name):
+                # The face carries arkit_ and facs_bs_ copies; driving both
+                # would close the eye twice as hard.
+                self.assertEqual(len(driven), 1 if blink else 0, driven)
+                if driven and any(b.name.startswith("arkit_") for b in blink):
+                    self.assertTrue(driven[0].startswith("arkit_"))
+            self.assertFalse(
+                any(
+                    b.value > 0.0
+                    for b in blocks
+                    if normalize(b.name, shape=True) == "eyeblinkright"
+                )
+            )
+
+    def test_face_frame_measures_the_eyes_not_their_targets(self) -> None:
+        frame = self.face.face_frame(self.rig, self.entries)
+        self.assertAlmostEqual(frame.scale, 0.0591, delta=0.002)
+        self.assertGreater(frame.up.z, 0.99)
+        self.assertGreater(frame.lateral.x, 0.99)
+        self.assertLess(frame.forward.y, -0.99)
+
+    def test_bone_controls_move_in_face_space(self) -> None:
+        self._apply(
+            {"eyeBlinkLeft": 1.0, "browOuterUpLeft": 1.0, "mouthSmileLeft": 1.0},
+            "BONES",
+        )
+        scale = self.face.face_frame(self.rig, self.entries).scale
+        lid = self._world_offset("c_eyelid_top.l")
+        brow = self._world_offset("c_eyebrow_01_end.l")
+        corner = self._world_offset("c_lips_smile.l")
+        # The jaw drags the mouth corners down through ARP's retain bones,
+        # so it is checked on its own.
+        self.setUp()
+        self._apply({"jawOpen": 1.0}, "BONES")
+        jaw = self._world_offset("c_jawbone.x")
+        # Each moves mostly up or down, by its travel share of the face.
+        self.assertAlmostEqual(lid.z, -0.34 * scale, delta=0.1 * scale)
+        self.assertAlmostEqual(brow.z, 0.17 * scale, delta=0.05 * scale)
+        self.assertAlmostEqual(corner.z, 0.17 * scale, delta=0.05 * scale)
+        self.assertLess(abs(corner.x), 0.02 * scale)
+        self.assertAlmostEqual(jaw.z, -0.55 * scale, delta=0.1 * scale)
+        # ARP opens the jaw from the controller's position, not rotation.
+        jaw_bone = self.rig.pose.bones["c_jawbone.x"]
+        self.assertAlmostEqual(jaw_bone.rotation_quaternion.angle, 0.0, places=5)
+
+    def test_eye_gaze_also_drives_eye_bones_with_shape_keys(self) -> None:
+        self._apply({"eyeLookOutLeft": 1.0, "eyeLookInRight": 1.0}, "ARKIT")
+        target = self._world_offset("c_eye_target.l")
+        # Positive coefficients look to the subject's left (+X here).
+        self.assertGreater(target.x, 0.0)
+        tracker = self.face._gaze_tracker(
+            self.rig, self.rig.pose.bones["c_eye_target.l"]
+        )
+        self.assertIsNotNone(tracker)
+        distance = (
+            self.rig.data.bones["c_eye_target.l"].head_local - tracker.bone.head_local
+        ).length
+        expected = distance * math.tan(self.face.GAZE_ANGLE)
+        self.assertAlmostEqual(target.x, expected, delta=0.1 * expected)
+
+
+if __name__ == "__main__":
+    unittest.main()

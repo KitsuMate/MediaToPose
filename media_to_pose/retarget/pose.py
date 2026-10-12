@@ -203,10 +203,11 @@ def build_target_pose(
         )
     if (
         settings.use_face
-        and settings.face_output == FaceOutput.BONES
         and getattr(settings, "provider", "MEDIAPIPE") == "MEDIAPIPE"
         and frame.blendshapes
     ):
+        # Eyeball rotation is not an expression shape: mapped eye bones are
+        # driven whichever face output is chosen.
         _apply_eye_gaze(armature, entries, frame, target_pose)
     if settings.use_face and getattr(settings, "provider", "MEDIAPIPE") == "MEDIAPIPE":
         if settings.face_output in {FaceOutput.ARKIT, FaceOutput.FACS}:

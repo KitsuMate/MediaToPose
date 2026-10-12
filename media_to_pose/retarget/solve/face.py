@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import bpy
 from mathutils import Quaternion, Vector
@@ -111,6 +112,106 @@ def _apply_shapes(armature, entries, frame, scheme: str, target_pose: TargetPose
     return changed
 
 
+# Travel of a location-driven face control at full strength, as a fraction
+# of the distance between the eyes. Measured on an Auto-Rig Pro face (lids
+# close fully, brows and mouth corners move clearly without breaking).
+FACE_CONTROL_TRAVEL = {
+    "FACE_JAW_OPEN": 0.55,
+    "FACE_JAW_SIDE": 0.20,
+    "FACE_LID_L": 0.34,
+    "FACE_LID_R": 0.34,
+    "FACE_BROW_INNER": 0.17,
+    "FACE_BROW_OUTER_L": 0.17,
+    "FACE_BROW_OUTER_R": 0.17,
+    "FACE_CHEEK_L": 0.10,
+    "FACE_CHEEK_R": 0.10,
+    "FACE_MOUTH_CORNER_L": 0.17,
+    "FACE_MOUTH_CORNER_R": 0.17,
+    "FACE_LIP_TOP": 0.05,
+    "FACE_LIP_BOTTOM": 0.05,
+}
+DEFAULT_FACE_CONTROL_TRAVEL = 0.12
+# Eye rotation for a gaze coefficient of 1.0.
+GAZE_ANGLE = math.radians(18.0)
+
+
+@dataclass(frozen=True)
+class FaceFrame:
+    """The face's directions in armature space and its size.
+
+    ``lateral`` points to the subject's left, ``up`` along the head and
+    ``forward`` out of the face; ``scale`` is the distance between the eyes.
+    """
+
+    lateral: Vector
+    up: Vector
+    forward: Vector
+    scale: float
+
+
+def _eye_position(armature, bone) -> Vector:
+    """Where the eye is: the bone tracking a look-at target, else the bone."""
+    tracker = _gaze_tracker(armature, bone)
+    return (tracker or bone).bone.head_local
+
+
+def face_frame(armature, entries) -> FaceFrame:
+    head = _mapped_bone(armature, entries, "HEAD")
+    eye_left = _mapped_bone(armature, entries, "EYE_L")
+    eye_right = _mapped_bone(armature, entries, "EYE_R")
+    up = (
+        Vector(head.bone.matrix_local.col[1][:3]).normalized()
+        if head is not None
+        else Vector((0.0, 0.0, 1.0))
+    )
+    if eye_left is not None and eye_right is not None:
+        between = _eye_position(armature, eye_left) - _eye_position(armature, eye_right)
+        scale = between.length
+        lateral = between
+    else:
+        scale = 0.0
+        lateral = Vector((1.0, 0.0, 0.0))
+    lateral = lateral - up * up.dot(lateral)
+    if lateral.length < 1.0e-8:
+        lateral = Vector((1.0, 0.0, 0.0))
+    lateral.normalize()
+    if scale < 1.0e-6:
+        scale = max(head.bone.length * 0.35, 0.01) if head is not None else 0.06
+    return FaceFrame(lateral, up, lateral.cross(up).normalized(), scale)
+
+
+def _face_axis(frame: FaceFrame, axis_name: str) -> Vector:
+    """A face-space axis: X sideways (subject's left), Y forward, Z up."""
+    sign = -1.0 if axis_name.startswith("-") else 1.0
+    return {"X": frame.lateral, "Y": frame.forward, "Z": frame.up}[axis_name[-1]] * sign
+
+
+def _to_bone(bone, vector: Vector) -> Vector:
+    """An armature-space direction in the bone's rest (pose channel) space."""
+    return bone.bone.matrix_local.to_3x3().inverted() @ vector
+
+
+def _gaze_tracker(armature, target):
+    """The bone that aims at ``target`` (an eye following a look-at bone)."""
+    for bone in armature.pose.bones:
+        for constraint in bone.constraints:
+            if (
+                constraint.type in {"DAMPED_TRACK", "TRACK_TO", "LOCKED_TRACK"}
+                and getattr(constraint, "target", None) == armature
+                and getattr(constraint, "subtarget", "") == target.name
+            ):
+                return bone
+    return None
+
+
+def _gaze_pivot_distance(armature, target, frame: FaceFrame) -> float:
+    """Distance from the eye to a look-at target bone."""
+    tracker = _gaze_tracker(armature, target)
+    if tracker is None:
+        return frame.scale * 2.0
+    return (target.bone.head_local - tracker.bone.head_local).length
+
+
 def _axis(axis_name: str) -> Vector:
     sign = -1.0 if axis_name.startswith("-") else 1.0
     return {
@@ -183,37 +284,32 @@ def _apply_eye_gaze(
     frame,
     target_pose: TargetPose,
 ) -> set[bpy.types.PoseBone]:
+    """Point the eyes: rotate eye bones, or move look-at targets.
+
+    Directions are in face space, so the mapping's axis only matters for
+    its sign through gain and invert.
+    """
     changed = set()
+    space = face_frame(armature, entries)
     for semantic_id, side in (("EYE_L", "L"), ("EYE_R", "R")):
         entry = entries.get(semantic_id)
         bone = _mapped_bone(armature, entries, semantic_id)
         if not entry or not bone:
             continue
         horizontal, vertical = _eye_gaze(frame.blendshapes, side)
+        yaw = _signed_face_value(entry, horizontal) * GAZE_ANGLE
+        pitch = _signed_face_value(entry, vertical) * GAZE_ANGLE
         if entry.channel_mode == "LOCATION":
-            scale = max(bone.length * 0.3, 0.01)
-            horizontal_axis = _axis(entry.axis)
-            vertical_axis = _secondary_axis(horizontal_axis, Vector((0.0, 0.0, 1.0)))
-            target_pose.set_location(
-                semantic_id,
-                bone,
-                (
-                    horizontal_axis * _signed_face_value(entry, horizontal)
-                    + vertical_axis * _signed_face_value(entry, vertical)
-                )
-                * scale,
-            )
+            distance = _gaze_pivot_distance(armature, bone, space)
+            offset = (
+                space.lateral * math.tan(yaw) + space.up * math.tan(pitch)
+            ) * distance
+            target_pose.set_location(semantic_id, bone, _to_bone(bone, offset))
         else:
-            vertical_axis = _axis(entry.axis)
-            horizontal_axis = _secondary_axis(vertical_axis, Vector((0.0, 0.0, 1.0)))
-            rotation = Quaternion(
-                horizontal_axis,
-                _signed_face_value(entry, horizontal) * 0.35,
-            )
-            rotation @= Quaternion(
-                vertical_axis,
-                -_signed_face_value(entry, vertical) * 0.35,
-            )
+            # Positive yaw turns the gaze to the subject's left (about up);
+            # positive pitch looks up (about the lateral axis, negated).
+            rotation = Quaternion(_to_bone(bone, space.up).normalized(), yaw)
+            rotation @= Quaternion(_to_bone(bone, space.lateral).normalized(), -pitch)
             target_pose.set_basis_rotation(
                 semantic_id,
                 bone,
@@ -267,14 +363,18 @@ def _apply_face_controls(
         )
         changed.add(bone)
 
+    space = face_frame(armature, entries) if location_groups else None
     for bone, controls in location_groups.items():
-        direction = Vector((0.0, 0.0, 0.0))
+        offset = Vector((0.0, 0.0, 0.0))
         for entry, value in controls:
-            direction += _axis(entry.axis) * value
+            travel = FACE_CONTROL_TRAVEL.get(
+                entry.semantic_id, DEFAULT_FACE_CONTROL_TRAVEL
+            )
+            offset += _face_axis(space, entry.axis) * (value * travel * space.scale)
         target_pose.set_location(
             controls[0][0].semantic_id,
             bone,
-            direction * max(bone.length * 0.2, 0.005),
+            _to_bone(bone, offset),
         )
         changed.add(bone)
 

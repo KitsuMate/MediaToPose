@@ -32,8 +32,11 @@ ARP_BODY = {
 
 
 ARP_FACE = {
-    "FACE_JAW_OPEN": ("c_jawbone.x", "ROTATION", "X"),
-    "FACE_JAW_SIDE": ("c_jawbone.x", "ROTATION", "Z"),
+    # ARP opens the jaw from the controller's position (a damped track),
+    # not its rotation. Location axes are in face space: Z up, X subject's
+    # left.
+    "FACE_JAW_OPEN": ("c_jawbone.x", "LOCATION", "-Z"),
+    "FACE_JAW_SIDE": ("c_jawbone.x", "LOCATION", "-X"),
     "FACE_BROW_INNER": ("c_eyebrow_full.l", "LOCATION", "Z"),
     "FACE_BROW_OUTER_L": ("c_eyebrow_01_end.l", "LOCATION", "Z"),
     "FACE_BROW_OUTER_R": ("c_eyebrow_01_end.r", "LOCATION", "Z"),
