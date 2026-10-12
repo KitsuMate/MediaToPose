@@ -112,8 +112,11 @@ Pull requests run Ruff and the complete Blender test suite against an
 installed Linux release package. Weekly integration tests run real MediaPipe
 inference. SAM 3D GPU testing uses a protected runner.
 
-Release scripts are in `ci/`. Local files and downloaded models belong in
-`.workspace/`. Built release packages belong in `dist/`.
+The extension source is in `media_to_pose/`; `AGENTS.md` describes its
+layout, the layering rules and the checks to run before a commit. Release
+scripts are in `ci/` and the release steps in `docs/RELEASING.md`. Local
+files and downloaded models belong in `.workspace/`. Built release packages
+belong in `dist/`.
 
 ## License
 
