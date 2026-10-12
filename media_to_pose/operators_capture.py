@@ -21,6 +21,7 @@ from .capture_state import (
     mapping_scope_issues,
 )
 from .core.cache.stream import FrameSpool
+from .core.errors import MtpError
 from .core.log import get_logger
 from .media_io import probe_media
 from .models import MediaInfo
@@ -707,7 +708,8 @@ def _worker(
     except InterruptedError as exc:
         _remove_worker_spool(job)
         job.messages.put(("CANCELLED", str(exc)))
-    except Exception as exc:
+    except Exception as exc:  # Worker thread entry point.
+        LOGGER.exception("Capture worker failed")
         _remove_worker_spool(job)
         job.messages.put(("ERROR", (str(exc), traceback.format_exc())))
     finally:
@@ -845,7 +847,7 @@ class MTP_OT_apply_capture(Operator):
         if path:
             try:
                 media_info = probe_media(path)
-            except Exception as exc:
+            except (MtpError, OSError) as exc:
                 _set_status(settings, str(exc), "ERROR")
                 self.report({"ERROR"}, str(exc))
                 return {"CANCELLED"}
@@ -913,7 +915,8 @@ class MTP_OT_apply_capture(Operator):
                     # Load and verify before the capture request so a bad model
                     # cannot partially mutate the animation transaction.
                     rohm_backend.ensure_model_loaded(settings.rohm_device)
-                except Exception as exc:
+                except Exception as exc:  # Operator boundary.
+                    LOGGER.exception("RoHM model could not be loaded")
                     message = (
                         f"RoHM Correction could not load its verified model: {exc}"
                     )
@@ -1047,7 +1050,7 @@ class MTP_OT_apply_capture(Operator):
         COORDINATOR.attach_worker(job.token, thread=job.thread)
         try:
             job.thread.start()
-        except Exception as exc:
+        except RuntimeError as exc:
             COORDINATOR.finish(job.token, OperationState.FAILED, str(exc))
             COORDINATOR.release(job.token)
             _CAPTURE_JOBS.pop(job.token.generation, None)
@@ -1383,8 +1386,8 @@ class MTP_OT_apply_capture(Operator):
             return {"RUNNING_MODAL"}
 
         if kind == "ERROR":
-            message, details = payload
-            LOGGER.error("Capture worker failed: %s\n%s", message, details)
+            # The worker already logged the traceback.
+            message, _details = payload
             self.report({"ERROR"}, message)
             _set_status(settings, message, "ERROR")
             return self._finish(context, cancelled=True)

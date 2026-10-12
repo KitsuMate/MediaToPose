@@ -142,6 +142,8 @@ def resolve(
         return camera_calibration.scale_to(result, width, height)
     except InterruptedError:
         raise
-    except Exception as exc:
-        LOGGER.warning("AnyCalib fallback: %s: %s", type(exc).__name__, exc)
+    except Exception:
+        # Calibration is optional: any AnyCalib failure falls back to the
+        # default camera, but the cause is logged with its traceback.
+        LOGGER.exception("AnyCalib failed; using the fallback camera")
         return camera_calibration.fallback(width, height)

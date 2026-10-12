@@ -30,15 +30,10 @@ ignore = [
 # inside the package can only use relative imports. TID252 applies to tests/
 # and ci/, which import the package by its absolute name.
 "media_to_pose/**/*.py" = ["TID252"]
-# Temporary until the Phase 4 review narrows these broad handlers.
+# Temporary until the model backends move onto backends/lifecycle.py.
 "media_to_pose/anycalib_backend.py" = ["BLE001"]
-"media_to_pose/cache_preview.py" = ["BLE001"]
-"media_to_pose/camera_calibration_pipeline.py" = ["BLE001"]
-"media_to_pose/operators_capture.py" = ["BLE001"]
 "media_to_pose/rohm_backend.py" = ["BLE001"]
 "media_to_pose/sam3d_backend.py" = ["BLE001"]
-"media_to_pose/sam3d_ort_runtime.py" = ["BLE001"]
-"media_to_pose/sam3d_vith_runtime.py" = ["BLE001"]
 
 [tool.ruff.format]
 quote-style = "double"

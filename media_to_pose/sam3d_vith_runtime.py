@@ -21,12 +21,11 @@ from pathlib import Path, PurePosixPath
 
 import numpy as np
 
-if __package__:
-    from . import sam3d_ort_runtime as _ort_runtime
-    from .sam3d_mhr_runtime import MhrModel
-else:
-    import sam3d_ort_runtime as _ort_runtime
-    from sam3d_mhr_runtime import MhrModel
+from . import sam3d_ort_runtime as _ort_runtime
+from .core.log import get_logger
+from .sam3d_mhr_runtime import MhrModel
+
+LOGGER = get_logger(__name__)
 
 IMAGE_SIZE = 512
 BACKBONE_WIDTH = 384
@@ -1326,8 +1325,8 @@ class VithEstimator:
             if profiled:
                 try:
                     profile_path = Path(session.end_profiling())
-                except Exception:
-                    pass
+                except Exception:  # ONNX Runtime raises its own exception types.
+                    LOGGER.exception("Could not end ONNX Runtime profiling")
                 finally:
                     if profile_path is not None and profile_path.is_file():
                         profile_path.unlink(missing_ok=True)
@@ -1430,7 +1429,7 @@ class VithEstimator:
                     and isinstance(item.get("args"), dict)
                     and item.get("args", {}).get("provider")
                 ]
-            except Exception as exc:
+            except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
                 errors.append(f"{role}: could not read profile: {exc}")
             finally:
                 if profile_path is not None and profile_path.is_file():

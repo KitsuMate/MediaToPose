@@ -22,6 +22,9 @@ from types import MappingProxyType
 from typing import Any
 
 from .core.errors import BackendError
+from .core.log import get_logger
+
+LOGGER = get_logger(__name__)
 
 BUNDLE_SCHEMA_VERSION = 1
 BUNDLE_CONTRACT = "media-to-pose.sam3d.raw.v1"
@@ -546,7 +549,8 @@ def _register_webgpu_plugin(ort_module) -> None:
             existing = tuple(
                 str(value) for value in ort_module.get_available_providers()
             )
-        except Exception:
+        except Exception:  # ONNX Runtime raises its own exception types here.
+            LOGGER.exception("Could not list ONNX Runtime execution providers")
             existing = ()
         if any("webgpu" in value.casefold() for value in existing):
             _REGISTERED_ORT_MODULES.add(identity)

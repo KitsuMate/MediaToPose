@@ -15,11 +15,14 @@ import bpy.utils.previews
 
 from . import detection_cache
 from .constants import HAND_LANDMARK_NAMES
+from .core.log import get_logger
 from .media_io import (
     decode_image,
     decode_video_frame_index_with_timestamp,
     probe_media,
 )
+
+LOGGER = get_logger(__name__)
 
 PREVIEW_NAME = "media_to_pose_detection_preview"
 PREVIEW_FILE = Path(tempfile.gettempdir()) / (
@@ -312,7 +315,8 @@ def _render_overlay(request: _PreviewRequest) -> _PreviewResult:
             media_kind=media_kind,
             frame_count=frame_count,
         )
-    except Exception as exc:
+    except Exception as exc:  # Preview thread entry point.
+        LOGGER.exception("Detection preview failed")
         return _PreviewResult(
             generation=request.generation,
             key=request.key,
