@@ -13,8 +13,6 @@ resolved to a package-relative module name and checked against these rules:
   has a pure-Python fallback (``core.geometry`` uses ``mathutils`` when
   Blender provides it).
 - ``bpy`` and ``mathutils`` are used only where the layer allows them.
-  ``backends/`` may use ``bpy`` only for paths (``bpy.utils``, ``bpy.path``,
-  ``bpy.app``), never for Blender data, types or operators.
 - Only ``blender/operators/`` and ``api/`` read ``bpy.context``.
 
 ``ALLOWLIST`` records known violations. Entries must be removed as the code
@@ -54,10 +52,8 @@ BPY_LAYERS = {
     "rig",
     "evaluate",
     "root",
-    "backends",
 }
-MATHUTILS_LAYERS = (BPY_LAYERS - {"backends"}) | {"postprocess"}
-BACKEND_BPY_ATTRIBUTES = {"utils", "path", "app"}
+MATHUTILS_LAYERS = BPY_LAYERS | {"postprocess"}
 CORE_THIRD_PARTY = {"numpy"}
 BLENDER_MODULES = {"bpy", "mathutils", "bmesh", "gpu", "gpu_extras", "blf", "bl_ui"}
 
@@ -236,9 +232,6 @@ def collect_violations() -> set[tuple[str, str, str]]:
                 layer == "core" and name not in stdlib and name not in CORE_THIRD_PARTY
             ):
                 violations.add((module, "core-third-party", name))
-        if layer == "backends":
-            for attribute in sorted(visitor.bpy_attributes - BACKEND_BPY_ATTRIBUTES):
-                violations.add((module, "backend-bpy-api", f"bpy.{attribute}"))
         if visitor.reads_context and not (
             module.startswith(("blender.operators", "api")) or layer == "root"
         ):

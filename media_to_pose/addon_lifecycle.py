@@ -17,12 +17,17 @@ from . import (
 )
 from .backends.anycalib import runtime as anycalib_ort_runtime
 from .backends.rohm import runtime as rohm_ort_runtime
+from .blender import host
 from .blender.operators import models as model_operators
 from .core.log import configure_logging, get_logger
 from .operation import COORDINATOR
 from .rig_planning import clear_rig_solve_plans
 
 LOGGER = get_logger(__name__)
+
+# Point the Blender-free layers at Blender's user directories before any
+# cache or model path is resolved.
+host.install()
 
 __all__ = [
     "anycalib_ort_runtime",

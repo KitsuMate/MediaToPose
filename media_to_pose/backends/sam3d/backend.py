@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 from ...constants import CAPTURE_CONFIDENCE, extension_version
+from ...core import paths
 from ...core.errors import BackendError, Cancelled, InvalidRequest, ModelMissing
 from ...core.fs import atomic_json, read_json, remove_tree
 from ...core.log import get_logger
@@ -137,14 +138,9 @@ def backend_root(*, create: bool = True) -> Path:
 
 
 def _verified_backend_root() -> Path:
-    import bpy  # pyright: ignore[reportMissingImports]
-
     root = backend_root(create=False).resolve()
-    scripts_value = bpy.utils.user_resource("SCRIPTS", create=False)
-    if not scripts_value:
-        raise BackendError("Blender user scripts directory is unavailable")
-    scripts = Path(scripts_value).resolve()
-    if scripts not in root.parents or root.name != "sam3d":
+    user_root = paths.user_directory("", create=False).resolve()
+    if user_root not in root.parents or root.name != "sam3d":
         raise BackendError("Refusing to remove an unexpected backend path")
     return root
 

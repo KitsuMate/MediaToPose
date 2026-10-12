@@ -28,6 +28,7 @@ from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from ..core import paths
 from ..core.errors import BackendError, Cancelled, OperationBusy
 from ..core.fs import atomic_json, read_json, remove_tree, replace_directory
 from ..core.log import get_logger
@@ -75,29 +76,12 @@ def safe_metadata(value: object, *, limit: int = 160) -> str:
 
 def resolve_user_path(value: str) -> Path:
     """Expand ``~``, environment variables and Blender ``//`` relative paths."""
-    expanded = os.path.expandvars(str(Path(str(value).strip()).expanduser()))
-    try:
-        import bpy  # pyright: ignore[reportMissingImports]
-
-        expanded = bpy.path.abspath(expanded)
-    except ImportError:
-        pass
-    return Path(expanded).resolve(strict=False)
+    return paths.expand_user_path(value).resolve(strict=False)
 
 
 def backend_root(name: str, *, create: bool = True) -> Path:
-    """Return ``<user scripts>/media_to_pose/backends/<name>``."""
-    import bpy  # pyright: ignore[reportMissingImports]
-
-    value = bpy.utils.user_resource(
-        "SCRIPTS", path=f"media_to_pose/backends/{name}", create=create
-    )
-    if not value:
-        scripts = bpy.utils.user_resource("SCRIPTS", create=create)
-        if not scripts:
-            raise BackendError("Blender user scripts directory is unavailable")
-        value = str(Path(scripts) / "media_to_pose" / "backends" / name)
-    return Path(value)
+    """Return ``<user data>/media_to_pose/backends/<name>``."""
+    return paths.user_directory(f"backends/{name}", create=create)
 
 
 def safe_relative_path(value: str, *, label: str = "bundle") -> PurePosixPath:
