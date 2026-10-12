@@ -691,12 +691,10 @@ def create_estimator(
     }
     if bundle.runner != SPLIT_NUMPY_RUNNER:
         raise OrtRuntimeError(f"Unsupported ONNX bundle runner {bundle.runner!r}")
-    module_name = (
-        f"{__package__}.sam3d_vith_runtime" if __package__ else "sam3d_vith_runtime"
-    )
     try:
-        module = importlib.import_module(module_name)
-        estimator_type = module.VithEstimator
+        from . import vith_runtime
+
+        estimator_type = vith_runtime.VithEstimator
     except Exception as exc:
         raise OrtRuntimeError(f"Could not load the ViT-H orchestrator: {exc}") from exc
     return estimator_type(bundle, requested_mode, **common)
