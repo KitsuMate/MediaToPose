@@ -179,6 +179,23 @@ of a face bone (or the current shape key value) as `output_full`;
 **Reset Ranges** restores the defaults. Mapping presets from 0.2.0 (gain,
 offset, clamp, invert) are converted on import.
 
+A rig with both ARKit keys and face bones (an Auto-Rig Pro face with ARKit
+morphs) can fit its bone ranges to its keys:
+
+```python
+report = api.fit_face_controls("Face")          # apply=False to only report
+print(report["controls"]["FACE_LID_L"]["full"])  # output, rms_default, rms_fit, accepted
+```
+
+Each control's output becomes the one that moves the meshes closest to the
+matching key (least squares over every vertex): lids to `eyeBlink*` and
+`eyeWide*`, brows to `browOuterUp*` / `browDown*` and `browInnerUp`, mouth
+corners to `mouthSmile*` / `mouthFrown*`, the jaw to `jawOpen`,
+`jawLeft` / `jawRight`. A fit is kept only when the bone explains at
+least a quarter of the key's motion (`explained` >= 0.25), so a control
+that moves differently from its key keeps the default. The Auto-Rig Pro
+defaults come from this fit on the project's FaceFX test rig.
+
 Video captures run **Face Expression Cleanup** (`FACE_CORRECTION`) before
 retargeting: it removes each expression's resting level (`neutral_calibration`),
 zeroes small values (`face_deadzone`), smooths without lag while keeping
@@ -307,6 +324,7 @@ the JSON document and `--save` to save the .blend afterwards.
 | `capture --media M --armature A [--parts body,hands] [--mode] [--frame N] [--frame-range FIRST:END] [--start-frame F] [--root-motion] [--face-output] [--mirror] [--config FILE] [--output NEW_ACTION\|REPLACE\|NLA_STRIP] [--no-cache] [--timeout S] [--out FILE]` | `api.capture` |
 | `retarget` (same options, without `--no-cache`) | `api.retarget_cached` |
 | `describe-rig --armature A` | `api.describe_rig` |
+| `fit-face --armature A [--controls FACE_LID_L,...] [--dry-run]` | `api.fit_face_controls` |
 | `auto-map --armature A [--force-profile]` | `api.auto_map` |
 | `evaluate --armature A [--action] [--frame-range FIRST:LAST] [--result FILE] [--ground-height Z] [--face-output]` | `api.evaluate` |
 | `config get --armature A [--out FILE]` / `config set FILE --armature A` | `api.get_config` / `api.set_config` |

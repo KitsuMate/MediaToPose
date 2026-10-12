@@ -2,7 +2,7 @@
 
 Shape keys go from 0 to 1. Eye gaze turns the eyes ``GAZE_DEGREES`` at
 full. Face bone controls that move travel a share of the distance between
-the eyes (``FACE_CONTROL_TRAVEL``, measured on an Auto-Rig Pro face), so
+the eyes (``FACE_CONTROL_TRAVEL``, fitted on an Auto-Rig Pro face), so
 the defaults scale with the face; rotating controls turn
 ``FACE_ROTATION_DEGREES``. See ``core/face_ranges.py`` for how the ranges
 are applied.
@@ -15,22 +15,25 @@ from .face_schemes import SIGNED_FACE_CONTROLS
 from .face_space import face_frame
 
 # Travel of a location-driven face control at full strength, as a fraction
-# of the distance between the eyes. Measured on an Auto-Rig Pro face (lids
-# close fully, brows and mouth corners move clearly without breaking).
+# of the distance between the eyes: (full, negative full). Fitted on the
+# Auto-Rig Pro FaceFX fixture so each bone control moves the face mesh as
+# close as possible to the matching ARKit key (rig/face_fit.py, least
+# squares over every vertex). The lips keep a small hand-set value: ARP's
+# lip centre moves differently from ARKit's lip-side keys, so no fit holds.
 FACE_CONTROL_TRAVEL = {
-    "FACE_JAW_OPEN": 0.55,
-    "FACE_JAW_SIDE": 0.20,
-    "FACE_LID_L": 0.34,
-    "FACE_LID_R": 0.34,
-    "FACE_BROW_INNER": 0.17,
-    "FACE_BROW_OUTER_L": 0.17,
-    "FACE_BROW_OUTER_R": 0.17,
-    "FACE_CHEEK_L": 0.10,
-    "FACE_CHEEK_R": 0.10,
-    "FACE_MOUTH_CORNER_L": 0.17,
-    "FACE_MOUTH_CORNER_R": 0.17,
-    "FACE_LIP_TOP": 0.05,
-    "FACE_LIP_BOTTOM": 0.05,
+    "FACE_JAW_OPEN": (0.93, -0.93),
+    "FACE_JAW_SIDE": (0.082, -0.082),
+    "FACE_LID_L": (0.34, -0.107),
+    "FACE_LID_R": (0.34, -0.107),
+    "FACE_BROW_INNER": (0.066, -0.066),
+    "FACE_BROW_OUTER_L": (0.039, -0.113),
+    "FACE_BROW_OUTER_R": (0.039, -0.113),
+    "FACE_CHEEK_L": (0.098, -0.098),
+    "FACE_CHEEK_R": (0.098, -0.098),
+    "FACE_MOUTH_CORNER_L": (0.116, -0.058),
+    "FACE_MOUTH_CORNER_R": (0.116, -0.058),
+    "FACE_LIP_TOP": (0.05, -0.05),
+    "FACE_LIP_BOTTOM": (0.05, -0.05),
 }
 DEFAULT_FACE_CONTROL_TRAVEL = 0.12
 FACE_ROTATION_DEGREES = 25.0
@@ -57,28 +60,30 @@ def has_ranges(entry) -> bool:
     return entry.section in {"SHAPES", "FACE_RIG"} or entry.semantic_id in EYES
 
 
-def _full_value(armature, entries, entry) -> float:
-    """The output at full strength for ``entry``'s channel."""
+def _outputs(armature, entries, entry) -> tuple[float, float]:
+    """Output at full and at negative full for ``entry``'s channel."""
     if entry.semantic_id in EYES:
-        return GAZE_DEGREES
+        return GAZE_DEGREES, -GAZE_DEGREES
     if entry.section == "SHAPES":
-        return 1.0
+        return 1.0, -1.0
     if entry.channel_mode == "LOCATION":
-        travel = FACE_CONTROL_TRAVEL.get(entry.semantic_id, DEFAULT_FACE_CONTROL_TRAVEL)
-        return travel * face_frame(armature, entries).scale
-    if entry.channel_mode == "ROTATION":
-        return FACE_ROTATION_DEGREES
-    return 1.0
+        default = (DEFAULT_FACE_CONTROL_TRAVEL, -DEFAULT_FACE_CONTROL_TRAVEL)
+        full, negative = FACE_CONTROL_TRAVEL.get(entry.semantic_id, default)
+        scale = face_frame(armature, entries).scale
+        return full * scale, negative * scale
+    if entry.channel_mode in {"ROTATION", "AUTO"}:
+        return FACE_ROTATION_DEGREES, -FACE_ROTATION_DEGREES
+    return 1.0, -1.0
 
 
 def default_ranges(armature, entries, entry) -> dict[str, float]:
-    full = _full_value(armature, entries, entry)
+    full, negative = _outputs(armature, entries, entry)
     return {
         "input_zero": 0.0,
         "input_full": 1.0,
         "output_zero": 0.0,
         "output_full": full,
-        "output_negative": -full,
+        "output_negative": negative,
     }
 
 
@@ -94,11 +99,14 @@ def migrate_ranges(armature, entries, entry) -> None:
     Those properties are gone from the mapping but stay stored in the .blend
     as ID properties, which is where they are read from.
     """
+    negative = None
     if entry.semantic_id in EYES:
         # Gaze used the gain only for its sign.
         scale = GAZE_DEGREES
     elif entry.section == "FACE_RIG":
-        scale = _full_value(armature, entries, entry)
+        # 0.2.0 bone travel was not in face units; take today's defaults,
+        # scaled by the old clamp on both sides.
+        scale, negative = _outputs(armature, entries, entry)
     else:
         scale = 1.0
     ranges = legacy_ranges(
@@ -108,6 +116,8 @@ def migrate_ranges(armature, entries, entry) -> None:
         invert=bool(entry.get("invert", False)),
         scale=scale,
     )
+    if negative is not None and not entry.get("invert", False):
+        ranges["output_negative"] = negative * float(entry.get("clamp_max", 1.0))
     for name, value in ranges.items():
         setattr(entry, name, value)
     entry.ranges_version = RANGES_VERSION

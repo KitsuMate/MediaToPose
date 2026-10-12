@@ -15,6 +15,16 @@ checked with numbers and face close-ups.
   lag-free smoothing that keeps blinks, and holding the face briefly when it
   is lost. Temporal smoothing no longer smooths face channels after it.
 - Bone face lids follow the gaze up and down.
+- Input and output ranges for every face mapping, replacing gain, offset,
+  clamp and invert: the detected values treated as rest and full, and the
+  target's value at rest, full and (for brows, mouth corners, lids, jaw
+  side, gaze) negative full, in the target's units (key value, metres,
+  degrees). Rig Setup shows them with Set from Pose and Reset Ranges;
+  0.2.0 mappings and presets are converted.
+- `api.fit_face_controls` / `fit-face`: fit face bone ranges to the rig's
+  own ARKit keys by least squares over the mesh vertices. The Auto-Rig Pro
+  defaults come from this fit (brows and mouth corners move less, the jaw
+  opens further, the negative sides are separate).
 - Capture results carry a `face` block: the value sent to each mapped
   expression and the detected expressions with no target.
 - Face metrics in `evaluate`: `expression_fit`, `blink_recall`,

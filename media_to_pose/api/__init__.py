@@ -34,7 +34,7 @@ from .config import get_config, list_postprocessors, set_config
 from .detections import export_detections, import_detections
 from .evaluation import evaluate, load_result, render_comparison
 from .models import list_providers, model_status
-from .rig import auto_map, describe_rig
+from .rig import auto_map, describe_rig, fit_face_controls
 
 __all__ = [
     "BackendError",
@@ -53,6 +53,7 @@ __all__ = [
     "describe_rig",
     "evaluate",
     "export_detections",
+    "fit_face_controls",
     "get_config",
     "import_detections",
     "list_postprocessors",

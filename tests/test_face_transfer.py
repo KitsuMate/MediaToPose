@@ -179,24 +179,26 @@ class FaceTransferTests(unittest.TestCase):
         jaw = self._world_offset("c_jawbone.x")
         # Each moves mostly up or down, by its travel share of the face.
         self.assertAlmostEqual(lid.z, -0.34 * scale, delta=0.1 * scale)
-        self.assertAlmostEqual(brow.z, 0.17 * scale, delta=0.05 * scale)
-        self.assertAlmostEqual(corner.z, 0.17 * scale, delta=0.05 * scale)
+        self.assertAlmostEqual(brow.z, 0.039 * scale, delta=0.01 * scale)
+        self.assertAlmostEqual(corner.z, 0.116 * scale, delta=0.03 * scale)
         self.assertLess(abs(corner.x), 0.02 * scale)
-        self.assertAlmostEqual(jaw.z, -0.55 * scale, delta=0.1 * scale)
+        self.assertAlmostEqual(jaw.z, -0.93 * scale, delta=0.1 * scale)
         # ARP opens the jaw from the controller's position, not rotation.
         jaw_bone = self.rig.pose.bones["c_jawbone.x"]
         self.assertAlmostEqual(jaw_bone.rotation_quaternion.angle, 0.0, places=5)
 
     def test_bone_lids_follow_the_gaze(self) -> None:
         scale = self.addon.rig.face_space.face_frame(self.rig, self.entries).scale
-        share = self.face.LID_FOLLOW_GAZE * 0.34 * scale
+        follow = self.face.LID_FOLLOW_GAZE
+        # Lids close 0.34 eye distances and open (the negative side) 0.107.
+        lower, lift = follow * 0.34 * scale, follow * 0.107 * scale
         self._apply({"eyeLookDownLeft": 1.0}, "BONES")
         down = self._world_offset("c_eyelid_top.l").z
         self.setUp()
         self._apply({"eyeLookUpLeft": 1.0}, "BONES")
         up = self._world_offset("c_eyelid_top.l").z
-        self.assertAlmostEqual(down, -share, delta=0.3 * share)
-        self.assertAlmostEqual(up, share, delta=0.3 * share)
+        self.assertAlmostEqual(down, -lower, delta=0.3 * lower)
+        self.assertAlmostEqual(up, lift, delta=0.3 * lift)
 
     def _entry(self, semantic_id: str):
         entry = self.addon.rig.mapping.mapping_by_id(self.rig.mtp_rig_config)[
@@ -259,7 +261,7 @@ class FaceTransferTests(unittest.TestCase):
         self.assertTrue(entry.manual_lock)
         bpy.ops.mtp.reset_face_ranges()
         scale = space.scale
-        self.assertAlmostEqual(entry.output_full, 0.55 * scale, delta=1e-6)
+        self.assertAlmostEqual(entry.output_full, 0.93 * scale, delta=1e-6)
 
     def test_mappings_from_0_2_0_are_migrated(self) -> None:
         entry = self._entry("ARKIT_mouthSmileLeft")
@@ -301,6 +303,54 @@ class FaceTransferTests(unittest.TestCase):
         presets.load_config(self.rig, legacy)
         self.assertAlmostEqual(entry.input_full, 0.25)
         self.assertAlmostEqual(lid.output_full, 0.34 * scale, delta=1e-6)
+
+    def test_default_bone_ranges_match_the_shape_keys(self) -> None:
+        # The Auto-Rig Pro defaults were fitted on this rig: each control at
+        # its default output is as close to its ARKit key as the best fit.
+        lid = self.rig.pose.bones["c_eyelid_top.l"]
+        lid.location.z = 0.003
+        report = self.addon.api.fit_face_controls(self.rig.name, apply=False)
+        self.assertAlmostEqual(lid.location.z, 0.003)  # pose restored
+        controls = report["controls"]
+        self.assertFalse(report["applied"])
+        self.assertGreaterEqual(len(controls), 11)
+        for control, sides in controls.items():
+            for side, fit in sides.items():
+                with self.subTest(control=control, side=side):
+                    if not fit["accepted"]:
+                        continue
+                    self.assertLess(fit["rms_fit"], fit["rms_rest"])
+                    self.assertLessEqual(
+                        fit["rms_default"], fit["rms_fit"] * 1.05 + 2.0e-5
+                    )
+        # ARP's lip centre cannot follow ARKit's lip-side keys.
+        self.assertFalse(controls["FACE_LIP_TOP"]["full"]["accepted"])
+        self.assertTrue(controls["FACE_LID_L"]["full"]["accepted"])
+
+    def test_fit_face_command_applies_accepted_fits(self) -> None:
+        entry = self._entry("FACE_JAW_SIDE")
+        lips = self._entry("FACE_LIP_TOP")
+        with self.addon.rig.locks.suppress_manual_locks():
+            entry.output_full = lips.output_full = 0.05
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = self.addon.api.cli.execute(
+                [
+                    "fit-face",
+                    "--armature",
+                    self.rig.name,
+                    "--controls",
+                    "FACE_JAW_SIDE,FACE_LIP_TOP",
+                    "--json",
+                ]
+            )
+        self.assertEqual(code, 0, output.getvalue())
+        printed = json.loads(output.getvalue())
+        self.assertEqual(set(printed["controls"]), {"FACE_JAW_SIDE", "FACE_LIP_TOP"})
+        scale = self.addon.rig.face_space.face_frame(self.rig, self.entries).scale
+        self.assertAlmostEqual(entry.output_full, 0.082 * scale, delta=0.005 * scale)
+        # A rejected fit leaves the default, not the value set before.
+        self.assertAlmostEqual(lips.output_full, 0.05 * scale, delta=1e-6)
 
     def test_eye_gaze_also_drives_eye_bones_with_shape_keys(self) -> None:
         self._apply({"eyeLookOutLeft": 1.0, "eyeLookInRight": 1.0}, "ARKIT")

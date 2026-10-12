@@ -28,7 +28,7 @@ from .config import get_config, list_postprocessors, set_config
 from .detections import export_detections, import_detections
 from .evaluation import evaluate, render_comparison
 from .models import list_providers, model_status
-from .rig import auto_map, describe_rig
+from .rig import auto_map, describe_rig, fit_face_controls
 
 COMMAND = "media_to_pose"
 LOGGER = get_logger(__name__)
@@ -133,6 +133,17 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--out")
     _common(sub)
 
+    sub = commands.add_parser(
+        "fit-face", help="fit face bone ranges to the rig's ARKit shape keys"
+    )
+    sub.add_argument("--armature", required=True)
+    sub.add_argument(
+        "--controls", help="comma-separated FACE_* controls (default: all)"
+    )
+    sub.add_argument("--dry-run", action="store_true", help="report without applying")
+    sub.add_argument("--out")
+    _common(sub)
+
     sub = commands.add_parser("describe-rig", help="mapping coverage and profile")
     sub.add_argument("--armature", required=True)
     sub.add_argument("--out")
@@ -229,6 +240,12 @@ def run(args) -> Any:
         payload = describe_rig(args.armature)
     elif command == "auto-map":
         payload = auto_map(args.armature, force_profile=args.force_profile)
+    elif command == "fit-face":
+        payload = fit_face_controls(
+            args.armature,
+            controls=args.controls.split(",") if args.controls else None,
+            apply=not args.dry_run,
+        )
     elif command == "evaluate":
         payload = evaluate(
             args.armature,

@@ -7,9 +7,10 @@ from typing import Any
 from ..core.constants import SECTIONS
 from ..retarget.solve.face_values import describe_face_rig
 from ..rig import mapping
+from ..rig.face_fit import fit_face_controls as _fit_face_controls
 from ..rig.face_schemes import associated_meshes, shape_scheme
 from ..rig.profiles.common import PROFILE_LABELS, detect_profile
-from .common import resolve_armature, resolve_scene
+from .common import resolve_armature, resolve_scene, scene_context
 
 
 def prepare_rig(armature, settings) -> None:
@@ -122,4 +123,33 @@ def describe_rig(armature, *, scene=None) -> dict[str, Any]:
     }
 
 
-__all__ = ["auto_map", "describe_rig", "prepare_rig"]
+def fit_face_controls(
+    armature, *, controls=None, apply: bool = True, scene=None
+) -> dict[str, Any]:
+    """Fit face bone ranges to the rig's own ARKit shape keys.
+
+    For a rig with both ARKit keys and face bone controls: each control's
+    ``output_full`` (and ``output_negative`` for signed controls) becomes
+    the output that moves the meshes closest to the matching key, unless
+    the bone explains less than a quarter of the key's motion. Returns per
+    control, for ``full`` and ``negative``: ``output``, ``default_output``,
+    vertex ``rms_rest`` / ``rms_default`` / ``rms_fit`` (metres),
+    ``explained`` and ``accepted``. ``apply=False`` only reports.
+    """
+    target = resolve_armature(armature)
+    settings = getattr(resolve_scene(scene), "mtp_settings", None)
+    prepare_rig(target, settings)
+    entries = mapping.mapping_by_id(target.mtp_rig_config)
+    report = _fit_face_controls(
+        target,
+        entries,
+        scene_context(scene).view_layer,
+        controls=set(controls) if controls else None,
+        apply=apply,
+    )
+    if apply:
+        mapping.validate_mapping(target, settings=settings)
+    return {"armature": target.name, "applied": bool(apply), "controls": report}
+
+
+__all__ = ["auto_map", "describe_rig", "fit_face_controls", "prepare_rig"]
