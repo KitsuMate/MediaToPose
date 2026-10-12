@@ -57,7 +57,7 @@ def _mapping_edited(self, context) -> None:
         from . import mapping
 
         mapping.validate_mapping(armature, settings=settings)
-        from .post_processing import validate_modules
+        from .postprocess import validate_modules
 
         validate_modules(armature)
 
@@ -69,7 +69,7 @@ def _fk_switch_edited(self, context) -> None:
         armature = getattr(settings, "target_armature", None) if settings else None
         if armature is not None:
             from . import mapping
-            from .post_processing import validate_modules
+            from .postprocess import validate_modules
 
             mapping.validate_mapping(armature, settings=settings)
             validate_modules(armature)
@@ -98,7 +98,7 @@ def _shape_override_edited(self, context) -> None:
     from . import mapping
 
     mapping.validate_mapping(armature)
-    from .post_processing import validate_modules
+    from .postprocess import validate_modules
 
     validate_modules(armature)
 

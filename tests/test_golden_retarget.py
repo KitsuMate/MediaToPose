@@ -88,7 +88,7 @@ class GoldenRetargetTests(unittest.TestCase):
             lambda: [setattr(item, "enabled", value) for item, value in saved]
         )
         # RoHM needs its external model bundle; keep the cases model-free.
-        rohm = self.addon.post_processing.module_config(config, "ROHM_CORRECTION")
+        rohm = self.addon.postprocess.module_config(config, "ROHM_CORRECTION")
         rohm.enabled = False
 
     def _recorded(self, fixture_id: str):
@@ -205,10 +205,8 @@ class GoldenRetargetTests(unittest.TestCase):
                 "DETECTION_FILTER",
                 "TEMPORAL_CORRECTION",
             ):
-                self.addon.post_processing.module_config(
-                    config, module_id
-                ).enabled = True
-            temporal = self.addon.post_processing.module_config(
+                self.addon.postprocess.module_config(config, module_id).enabled = True
+            temporal = self.addon.postprocess.module_config(
                 config, "TEMPORAL_CORRECTION"
             )
             state = (

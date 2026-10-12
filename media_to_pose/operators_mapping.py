@@ -476,7 +476,7 @@ class MTP_OT_reset_all_post_processing(_IdleMutationMixin, Operator):
         armature = active_armature(context)
         if not armature:
             return {"CANCELLED"}
-        from .post_processing import (
+        from .postprocess import (
             ensure_module_configs,
             reset_module_defaults,
             validate_modules,

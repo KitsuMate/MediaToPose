@@ -13,7 +13,7 @@ from .. import (
 )
 from ..core.scene import SceneContext
 from ..models import CanonicalFrame
-from ..post_processing import (
+from ..postprocess import (
     PostProcessingSession,
     iter_pipeline,
 )

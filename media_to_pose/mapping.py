@@ -972,7 +972,7 @@ def ensure_mapping_entries(armature: bpy.types.Object) -> None:
             entry.section = section
             entry.side = side_from_role(entry.semantic_id)
             entry.required = required
-    from .post_processing import ensure_module_configs
+    from .postprocess import ensure_module_configs
 
     ensure_module_configs(config)
 
@@ -1675,7 +1675,7 @@ def auto_map(armature: bpy.types.Object, *, force_profile: bool = False) -> str:
             )
 
     validate_mapping(armature)
-    from .post_processing import validate_modules
+    from .postprocess import validate_modules
 
     validate_modules(armature)
     return profile
@@ -1698,7 +1698,7 @@ def refresh_auto_mapping(armature: bpy.types.Object) -> bool:
     # Correction definitions can change without the armature geometry or
     # mapping profile changing. Synchronize them before the mapping staleness
     # checks so newly registered processors appear on existing target rigs.
-    from .post_processing import ensure_module_configs
+    from .postprocess import ensure_module_configs
 
     ensure_module_configs(config)
     if config.profile != PROFILE_AUTO:
@@ -1996,7 +1996,7 @@ def validate_mapping(
 
 def serialize_config(armature: bpy.types.Object) -> dict:
     config = armature.mtp_rig_config
-    from .post_processing import serialize_module_configs
+    from .postprocess import serialize_module_configs
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -2078,7 +2078,7 @@ def load_config(armature: bpy.types.Object, payload: dict) -> None:
                 )
         if "manual" in switch_values:
             armature.mtp_rig_config.fk_switches_manual = bool(switch_values["manual"])
-        from .post_processing import load_module_configs
+        from .postprocess import load_module_configs
 
         load_module_configs(
             armature.mtp_rig_config,
@@ -2112,7 +2112,7 @@ def copy_section(
     target_entries = mapping_by_id(target.mtp_rig_config)
     with properties.suppress_manual_locks():
         if section in {None, "POST_PROCESSING"}:
-            from .post_processing import (
+            from .postprocess import (
                 load_module_configs,
                 serialize_module_configs,
             )

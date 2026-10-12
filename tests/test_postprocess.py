@@ -25,7 +25,7 @@ class PostProcessCompilationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
-        cls.post = cls.addon.post_processing
+        cls.post = cls.addon.postprocess
 
     def _config(self):
         modules = _Collection()
@@ -644,11 +644,13 @@ class PostProcessCompilationTests(unittest.TestCase):
             forearm_twist_limit=math.pi,
         )
 
-        observation = self.post.ArmAxisCorrection()._palm_forearm_twist(
-            pose,
-            "L",
-            settings,
-            self.post.PostProcessingSession(),
+        observation = (
+            self.post.modules.limb_axis.ArmAxisCorrection()._palm_forearm_twist(
+                pose,
+                "L",
+                settings,
+                self.post.PostProcessingSession(),
+            )
         )
 
         self.assertIsNotNone(observation)
@@ -698,7 +700,7 @@ class PostProcessCompilationTests(unittest.TestCase):
             palm_roll_strength=1.0,
             forearm_twist_limit=math.radians(90.0),
         )
-        processor = self.post.ArmAxisCorrection()
+        processor = self.post.modules.limb_axis.ArmAxisCorrection()
         session = self.post.PostProcessingSession()
         session.prepare_frame(0)
         before = processor._palm_forearm_twist(pose_at(-170.0), "L", settings, session)

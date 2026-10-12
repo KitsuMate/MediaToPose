@@ -11,7 +11,7 @@ from .. import (
 from ..core.requests import FaceOutput
 from ..core.scene import SceneContext
 from ..models import CanonicalFrame
-from ..post_processing import (
+from ..postprocess import (
     PostProcessingSession,
     compile_postprocess_config,
     iter_pipeline,

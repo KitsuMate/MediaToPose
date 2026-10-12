@@ -30,7 +30,7 @@ class VroidFixtureTests(unittest.TestCase):
             bone.matrix_basis = Matrix.Identity(4)
         # These fixture tests exercise retargeting and model-free cleanup.
         # RoHM is release-default but requires its external verified bundle.
-        rohm = self.addon.post_processing.module_config(
+        rohm = self.addon.postprocess.module_config(
             self.armature.mtp_rig_config, "ROHM_CORRECTION"
         )
         rohm_was_enabled = rohm.enabled
@@ -51,7 +51,7 @@ class VroidFixtureTests(unittest.TestCase):
 
     def _spine_quality(self, frame):
         entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
-        samples, inferred = self.addon.post_processing.CORRECTION_REGISTRY[
+        samples, inferred = self.addon.postprocess.CORRECTION_REGISTRY[
             "SPINE_CORRECTION"
         ]._source_curve(SimpleNamespace(frame=frame))
         channels = []
@@ -92,9 +92,9 @@ class VroidFixtureTests(unittest.TestCase):
             start_fraction = cursor / total
             cursor += length
             end_fraction = cursor / total
-            source_segment = self.addon.post_processing._arc_point(
+            source_segment = self.addon.postprocess.base._arc_point(
                 samples, end_fraction
-            ) - self.addon.post_processing._arc_point(samples, start_fraction)
+            ) - self.addon.postprocess.base._arc_point(samples, start_fraction)
             intended = self.addon.retarget.solve.frames._to_target_direction(
                 source_segment,
                 source_basis,
@@ -109,7 +109,7 @@ class VroidFixtureTests(unittest.TestCase):
 
     def _assert_recorded_retarget(self, fixture_id: str, body_count: int) -> None:
         payload, frame, settings = self._recorded_frame(fixture_id)
-        spine = self.addon.post_processing.module_config(
+        spine = self.addon.postprocess.module_config(
             self.armature.mtp_rig_config,
             "SPINE_CORRECTION",
         )
@@ -580,7 +580,7 @@ class VroidFixtureTests(unittest.TestCase):
     def test_sequence_streams_detection_and_keyframe_work(self) -> None:
         payload, source, settings = self._recorded_frame("sam_ref_pose_stylized_output")
         settings.root_motion_mode = "OFF"
-        temporal = self.addon.post_processing.module_config(
+        temporal = self.addon.postprocess.module_config(
             self.armature.mtp_rig_config, "TEMPORAL_CORRECTION"
         )
         temporal_state = (
@@ -701,7 +701,7 @@ class VroidFixtureTests(unittest.TestCase):
         )
         settings.root_motion_mode = "AUTOMATIC"
         settings.keep_original_root_position = False
-        temporal = self.addon.post_processing.module_config(
+        temporal = self.addon.postprocess.module_config(
             self.armature.mtp_rig_config, "TEMPORAL_CORRECTION"
         )
         temporal_was_enabled = temporal.enabled

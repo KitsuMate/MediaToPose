@@ -46,7 +46,7 @@ from ..core.scene import SceneContext
 from ..media_io import probe_media
 from ..models import CanonicalFrame, MediaInfo
 from ..operation import COORDINATOR, OperationKind, OperationState
-from ..post_processing import compile_postprocess_config
+from ..postprocess import compile_postprocess_config
 from ..providers import descriptor
 from ..retarget import (
     iter_apply_frame,

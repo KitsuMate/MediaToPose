@@ -7,7 +7,7 @@ import textwrap
 import bpy
 from bpy.types import AddonPreferences, Panel, UIList
 
-from . import cache_preview, detection_cache, mapping, post_processing
+from . import cache_preview, detection_cache, mapping, postprocess
 from .backends.anycalib import backend as anycalib_backend
 from .backends.rohm import backend as rohm_backend
 from .backends.sam3d import backend as sam3d_backend
@@ -1474,7 +1474,7 @@ class MTP_PT_pose_motion_cleanup(Panel):
         if armature is None:
             layout.label(text="Choose a target character", icon="INFO")
             return
-        modules = post_processing.ordered_module_configs(armature.mtp_rig_config)
+        modules = postprocess.ordered_module_configs(armature.mtp_rig_config)
         if not modules:
             layout.label(text="Cleanup settings are not initialized", icon="INFO")
             return

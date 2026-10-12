@@ -17,7 +17,7 @@ from ..core.errors import MediaError
 from ..core.requests import MediaKind, RootMotionMode
 from ..core.scene import SceneContext
 from ..models import CanonicalFrame
-from ..post_processing import (
+from ..postprocess import (
     PostProcessingSession,
     SequenceProcessingContext,
     compile_postprocess_config,

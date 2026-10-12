@@ -78,7 +78,7 @@ def _detect(addon, provider_name: str, image: Path, sam_device: str):
 
 def _spine_quality(addon, armature, frame):
     entries = addon.mapping.mapping_by_id(armature.mtp_rig_config)
-    samples, inferred = addon.post_processing.CORRECTION_REGISTRY[
+    samples, inferred = addon.postprocess.CORRECTION_REGISTRY[
         "SPINE_CORRECTION"
     ]._source_curve(SimpleNamespace(frame=frame))
     channels = []
@@ -110,9 +110,9 @@ def _spine_quality(addon, armature, frame):
         start_fraction = cursor / total
         cursor += length
         end_fraction = cursor / total
-        source_segment = addon.post_processing._arc_point(
+        source_segment = addon.postprocess.base._arc_point(
             samples, end_fraction
-        ) - addon.post_processing._arc_point(samples, start_fraction)
+        ) - addon.postprocess.base._arc_point(samples, start_fraction)
         intended = addon.retarget.solve.frames._to_target_direction(
             source_segment,
             source_basis,
