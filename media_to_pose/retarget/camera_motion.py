@@ -168,7 +168,7 @@ def _iter_prepare_camera_motion_track(
     source_identity = dict(getattr(request, "source_identity", {}) or {})
     expected_key = camera_motion_correction.cache_key(source_identity, inputs)
     directory = detection_cache.camera_motion_directory(create_root=False)
-    from .dependency_bootstrap import import_camera_dependencies
+    from ..dependency_bootstrap import import_camera_dependencies
 
     try:
         cv2, np = import_camera_dependencies()

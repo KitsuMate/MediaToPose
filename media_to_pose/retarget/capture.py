@@ -62,7 +62,7 @@ def _capture_rohm_frame_input(
     deliberately not Blender ``matrix_basis`` values: RoHM converts these
     globals through the official SMPL-X hierarchy before inference.
     """
-    from .rohm_correction import SMPLX_SEMANTICS
+    from ..rohm_correction import SMPLX_SEMANTICS
 
     result = _RohmFrameInput()
     pelvis = evaluated_semantic_bone(armature, target_pose.entries, "PELVIS")
