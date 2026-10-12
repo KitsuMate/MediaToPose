@@ -9,14 +9,39 @@ from unittest import mock
 import bpy
 from mathutils import Matrix
 
-from tests.blender_test_support import load_addon
+from tests.blender_test_support import load_addon, scene_context
 
 
 class CaptureWorkerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         addon = load_addon()
-        cls.capture = addon.operators_capture
+        cls.worker = addon.session.worker
+        cls.progress = addon.session.progress
+        cls.requests = addon.core.requests
+
+    def _request(self, media, mode, source_index, options):
+        return self.requests.CaptureRequest(
+            provider_id="MEDIAPIPE",
+            mode=mode,
+            media_path=media.path,
+            media_kind=media.kind,
+            source_frame_index=source_index,
+            use_body=True,
+            use_hands=True,
+            use_face=False,
+            face_output="ARKIT",
+            root_motion_mode="OFF",
+            keep_original_root_position=False,
+            keep_detection_cache=False,
+            cache_limit_bytes=0,
+            start_frame=1.0,
+            scene_name="Scene",
+            scene_pointer=1,
+            options=options,
+            media_info=media,
+            cache_media_info=media,
+        )
 
     def test_video_pose_detects_the_selected_source_frame(self) -> None:
         calls = []
@@ -40,20 +65,9 @@ class CaptureWorkerTests(unittest.TestCase):
         )
         media = SimpleNamespace(kind="VIDEO", path="clip.mp4")
         provider = SimpleNamespace(provider_class=Provider)
-        with mock.patch.object(self.capture, "descriptor", return_value=provider):
-            self.capture._worker(
-                job,
-                "MEDIAPIPE",
-                {},
-                media,
-                media,
-                "POSE",
-                17,
-                "",
-                {},
-                False,
-                0,
-            )
+        request = self._request(media, "POSE", 17, {})
+        with mock.patch.object(self.worker, "descriptor", return_value=provider):
+            self.worker.run_detection(job, request)
 
         self.assertEqual(job.messages.get_nowait(), ("FRAME", "selected-pose"))
         self.assertIn(("detect", "clip.mp4", 17), calls)
@@ -110,20 +124,9 @@ class CaptureWorkerTests(unittest.TestCase):
             "camera_precision": "fp32",
         }
         descriptor = SimpleNamespace(provider_class=Provider)
-        with mock.patch.object(self.capture, "descriptor", return_value=descriptor):
-            self.capture._worker(
-                job,
-                "MEDIAPIPE",
-                options,
-                media,
-                media,
-                "POSE",
-                0,
-                "",
-                {},
-                False,
-                0,
-            )
+        request = self._request(media, "POSE", 0, options)
+        with mock.patch.object(self.worker, "descriptor", return_value=descriptor):
+            self.worker.run_detection(job, request)
 
         self.assertEqual(job.messages.get_nowait(), ("FRAME", "pose"))
         self.assertEqual(calls[0], ("init", None, False))
@@ -149,7 +152,7 @@ class CaptureWorkerTests(unittest.TestCase):
             root_motion_mode="AUTOMATIC",
             postprocess_config=modules,
         )
-        plan = self.capture._capture_progress_plan(request, cached=False)
+        plan = self.progress.capture_progress_plan(request, cached=False)
         updates = (
             SimpleNamespace(phase="Loading detections", current=10, total=10),
             SimpleNamespace(phase="Solving animation", current=10, total=10),
@@ -168,7 +171,7 @@ class CaptureWorkerTests(unittest.TestCase):
         values = []
         previous = 0.0
         for update in updates:
-            previous = self.capture._sequence_progress_percent(
+            previous = self.progress.sequence_progress_percent(
                 update,
                 previous,
                 plan,
@@ -184,7 +187,7 @@ class CaptureWorkerTests(unittest.TestCase):
 
         sam_request = SimpleNamespace(**vars(request))
         sam_request.provider_id = "SAM3D_BODY"
-        sam_plan = self.capture._capture_progress_plan(sam_request, cached=False)
+        sam_plan = self.progress.capture_progress_plan(sam_request, cached=False)
         sam_detection_span = (
             sam_plan.range_for("detection")[1] - sam_plan.range_for("detection")[0]
         )
@@ -205,18 +208,18 @@ class CaptureWorkerTests(unittest.TestCase):
             postprocess_config=SimpleNamespace(modules=(rohm,)),
         )
 
-        self.assertFalse(self.capture._rohm_may_run(request))
+        self.assertFalse(self.progress.rohm_may_run(request))
         self.assertNotIn(
             "rohm",
-            self.capture._capture_progress_plan(request, cached=True).ranges,
+            self.progress.capture_progress_plan(request, cached=True).ranges,
         )
 
         rohm.learned_pose_residual = True
         request.root_motion_mode = "OFF"
-        self.assertTrue(self.capture._rohm_may_run(request))
+        self.assertTrue(self.progress.rohm_may_run(request))
         self.assertIn(
             "rohm",
-            self.capture._capture_progress_plan(request, cached=True).ranges,
+            self.progress.capture_progress_plan(request, cached=True).ranges,
         )
 
 
@@ -253,8 +256,8 @@ class CaptureTransactionTests(unittest.TestCase):
                 bpy.data.actions.remove(action)
 
     def test_failed_animation_restores_action_pose_frame_and_selection(self) -> None:
-        transaction = self.addon.operators_capture._CaptureTransaction(
-            bpy.context.scene,
+        transaction = self.addon.session.transaction.CaptureTransaction(
+            scene_context(),
             self.armature,
             animation=True,
         )
@@ -282,8 +285,8 @@ class CaptureTransactionTests(unittest.TestCase):
         root.rotation_mode = "XYZ"
         root.rotation_euler.x = 0.25
         root.keyframe_insert(data_path="rotation_euler", index=0, frame=2.0)
-        transaction = self.addon.operators_capture._CaptureTransaction(
-            bpy.context.scene,
+        transaction = self.addon.session.transaction.CaptureTransaction(
+            scene_context(),
             self.armature,
             animation=True,
         )
@@ -316,8 +319,8 @@ class CaptureTransactionTests(unittest.TestCase):
         original = bpy.data.actions.new("OriginalShapeAction")
         keys.animation_data_create().action = original
         try:
-            transaction = self.addon.operators_capture._CaptureTransaction(
-                bpy.context.scene,
+            transaction = self.addon.session.transaction.CaptureTransaction(
+                scene_context(),
                 self.armature,
                 animation=True,
             )

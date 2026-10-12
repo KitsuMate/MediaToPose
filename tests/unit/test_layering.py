@@ -105,7 +105,6 @@ ALLOWLIST: set[tuple[str, str, str]] = {
     ("detection_cache", "uses-bpy", "bpy"),
     ("mapping", "imports-blender", "properties"),
     ("mapping", "reads-bpy-context", "bpy.context"),
-    ("operators_capture", "reads-bpy-context", "bpy.context"),
     ("ui", "reads-bpy-context", "bpy.context"),
 }
 
