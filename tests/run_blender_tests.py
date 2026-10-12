@@ -1,7 +1,12 @@
-"""Run the CI test suite once inside Blender."""
+"""Run the CI test suite once inside Blender.
+
+Pass ``-- --update-golden`` after the Blender arguments to rewrite the golden
+retarget snapshots instead of comparing against them.
+"""
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -23,6 +28,7 @@ TEST_MODULES = (
     "tests.test_rohm_correction",
     "tests.test_grounded_cleanup",
     "tests.test_e2e_vroid",
+    "tests.test_golden_retarget",
     "tests.test_capture_operations",
     "tests.test_registration",
     "tests.test_anycalib_backend",
@@ -34,6 +40,9 @@ TEST_MODULES = (
 
 
 def main() -> None:
+    arguments = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
+    if "--update-golden" in arguments:
+        os.environ["MTP_UPDATE_GOLDEN"] = "1"
     loader = unittest.defaultTestLoader
     suite = unittest.TestSuite()
     for module_name in TEST_MODULES:
