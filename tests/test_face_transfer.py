@@ -157,7 +157,7 @@ class FaceTransferTests(unittest.TestCase):
         self.assertEqual(facs({"mouthStretchLeft": 1.0})["AU27"], 0.0)
 
     def test_face_frame_measures_the_eyes_not_their_targets(self) -> None:
-        frame = self.face.face_frame(self.rig, self.entries)
+        frame = self.addon.rig.face_space.face_frame(self.rig, self.entries)
         self.assertAlmostEqual(frame.scale, 0.0591, delta=0.002)
         self.assertGreater(frame.up.z, 0.99)
         self.assertGreater(frame.lateral.x, 0.99)
@@ -168,7 +168,7 @@ class FaceTransferTests(unittest.TestCase):
             {"eyeBlinkLeft": 1.0, "browOuterUpLeft": 1.0, "mouthSmileLeft": 1.0},
             "BONES",
         )
-        scale = self.face.face_frame(self.rig, self.entries).scale
+        scale = self.addon.rig.face_space.face_frame(self.rig, self.entries).scale
         lid = self._world_offset("c_eyelid_top.l")
         brow = self._world_offset("c_eyebrow_01_end.l")
         corner = self._world_offset("c_lips_smile.l")
@@ -188,7 +188,7 @@ class FaceTransferTests(unittest.TestCase):
         self.assertAlmostEqual(jaw_bone.rotation_quaternion.angle, 0.0, places=5)
 
     def test_bone_lids_follow_the_gaze(self) -> None:
-        scale = self.face.face_frame(self.rig, self.entries).scale
+        scale = self.addon.rig.face_space.face_frame(self.rig, self.entries).scale
         share = self.face.LID_FOLLOW_GAZE * 0.34 * scale
         self._apply({"eyeLookDownLeft": 1.0}, "BONES")
         down = self._world_offset("c_eyelid_top.l").z
@@ -203,7 +203,7 @@ class FaceTransferTests(unittest.TestCase):
         target = self._world_offset("c_eye_target.l")
         # Positive coefficients look to the subject's left (+X here).
         self.assertGreater(target.x, 0.0)
-        tracker = self.face._gaze_tracker(
+        tracker = self.addon.rig.face_space.gaze_tracker(
             self.rig, self.rig.pose.bones["c_eye_target.l"]
         )
         self.assertIsNotNone(tracker)

@@ -15,10 +15,10 @@ from mathutils import Matrix, Vector
 from ..core.requests import FaceOutput
 from ..core.types import CanonicalFrame
 from ..retarget.solve.common import _mapped_bone
-from ..retarget.solve.face import _eye_position, face_frame
 from ..retarget.solve.face_values import FaceValueReader, mapped_expressions
 from ..rig import mapping
 from ..rig.face_schemes import associated_meshes
+from ..rig.face_space import eye_position, face_frame
 
 BAR_COUNT = 10
 # Space around the detected face box, as a share of its size.
@@ -88,7 +88,7 @@ def face_camera(scene, armature):
     head_length = head.bone.length if head is not None else 0.0
     if eye_left is not None and eye_right is not None:
         eyes = (
-            _eye_position(armature, eye_left) + _eye_position(armature, eye_right)
+            eye_position(armature, eye_left) + eye_position(armature, eye_right)
         ) * 0.5
     elif head is not None:
         eyes = (head.bone.head_local + head.bone.tail_local) * 0.5

@@ -16,17 +16,15 @@ from mathutils import Vector
 from ...core.constants import SHAPE_SCHEMES
 from ...core.requests import FaceOutput
 from ...rig.face_schemes import matching_shape_blocks
+from ...rig.face_space import face_axis, face_frame, gaze_tracker
 from .common import _mapped_bone
 from .face import (
     DEFAULT_FACE_CONTROL_TRAVEL,
     FACE_CONTROL_TRAVEL,
     _axis,
     _expression_value,
-    _face_axis,
     _face_control_values,
     _finite_float,
-    _gaze_tracker,
-    face_frame,
     facs_values,
     vrm_values,
 )
@@ -113,7 +111,7 @@ def _bone_value(bone, entry, space) -> float:
     if entry.channel_mode == "LOCATION":
         offset = bone.bone.matrix_local.to_3x3() @ Vector(bone.location)
         travel = FACE_CONTROL_TRAVEL.get(entry.semantic_id, DEFAULT_FACE_CONTROL_TRAVEL)
-        return offset.dot(_face_axis(space, entry.axis)) / (travel * space.scale)
+        return offset.dot(face_axis(space, entry.axis)) / (travel * space.scale)
     rotation = bone.matrix_basis.to_quaternion()
     axis, angle = rotation.to_axis_angle()
     return angle * Vector(axis).dot(_axis(entry.axis)) / ROTATION_PER_UNIT
@@ -219,7 +217,7 @@ def describe_face_rig(armature, config, entries) -> dict:
         if bone is None:
             eyes[semantic_id] = None
             continue
-        tracker = _gaze_tracker(armature, bone)
+        tracker = gaze_tracker(armature, bone)
         aim = (tracker or bone).bone
         eyes[semantic_id] = {
             "bone": bone.name,
