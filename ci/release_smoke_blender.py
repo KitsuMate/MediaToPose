@@ -274,12 +274,14 @@ def _exercise_rohm_bundle(addon: object) -> None:
     if not configured:
         return
     root = Path(configured).resolve(strict=True)
-    bundle = addon.rohm_ort_runtime.load_bundle(
+    bundle = addon.backends.rohm.runtime.load_bundle(
         root,
-        expected_upstream_revision=addon.rohm_backend.MODEL_SPEC["upstream_revision"],
+        expected_upstream_revision=addon.backends.rohm.backend.MODEL_SPEC[
+            "upstream_revision"
+        ],
     )
     runtime = addon.dependency_bootstrap.import_onnxruntime()
-    session = addon.rohm_ort_runtime.RohmSession(
+    session = addon.backends.rohm.runtime.RohmSession(
         bundle,
         "CPU",
         ort_module=runtime,

@@ -62,32 +62,34 @@ class ModelBackendOperatorTests(unittest.TestCase):
                 self.assertFalse(coordinator.is_busy())
 
     def test_backend_snapshots_describe_missing_models(self) -> None:
-        anycalib = self.addon.anycalib_backend.backend_snapshot("CPU")
-        rohm = self.addon.rohm_backend.backend_snapshot("CPU")
-        sam = self.addon.sam3d_backend.backend_snapshot("VITH", "CPU")
+        anycalib = self.addon.backends.anycalib.backend.backend_snapshot("CPU")
+        rohm = self.addon.backends.rohm.backend.backend_snapshot("CPU")
+        sam = self.addon.backends.sam3d.backend.backend_snapshot("VITH", "CPU")
         for snapshot in (anycalib, rohm):
             if not snapshot.installed:
                 self.assertIn(snapshot.state, {"NOT_INSTALLED", "ERROR"})
         if not sam.installed:
             self.assertTrue(sam.message)
         for module in (
-            self.addon.anycalib_backend,
-            self.addon.rohm_backend,
-            self.addon.sam3d_backend,
+            self.addon.backends.anycalib.backend,
+            self.addon.backends.rohm.backend,
+            self.addon.backends.sam3d.backend,
         ):
             self.assertFalse(module.install_status_snapshot().running)
 
     def test_one_downloader_and_one_job_class_serve_every_backend(self) -> None:
         lifecycle = self.addon.backends.lifecycle
         for module in (
-            self.addon.anycalib_backend,
-            self.addon.rohm_backend,
-            self.addon.sam3d_backend,
+            self.addon.backends.anycalib.backend,
+            self.addon.backends.rohm.backend,
+            self.addon.backends.sam3d.backend,
         ):
             with self.subTest(module=module.__name__):
                 self.assertIsInstance(module.BACKEND, lifecycle.ModelBackend)
                 self.assertFalse(hasattr(module, "_Job"))
-        self.assertIs(self.addon.sam3d_backend.BackgroundJob, lifecycle.BackgroundJob)
+        self.assertIs(
+            self.addon.backends.sam3d.backend.BackgroundJob, lifecycle.BackgroundJob
+        )
 
 
 if __name__ == "__main__":

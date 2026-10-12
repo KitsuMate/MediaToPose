@@ -21,8 +21,8 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any
 
-from .core.errors import BackendError
-from .core.log import get_logger
+from ...core.errors import BackendError
+from ...core.log import get_logger
 
 LOGGER = get_logger(__name__)
 

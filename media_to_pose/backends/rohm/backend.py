@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from . import rohm_ort_runtime, sam3d_backend, sam3d_ort_runtime
-from .backends import lifecycle
-from .backends.lifecycle import (
+from ...core.errors import Cancelled, ModelMissing, MtpError
+from ...operation import OperationKind
+from .. import lifecycle
+from ..lifecycle import (
     BackgroundJob,
     BundleFile,
     JobKind,
@@ -16,8 +17,9 @@ from .backends.lifecycle import (
     ModelBackend,
     PinnedBundle,
 )
-from .core.errors import Cancelled, ModelMissing, MtpError
-from .operation import OperationKind
+from ..sam3d import backend as sam3d_backend
+from ..sam3d import ort_runtime as sam3d_ort_runtime
+from . import runtime as rohm_ort_runtime
 
 HF_ENDPOINT = lifecycle.HF_ENDPOINT
 MODEL_STORAGE_FOLDER = "media_to_pose_rohm"

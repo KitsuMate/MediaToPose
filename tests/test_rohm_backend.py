@@ -14,7 +14,7 @@ class RohmBackendTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         load_addon()
-        cls.backend = importlib.import_module(f"{PACKAGE_NAME}.rohm_backend")
+        cls.backend = importlib.import_module(f"{PACKAGE_NAME}.backends.rohm.backend")
 
     def tearDown(self) -> None:
         self.backend.unload_model()

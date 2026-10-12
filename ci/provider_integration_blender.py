@@ -62,7 +62,7 @@ def _detect(addon, provider_name: str, image: Path, sam_device: str):
             **common,
         )
     else:
-        options = addon.sam3d_backend.runtime_paths()
+        options = addon.backends.sam3d.backend.runtime_paths()
         provider = addon.providers.SAM3DBodyProvider(
             variant="VITH",
             device=sam_device,
@@ -219,7 +219,7 @@ def main() -> None:
         raise AssertionError(f"Both hands were not detected: {sorted(frame.hands)}")
     report = _retarget_and_assert(addon, arguments.provider, frame)
     if arguments.provider == "sam3d":
-        diagnostics = addon.sam3d_backend.runtime_diagnostics(
+        diagnostics = addon.backends.sam3d.backend.runtime_diagnostics(
             "VITH",
             arguments.sam_device,
         )

@@ -16,8 +16,10 @@ import bpy
 from bpy.props import StringProperty
 from bpy.types import Operator
 
-from ... import anycalib_backend, rohm_backend, sam3d_backend
+from ...backends.anycalib import backend as anycalib_backend
 from ...backends.lifecycle import BackgroundJob, JobKind, ModelBackend
+from ...backends.rohm import backend as rohm_backend
+from ...backends.sam3d import backend as sam3d_backend
 from ...core.errors import MtpError, OperationBusy
 from ...core.log import get_logger
 from ...operation import COORDINATOR

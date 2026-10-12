@@ -900,7 +900,7 @@ class MTP_OT_apply_capture(Operator):
                     )
                 )
             ):
-                from . import rohm_backend
+                from .backends.rohm import backend as rohm_backend
 
                 model = rohm_backend.backend_snapshot(settings.rohm_device)
                 if not model.installed:

@@ -203,7 +203,7 @@ _SAM3D_VITH_ITEM = ("VITH", "ViT-H", "Default immutable ONNX graph bundle")
 def _sam3d_device_items(_self, _context):
     # Keep this callback read-only so panel draw never probes hardware.
     try:
-        from . import sam3d_backend
+        from .backends.sam3d import backend as sam3d_backend
 
         return sam3d_backend.sam3d_device_enum_items()
     except (AttributeError, ImportError, RuntimeError):
@@ -221,7 +221,7 @@ def _sam3d_device_items(_self, _context):
 def _rohm_device_items(_self, _context):
     """Return fixed provider-neutral choices without probing hardware."""
     try:
-        from . import rohm_backend
+        from .backends.rohm import backend as rohm_backend
 
         return rohm_backend.rohm_device_enum_items()
     except (AttributeError, ImportError, RuntimeError):

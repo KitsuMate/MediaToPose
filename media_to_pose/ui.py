@@ -7,15 +7,10 @@ import textwrap
 import bpy
 from bpy.types import AddonPreferences, Panel, UIList
 
-from . import (
-    anycalib_backend,
-    cache_preview,
-    detection_cache,
-    mapping,
-    post_processing,
-    rohm_backend,
-    sam3d_backend,
-)
+from . import cache_preview, detection_cache, mapping, post_processing
+from .backends.anycalib import backend as anycalib_backend
+from .backends.rohm import backend as rohm_backend
+from .backends.sam3d import backend as sam3d_backend
 from .capture_state import evaluate_apply_readiness
 from .operation import COORDINATOR, OperationKind
 from .operators_mapping import (

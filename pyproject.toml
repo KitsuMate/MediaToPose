@@ -48,11 +48,10 @@ include = [
   "media_to_pose/core",
   "media_to_pose/dependency_bootstrap.py",
   "media_to_pose/media_io.py",
-  "media_to_pose/model_lifecycle.py",
   "media_to_pose/models.py",
   "media_to_pose/operation.py",
   "media_to_pose/providers/base.py",
-  "media_to_pose/rohm_ort_runtime.py",
+  "media_to_pose/backends/rohm/runtime.py",
   "media_to_pose/sam3d_state.py",
 ]
 

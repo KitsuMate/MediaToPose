@@ -5,7 +5,7 @@ import unittest
 
 import numpy as np
 
-from media_to_pose import sam3d_mhr_runtime as runtime
+from media_to_pose.backends.sam3d import mhr_runtime as runtime
 
 MhrCameraOutput = runtime.MhrCameraOutput
 MhrModel = runtime.MhrModel

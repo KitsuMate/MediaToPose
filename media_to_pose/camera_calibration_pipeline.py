@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from . import anycalib_backend, camera_calibration
+from . import camera_calibration
+from .backends.anycalib import backend as anycalib_backend
 from .core.errors import Cancelled, MediaError
 from .core.log import get_logger
 from .dependency_bootstrap import import_runtime_dependencies

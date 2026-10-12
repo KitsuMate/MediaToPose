@@ -538,7 +538,7 @@ def options_from_settings(settings) -> dict:
         "anycalib_device": str(getattr(settings, "anycalib_device", "AUTO")),
     }
     if getattr(settings, "perspective_correction", "AUTO") == "AUTO":
-        from . import anycalib_backend
+        from .backends.anycalib import backend as anycalib_backend
 
         snapshot = anycalib_backend.backend_snapshot(
             getattr(settings, "anycalib_device", "AUTO")
@@ -560,7 +560,7 @@ def options_from_settings(settings) -> dict:
             }
         )
     if settings.provider == "SAM3D_BODY":
-        from .sam3d_backend import provider_options_from_settings
+        from .backends.sam3d.backend import provider_options_from_settings
 
         options.update(provider_options_from_settings(settings))
     return options
@@ -582,7 +582,7 @@ def _identity_options_from_settings(settings) -> dict:
         "manual_vertical_fov": float(getattr(settings, "manual_vertical_fov", 45.0)),
     }
     if getattr(settings, "perspective_correction", "AUTO") == "AUTO":
-        from . import anycalib_backend
+        from .backends.anycalib import backend as anycalib_backend
 
         snapshot = anycalib_backend.backend_snapshot(
             getattr(settings, "anycalib_device", "AUTO")

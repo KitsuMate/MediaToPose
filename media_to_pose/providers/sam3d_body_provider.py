@@ -10,7 +10,9 @@ from contextlib import suppress
 from pathlib import Path
 from threading import Event
 
-from .. import camera_calibration, sam3d_backend, sam3d_ort_runtime
+from .. import camera_calibration
+from ..backends.sam3d import backend as sam3d_backend
+from ..backends.sam3d import ort_runtime as sam3d_ort_runtime
 from ..constants import HAND_LANDMARK_NAMES
 from ..core.errors import InvalidRequest, MediaError, ModelMissing
 from ..dependency_bootstrap import import_runtime_dependencies

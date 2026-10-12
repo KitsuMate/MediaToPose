@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 
 import numpy as np
 
-from .core.errors import BackendError
+from ...core.errors import BackendError
 
 MODEL_FPS = 30.0
 SOURCE_WINDOW_FRAMES = 145
@@ -220,7 +220,7 @@ def visibility_vector(joint_visibility: np.ndarray) -> np.ndarray:
 
 
 def _provider(requested: object, available: Sequence[str]) -> tuple[str, str, bool]:
-    from . import sam3d_ort_runtime
+    from ..sam3d import ort_runtime as sam3d_ort_runtime
 
     return sam3d_ort_runtime.select_execution_provider(requested, available)
 
@@ -237,7 +237,7 @@ class RohmSession:
         session_factory=None,
     ):
         if ort_module is None:
-            from . import dependency_bootstrap
+            from ... import dependency_bootstrap
 
             ort_module = dependency_bootstrap.import_onnxruntime()
         available = tuple(ort_module.get_available_providers())

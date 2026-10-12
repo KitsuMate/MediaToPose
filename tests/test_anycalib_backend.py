@@ -15,7 +15,7 @@ class AnyCalibBundleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.addon = load_addon()
-        cls.runtime = cls.addon.anycalib_ort_runtime
+        cls.runtime = cls.addon.backends.anycalib.runtime
 
     def _bundle(self, directory: Path, *, graph_path="model.onnx"):
         graph = directory / "model.onnx"
@@ -85,9 +85,9 @@ class AnyCalibBundleTests(unittest.TestCase):
             self.assertGreater(target[1], 0)
 
     def test_public_bundle_is_pinned_to_an_immutable_kitsumate_commit(self):
-        spec = self.addon.anycalib_backend.MODEL_SPEC
+        spec = self.addon.backends.anycalib.backend.MODEL_SPEC
         self.assertEqual(spec["repo"], "KitsuMate/anycalib-onnx")
-        self.assertTrue(self.addon.anycalib_backend.is_published())
+        self.assertTrue(self.addon.backends.anycalib.backend.is_published())
         self.assertNotEqual(spec["revision"], "main")
         for value in spec["variants"].values():
             self.assertGreater(value["download_bytes"], 0)

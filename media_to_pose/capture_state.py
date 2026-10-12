@@ -117,7 +117,8 @@ def evaluate_apply_readiness(
     media_source=None,
 ) -> CaptureReadiness:
     """Evaluate the exact side-effect-free state shared by UI and Apply."""
-    from . import detection_cache, sam3d_backend
+    from . import detection_cache
+    from .backends.sam3d import backend as sam3d_backend
 
     provider = provider or _descriptor(settings.provider)
     source = (

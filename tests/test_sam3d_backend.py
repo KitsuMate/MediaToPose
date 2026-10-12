@@ -18,20 +18,20 @@ class SamBackendContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
-        cls.sam = cls.addon.sam3d_backend
+        cls.sam = cls.addon.backends.sam3d.backend
 
     def test_model_specs_use_kitsumate_and_require_an_immutable_revision(self) -> None:
         self.assertEqual(tuple(self.sam.MODEL_VARIANTS), ("VITH",))
         specification = self.sam.MODEL_VARIANTS["VITH"]
         self.assertEqual(specification["repo"], "KitsuMate/sam-3d-body-onnx")
         self.assertTrue(
-            self.addon.sam3d_ort_runtime.is_immutable_revision(
+            self.addon.backends.sam3d.ort_runtime.is_immutable_revision(
                 specification["revision"]
             )
         )
 
     def test_device_modes_are_stable_and_invalid_values_are_rejected(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         self.assertEqual(
             [item[0] for item in self.sam.sam3d_device_enum_items()],
             ["AUTO", "GPU", "CPU"],
@@ -77,7 +77,7 @@ class SamBackendContractTests(unittest.TestCase):
                     return_value=root,
                 ),
                 mock.patch.object(
-                    self.addon.sam3d_ort_runtime,
+                    self.addon.backends.sam3d.ort_runtime,
                     "load_bundle_manifest",
                     return_value=bundle,
                 ) as load_bundle,
@@ -97,7 +97,7 @@ class SamBackendContractTests(unittest.TestCase):
                     self.sam.invalidate_backend_snapshot()
 
     def test_execution_provider_policy_is_platform_specific_with_cpu_fallback(self):
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         providers = (
             "CPUExecutionProvider",
             "WebGpuExecutionProvider",
@@ -145,8 +145,8 @@ class SamBackendContractTests(unittest.TestCase):
             )
         manifest = {
             "schema_version": 1,
-            "contract": self.addon.sam3d_ort_runtime.BUNDLE_CONTRACT,
-            "runner": self.addon.sam3d_ort_runtime.SPLIT_NUMPY_RUNNER,
+            "contract": self.addon.backends.sam3d.ort_runtime.BUNDLE_CONTRACT,
+            "runner": self.addon.backends.sam3d.ort_runtime.SPLIT_NUMPY_RUNNER,
             "variant": "VITH",
             "model_revision": "a" * 40,
             "precision": "fp16",
@@ -172,7 +172,7 @@ class SamBackendContractTests(unittest.TestCase):
             "neutral_rotations": {
                 str(index): [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
                 for index in sorted(
-                    self.addon.sam3d_ort_runtime.REQUIRED_NEUTRAL_ROTATION_INDICES
+                    self.addon.backends.sam3d.ort_runtime.REQUIRED_NEUTRAL_ROTATION_INDICES
                 )
             },
         }
@@ -181,7 +181,7 @@ class SamBackendContractTests(unittest.TestCase):
         return path
 
     def test_bundle_manifest_verifies_graph_and_external_data(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         with tempfile.TemporaryDirectory() as directory:
             bundle = runtime.load_bundle_manifest(
                 self._bundle(directory, artifact=True),
@@ -195,7 +195,7 @@ class SamBackendContractTests(unittest.TestCase):
                 runtime.load_bundle_manifest(Path(directory) / "bundle.json")
 
     def test_bundle_manifest_rejects_escaping_artifact(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         with tempfile.TemporaryDirectory() as directory:
             path = self._bundle(directory)
             manifest = json.loads(path.read_text(encoding="utf8"))
@@ -207,7 +207,7 @@ class SamBackendContractTests(unittest.TestCase):
                 runtime.load_bundle_manifest(path, verify_files=False)
 
     def test_bundle_requires_every_provider_neutral_rotation(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         with tempfile.TemporaryDirectory() as directory:
             path = self._bundle(directory)
             manifest = json.loads(path.read_text(encoding="utf8"))
@@ -221,7 +221,7 @@ class SamBackendContractTests(unittest.TestCase):
                 runtime.load_bundle_manifest(path, verify_files=False)
 
     def test_bundle_rejects_improper_neutral_rotation(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         with tempfile.TemporaryDirectory() as directory:
             path = self._bundle(directory)
             manifest = json.loads(path.read_text(encoding="utf8"))
@@ -244,7 +244,7 @@ class SamBackendContractTests(unittest.TestCase):
     def test_bundle_rejects_nonfinite_and_nonorthonormal_neutral_rotations(
         self,
     ) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         invalid_matrices = {
             "non-finite": [
                 float("nan"),
@@ -283,7 +283,7 @@ class SamBackendContractTests(unittest.TestCase):
                     runtime.load_bundle_manifest(path, verify_files=False)
 
     def test_every_ort_output_has_exact_dtype_shape_and_finite_values(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
         people = 2
         valid = {
             key: np.zeros((people, *suffix), dtype=dtype)
@@ -318,7 +318,7 @@ class SamBackendContractTests(unittest.TestCase):
                     runtime._validate_output_tensors(np, invalid, people)
 
     def test_auto_webgpu_prefers_nvidia_adapter(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
 
         class Hardware:
             type = "GPU"
@@ -348,7 +348,7 @@ class SamBackendContractTests(unittest.TestCase):
         self.assertEqual(diagnostics.hardware_device_id, 9373)
 
     def test_webgpu_plugin_registration_can_retry_after_transient_failure(self) -> None:
-        runtime = self.addon.sam3d_ort_runtime
+        runtime = self.addon.backends.sam3d.ort_runtime
 
         class FakeOrt:
             attempts = 0

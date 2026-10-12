@@ -21,9 +21,9 @@ from pathlib import Path, PurePosixPath
 
 import numpy as np
 
-from . import sam3d_ort_runtime as _ort_runtime
-from .core.log import get_logger
-from .sam3d_mhr_runtime import MhrModel
+from ...core.log import get_logger
+from . import ort_runtime as _ort_runtime
+from .mhr_runtime import MhrModel
 
 LOGGER = get_logger(__name__)
 

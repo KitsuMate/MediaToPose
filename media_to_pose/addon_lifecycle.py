@@ -6,7 +6,6 @@ import bpy
 from bpy.app.handlers import persistent
 
 from . import (
-    anycalib_ort_runtime,
     cache_preview,
     camera_calibration,
     camera_motion_correction,
@@ -14,9 +13,10 @@ from . import (
     operators_mapping,
     properties,
     rohm_correction,
-    rohm_ort_runtime,
     ui,
 )
+from .backends.anycalib import runtime as anycalib_ort_runtime
+from .backends.rohm import runtime as rohm_ort_runtime
 from .blender.operators import models as model_operators
 from .core.log import configure_logging, get_logger
 from .operation import COORDINATOR

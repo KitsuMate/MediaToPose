@@ -13,8 +13,8 @@ import numpy as np
 from tests.blender_test_support import PACKAGE_NAME, load_addon
 
 load_addon()
-ort_runtime = importlib.import_module(f"{PACKAGE_NAME}.sam3d_ort_runtime")
-vith_runtime = importlib.import_module(f"{PACKAGE_NAME}.sam3d_vith_runtime")
+ort_runtime = importlib.import_module(f"{PACKAGE_NAME}.backends.sam3d.ort_runtime")
+vith_runtime = importlib.import_module(f"{PACKAGE_NAME}.backends.sam3d.vith_runtime")
 RuntimeDiagnostics = ort_runtime.RuntimeDiagnostics
 load_estimator = ort_runtime.load_estimator
 CropBatch = vith_runtime.CropBatch
