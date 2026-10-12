@@ -6,9 +6,12 @@ so the numbers below encode what the visual review of the fixture showed.
 
 from __future__ import annotations
 
+import io
+import json
 import math
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -112,6 +115,12 @@ class FaceTransferTests(unittest.TestCase):
         self.assertEqual(scheme("facs_cbs_EyeFullCompressionLeft"), "NONE")
         self.assertEqual(scheme("facs_ctrl_vAA"), "NONE")
         self.assertEqual(scheme("AU12_L"), "FACS")
+        self.assertEqual(scheme("AU45"), "FACS")
+        for name in ("Fcl_EYE_Close_L", "Fcl_MTH_A", "vrm_blink", "Fcl_BRW_Angry"):
+            self.assertEqual(scheme(name), "VRM", name)
+        for name in ("Basis", "Smile_extra", "mouthSmileLeft_corrective"):
+            with self.subTest(name=name):
+                self.assertNotIn(scheme(name), {"FACS", "VRM"})
 
     def test_blink_drives_one_key_on_every_mesh_that_has_one(self) -> None:
         self._apply({"eyeBlinkLeft": 1.0}, "ARKIT")
@@ -487,6 +496,60 @@ class FaceCaptureResultTests(unittest.TestCase):
         )
         self.assertIn("mouthSmileRight", result.face["unmapped_expressions"])
         self.assertNotIn("mouthSmileRight", result.face["expressions"])
+
+    def test_command_line_face_capture_metrics_and_render(self) -> None:
+        def run(*argv: str) -> tuple[int, str]:
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = self.addon.api.cli.execute(list(argv))
+            return code, output.getvalue()
+
+        with tempfile.TemporaryDirectory() as temporary:
+            result_path = str(Path(temporary) / "result.json")
+            code, output = run(
+                "capture",
+                "--media",
+                str(fixture_path("face_smile_open")),
+                "--armature",
+                self.rig.name,
+                "--parts",
+                "face",
+                "--face-output",
+                "ARKIT",
+                "--out",
+                result_path,
+                "--json",
+            )
+            self.assertEqual(code, 0, output)
+            self.assertIn("mouthSmileLeft", json.loads(output)["face"]["expressions"])
+            code, output = run(
+                "evaluate",
+                "--armature",
+                self.rig.name,
+                "--result",
+                result_path,
+                "--json",
+            )
+            self.assertEqual(code, 0, output)
+            metrics = json.loads(output)
+            # One posed still: the rig shows exactly what was detected.
+            self.assertLess(metrics["expression_fit"], 0.01)
+            sheet = str(Path(temporary) / "face.png")
+            code, output = run(
+                "render",
+                "--armature",
+                self.rig.name,
+                "--result",
+                result_path,
+                "--out",
+                sheet,
+                "--size",
+                "96",
+                "--face",
+                "--json",
+            )
+            self.assertEqual(code, 0, output)
+            self.assertTrue(Path(sheet).is_file())
 
     def test_face_comparison_sheet_has_source_rig_and_chart(self) -> None:
         result = self.addon.api.capture(

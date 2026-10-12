@@ -1,0 +1,50 @@
+{
+ "bones": {
+  "J_Adj_L_FaceEye": {
+   "location": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rotation": [
+    0.999084,
+    -0.025175,
+    -0.009697,
+    0.033206
+   ]
+  },
+  "J_Adj_R_FaceEye": {
+   "location": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "rotation": [
+    0.999084,
+    -0.025175,
+    0.009697,
+    -0.033206
+   ]
+  }
+ },
+ "case": "still_face_vrm",
+ "schema_version": 1,
+ "shapes": {
+  "Face/Fcl_BRW_Angry": 0.148,
+  "Face/Fcl_BRW_Sorrow": 0.356,
+  "Face/Fcl_BRW_Surprised": 0.592,
+  "Face/Fcl_EYE_Close_L": 0.768,
+  "Face/Fcl_EYE_Close_R": 0.264,
+  "Face/Fcl_EYE_Joy_L": 0.176,
+  "Face/Fcl_EYE_Joy_R": 0.472,
+  "Face/Fcl_EYE_Surprised": 0.468,
+  "Face/Fcl_MTH_A": 0.428,
+  "Face/Fcl_MTH_Angry": 0.508,
+  "Face/Fcl_MTH_E": 0.07933,
+  "Face/Fcl_MTH_I": 0.05636,
+  "Face/Fcl_MTH_Joy": 0.476,
+  "Face/Fcl_MTH_O": 0.376,
+  "Face/Fcl_MTH_Sorrow": 0.332,
+  "Face/Fcl_MTH_U": 0.552
+ }
+}
