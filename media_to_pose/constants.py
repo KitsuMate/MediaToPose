@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import tomllib
 from functools import lru_cache
-from pathlib import Path
+
+from .core import paths
 
 
 @lru_cache(maxsize=1)
 def extension_version() -> str:
     """Read the sole release version from Blender's extension manifest."""
-    with (Path(__file__).resolve().parent / "blender_manifest.toml").open(
-        "rb"
-    ) as stream:
+    with paths.MANIFEST_PATH.open("rb") as stream:
         return str(tomllib.load(stream)["version"])
 
 

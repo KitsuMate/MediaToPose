@@ -95,5 +95,17 @@ class RelativeImportTests(unittest.TestCase):
         self.assertFalse(problems, "\n".join(problems))
 
 
+class SourceLocationTests(unittest.TestCase):
+    def test_only_core_paths_locates_files_from_its_own_path(self) -> None:
+        # Moving a module changes what ``__file__`` points at, so package
+        # resources are located through core.paths only.
+        offenders = [
+            name
+            for name, path in _modules().items()
+            if name != "core.paths" and "__file__" in path.read_text(encoding="utf8")
+        ]
+        self.assertEqual(offenders, [])
+
+
 if __name__ == "__main__":
     unittest.main()

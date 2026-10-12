@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
-from pathlib import Path
 from threading import Event
 
 from ... import camera_calibration
 from ...backends.sam3d import ort_runtime as sam3d_ort_runtime
 from ...constants import HAND_LANDMARK_NAMES
+from ...core import paths
 from ...core.errors import InvalidRequest, MediaError, ModelMissing
 from ...dependency_bootstrap import import_runtime_dependencies
 from ...media_io import (
@@ -115,12 +115,7 @@ class SAM3DBodyProvider:
             if self.video_mode
             else self.mp.tasks.vision.RunningMode.IMAGE
         )
-        model = (
-            Path(__file__).resolve().parents[1]
-            / "assets"
-            / "models"
-            / "pose_landmarker_full.task"
-        )
+        model = paths.BUNDLED_MODELS / "pose_landmarker_full.task"
         if not model.is_file():
             raise ModelMissing("Bundled person locator model is missing")
         options = self.mp.tasks.vision.PoseLandmarkerOptions(
