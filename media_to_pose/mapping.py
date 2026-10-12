@@ -23,6 +23,7 @@ from .constants import (
     SCHEMA_VERSION,
 )
 from .core.errors import InvalidRequest
+from .core.fs import atomic_json
 
 _ARKIT_NORMALIZED = {
     normalize
@@ -2166,8 +2167,12 @@ def copy_section(
 
 
 def save_json(filepath: str, armature: bpy.types.Object) -> None:
-    with Path(filepath).open("w", encoding="utf8") as handle:
-        json.dump(serialize_config(armature), handle, indent=2, ensure_ascii=False)
+    atomic_json(
+        Path(filepath),
+        serialize_config(armature),
+        sort_keys=False,
+        ensure_ascii=False,
+    )
 
 
 def load_json(filepath: str, armature: bpy.types.Object) -> None:

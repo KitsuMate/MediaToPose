@@ -10,10 +10,8 @@ import platform
 import queue
 import re
 import shutil
-import stat
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import traceback
@@ -33,6 +31,7 @@ from bpy.types import Operator
 
 from . import sam3d_ort_runtime
 from .constants import CAPTURE_CONFIDENCE, extension_version
+from .core.fs import atomic_json
 from .core.log import get_logger
 from .operation import (
     COORDINATOR,
@@ -45,6 +44,12 @@ from .registration import register_classes, unregister_classes
 from .sam3d_state import SAM_JOBS, SamJobSlot
 
 LOGGER = get_logger(__name__)
+
+
+def _private_json(path: Path, value: dict) -> None:
+    atomic_json(path, value, private=True)
+
+
 _LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
     "INFO": logging.INFO,
@@ -329,29 +334,6 @@ def _read_json(path: Path) -> dict | None:
         return None
 
 
-def _atomic_json(path: Path, value: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    file_descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=str(path.parent),
-    )
-    try:
-        with os.fdopen(
-            file_descriptor,
-            "w",
-            encoding="utf8",
-        ) as handle:
-            json.dump(value, handle, indent=2, sort_keys=True)
-        with suppress(OSError):
-            Path(temporary).chmod(stat.S_IRUSR | stat.S_IWUSR)
-        Path(temporary).replace(path)
-    except Exception:
-        with suppress(OSError):
-            Path(temporary).unlink()
-        raise
-
-
 def model_storage_config_path(*, create_root: bool = True) -> Path:
     return backend_root(create=create_root) / "model_storage.json"
 
@@ -416,7 +398,7 @@ def _ensure_model_storage(root: Path) -> None:
         or existing.get("kind") != "sam3d_models"
     ):
         raise OSError("The selected model location is owned by another application")
-    _atomic_json(
+    _private_json(
         marker,
         {
             "owner": "media_to_pose",
@@ -1066,7 +1048,7 @@ def _activate_install(job: BackgroundJob, layout: _InstallLayout) -> None:
     finally:
         invalidate_backend_snapshot()
     try:
-        _atomic_json(
+        _private_json(
             layout.storage_config or (layout.root / "model_storage.json"),
             {"storage_parent": str(layout.storage_parent.resolve(strict=False))},
         )
@@ -1313,7 +1295,7 @@ def _write_ort_install_manifest(
     specification: dict,
     diagnostics,
 ) -> None:
-    _atomic_json(
+    _private_json(
         layout.staging / "manifest.json",
         {
             "runtime_manifest_version": RUNTIME_MANIFEST_VERSION,

@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
 
+from .core.fs import remove_tree, replace_directory
+
 TRACK_SCHEMA_VERSION = 1
 ALGORITHM_VERSION = "tier1-camera-motion-v1"
 MAX_LONG_EDGE = 960
@@ -233,28 +235,11 @@ def store_sidecar(directory: Path, key: str, track: CameraMotionTrack, np) -> No
         (staging / "manifest.json").write_text(
             json.dumps(manifest, indent=2, sort_keys=True), encoding="utf8"
         )
-        if previous.exists():
-            _remove_tree(previous)
-        if directory.exists():
-            Path(directory).replace(previous)
-        try:
-            Path(staging).replace(directory)
-        except OSError:
-            if previous.exists() and not directory.exists():
-                Path(previous).replace(directory)
-            raise
-        if previous.exists():
-            _remove_tree(previous)
+        replace_directory(staging, directory, previous)
     except BaseException:
         if staging.exists():
-            _remove_tree(staging)
+            remove_tree(staging)
         raise
-
-
-def _remove_tree(path: Path) -> None:
-    import shutil
-
-    shutil.rmtree(path, ignore_errors=True)
 
 
 def _gray_working(image, cv2):

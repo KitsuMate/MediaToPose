@@ -88,7 +88,7 @@ class GoldenRetargetTests(unittest.TestCase):
 
     def _recorded(self, fixture_id: str):
         payload = json.loads(Path(fixture_path(fixture_id)).read_text("utf-8"))
-        frame = self.addon.detection_cache._frame_from_plain(payload["frame"])
+        frame = self.addon.core.cache.frames.frame_from_plain(payload["frame"])
         settings = SimpleNamespace(
             provider=payload["provider"],
             use_body=True,

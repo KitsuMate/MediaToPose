@@ -21,6 +21,7 @@ from bpy.props import StringProperty
 from bpy.types import Operator
 
 from . import anycalib_ort_runtime, sam3d_backend, sam3d_ort_runtime
+from .core.fs import atomic_json
 from .model_lifecycle import model_installation_lock
 from .operation import COORDINATOR, OperationKind, OperationState
 from .registration import register_classes, unregister_classes
@@ -152,13 +153,6 @@ def _read_json(path: Path) -> dict:
         return {}
 
 
-def _write_json(path: Path, value: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True), encoding="utf8")
-    Path(temporary).replace(path)
-
-
 def configured_storage_parent() -> Path:
     configured = str(
         _read_json(backend_root(create=False) / "storage.json").get("storage_parent")
@@ -286,7 +280,7 @@ def _ensure_storage(root: Path) -> None:
     existing = _read_json(marker)
     if existing and existing != expected:
         raise OSError("AnyCalib storage is owned by another application")
-    _write_json(marker, expected)
+    atomic_json(marker, expected)
 
 
 def _install_worker(
@@ -364,7 +358,7 @@ def _install_worker(
                 Path(backup).replace(current)
             raise
         shutil.rmtree(backup, ignore_errors=True)
-        _write_json(Path(storage_config_path), {"storage_parent": str(root.parent)})
+        atomic_json(Path(storage_config_path), {"storage_parent": str(root.parent)})
         invalidate_backend_snapshot()
         job.update(1.0, f"AnyCalib {precision.upper()} installed", "Complete")
         job.finish("DONE", "AnyCalib installed and verified")

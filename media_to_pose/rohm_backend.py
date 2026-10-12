@@ -21,6 +21,7 @@ from bpy.props import StringProperty
 from bpy.types import Operator
 
 from . import rohm_ort_runtime, sam3d_backend, sam3d_ort_runtime
+from .core.fs import atomic_json
 from .model_lifecycle import model_installation_lock
 from .operation import COORDINATOR, OperationKind, OperationState
 from .registration import register_classes, unregister_classes
@@ -156,13 +157,6 @@ def _read_json(path: Path) -> dict:
         return {}
 
 
-def _write_json(path: Path, value: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(value, indent=2, sort_keys=True), encoding="utf8")
-    Path(temporary).replace(path)
-
-
 def configured_storage_parent() -> Path:
     configured = str(_read_json(_config_path(create=False)).get("storage_parent") or "")
     if configured:
@@ -190,7 +184,7 @@ def _ensure_storage(root: Path) -> None:
     existing = _read_json(marker)
     if existing and existing != expected:
         raise OSError("RoHM storage is owned by another application")
-    _write_json(marker, expected)
+    atomic_json(marker, expected)
 
 
 def active_directory() -> Path:
@@ -360,7 +354,7 @@ def _install_worker(
                 Path(backup).replace(current)
             raise
         shutil.rmtree(backup, ignore_errors=True)
-        _write_json(Path(storage_config_path), {"storage_parent": str(root.parent)})
+        atomic_json(Path(storage_config_path), {"storage_parent": str(root.parent)})
         invalidate_backend_snapshot()
         job.update(1.0, "RoHM installed and verified", "Complete")
         job.finish("DONE", "RoHM installed and verified")

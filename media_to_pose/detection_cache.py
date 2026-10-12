@@ -8,7 +8,6 @@ compressed NumPy chunks so a preview never needs to load a complete clip.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import os
 import shutil
@@ -16,7 +15,6 @@ import tempfile
 import threading
 import time
 from collections.abc import Iterator
-from contextlib import suppress
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -24,15 +22,17 @@ from pathlib import Path
 import bpy
 
 from .constants import CAPTURE_CONFIDENCE
+from .core.cache.frames import (
+    compact_frame,
+    read_chunk,
+    write_chunk,
+)
 from .core.errors import InvalidRequest, MediaError
+from .core.fs import atomic_json, replace_directory
 from .core.log import get_logger
 from .models import (
-    CameraIntrinsicsObservation,
     CanonicalFrame,
-    JointFrameObservation,
-    Landmark,
     MediaInfo,
-    RootMotionObservation,
 )
 
 LOGGER = get_logger(__name__)
@@ -222,7 +222,7 @@ def retain_still_source(settings, path: str) -> bool:
     filename = f"media{Path(selected).suffix.casefold()}"
     try:
         shutil.copy2(selected, staging / filename)
-        _atomic_json(
+        atomic_json(
             staging / MANIFEST_NAME,
             {
                 "schema_version": CACHE_SCHEMA_VERSION,
@@ -231,20 +231,10 @@ def retain_still_source(settings, path: str) -> bool:
             },
         )
         active = managed_source_directory(create_root=False)
-        previous = root / ".source-previous"
         with _LOCK:
-            if previous.exists():
-                _safe_remove(previous)
-            if active.exists():
-                Path(active).replace(previous)
-            try:
-                Path(staging).replace(active)
-            except OSError:
-                if previous.exists() and not active.exists():
-                    Path(previous).replace(active)
-                raise
-            if previous.exists():
-                _safe_remove(previous)
+            replace_directory(
+                staging, active, root / ".source-previous", remove=_safe_remove
+            )
         settings.media_identity_json = json.dumps(source, sort_keys=True)
         invalidate_ui_state()
         return True
@@ -431,27 +421,6 @@ def discard_temporary(path: str) -> None:
     candidate = Path(path)
     if candidate.exists():
         _safe_remove(candidate)
-
-
-def _atomic_json(path: Path, value: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    file_descriptor, temporary = tempfile.mkstemp(
-        prefix=f".{path.name}.",
-        suffix=".tmp",
-        dir=str(path.parent),
-    )
-    try:
-        with os.fdopen(
-            file_descriptor,
-            "w",
-            encoding="utf8",
-        ) as handle:
-            json.dump(value, handle, indent=2, sort_keys=True)
-        Path(temporary).replace(path)
-    except (OSError, TypeError, ValueError):
-        with suppress(OSError):
-            Path(temporary).unlink()
-        raise
 
 
 def _read_manifest(directory: Path | None = None) -> dict | None:
@@ -737,239 +706,15 @@ def _media_dict(media_info: MediaInfo) -> dict:
     }
 
 
-def _compact_frame(frame: CanonicalFrame) -> CanonicalFrame:
-    # Work on a copy: preview/cache compaction must not mutate the frame that
-    # is about to be retargeted.
-    return CanonicalFrame(
-        timestamp_ms=int(frame.timestamp_ms),
-        body=dict(frame.body),
-        hands={side: dict(points) for side, points in frame.hands.items()},
-        auxiliary=dict(frame.auxiliary),
-        joint_frames=dict(frame.joint_frames),
-        face_landmarks=[],
-        face_overlay=list(
-            frame.face_overlay or [point.image for point in frame.face_landmarks]
-        ),
-        blendshapes=dict(frame.blendshapes),
-        camera=frame.camera,
-        root_motion=frame.root_motion,
-        warnings=list(frame.warnings),
-    )
-
-
-def _landmark_to_plain(value: Landmark) -> tuple:
-    return (
-        tuple(float(item) for item in value.position),
-        tuple(float(item) for item in value.image),
-        float(value.confidence),
-        bool(value.valid),
-    )
-
-
-def _landmark_from_plain(value: tuple) -> Landmark:
-    return Landmark(
-        position=tuple(value[0]),
-        image=tuple(value[1]),
-        confidence=float(value[2]),
-        valid=bool(value[3]),
-    )
-
-
-def _frame_to_plain(frame: CanonicalFrame) -> dict:
-    compact = _compact_frame(frame)
-    return {
-        "timestamp_ms": compact.timestamp_ms,
-        "body": {
-            name: _landmark_to_plain(value) for name, value in compact.body.items()
-        },
-        "hands": {
-            side: {name: _landmark_to_plain(value) for name, value in points.items()}
-            for side, points in compact.hands.items()
-        },
-        "auxiliary": {
-            name: _landmark_to_plain(value) for name, value in compact.auxiliary.items()
-        },
-        "joint_frames": {
-            name: (
-                tuple(float(item) for item in value.rotation_matrix),
-                float(value.confidence),
-                bool(value.valid),
-            )
-            for name, value in compact.joint_frames.items()
-        },
-        "face_overlay": [tuple(point) for point in compact.face_overlay],
-        "blendshapes": compact.blendshapes,
-        "camera": (
-            {
-                "width": compact.camera.width,
-                "height": compact.camera.height,
-                "fx": compact.camera.fx,
-                "fy": compact.camera.fy,
-                "cx": compact.camera.cx,
-                "cy": compact.camera.cy,
-                "horizontal_fov": compact.camera.horizontal_fov,
-                "vertical_fov": compact.camera.vertical_fov,
-                "confidence": compact.camera.confidence,
-                "source": compact.camera.source,
-                "bundle_revision": compact.camera.bundle_revision,
-                "precision": compact.camera.precision,
-                "valid": compact.camera.valid,
-            }
-            if compact.camera is not None
-            else None
-        ),
-        "root_motion": (
-            {
-                "translation": list(compact.root_motion.translation),
-                "rotation_matrix": (
-                    list(compact.root_motion.rotation_matrix)
-                    if compact.root_motion.rotation_matrix is not None
-                    else None
-                ),
-                "focal_length": compact.root_motion.focal_length,
-                "scale": compact.root_motion.scale,
-                "confidence": compact.root_motion.confidence,
-                "valid": compact.root_motion.valid,
-            }
-            if compact.root_motion is not None
-            else None
-        ),
-        "warnings": compact.warnings,
-    }
-
-
-def _frame_from_plain(value: dict) -> CanonicalFrame:
-    root_value = value.get("root_motion")
-    camera_value = value.get("camera")
-    return CanonicalFrame(
-        timestamp_ms=int(value["timestamp_ms"]),
-        body={
-            name: _landmark_from_plain(landmark)
-            for name, landmark in value.get("body", {}).items()
-        },
-        hands={
-            side: {
-                name: _landmark_from_plain(landmark)
-                for name, landmark in points.items()
-            }
-            for side, points in value.get("hands", {}).items()
-        },
-        auxiliary={
-            name: _landmark_from_plain(landmark)
-            for name, landmark in value.get("auxiliary", {}).items()
-        },
-        joint_frames={
-            name: JointFrameObservation(
-                rotation_matrix=tuple(frame_value[0]),
-                confidence=float(frame_value[1]),
-                valid=bool(frame_value[2]),
-            )
-            for name, frame_value in value.get("joint_frames", {}).items()
-        },
-        face_overlay=[tuple(point) for point in value.get("face_overlay", [])],
-        blendshapes={
-            name: float(score) for name, score in value.get("blendshapes", {}).items()
-        },
-        camera=(
-            CameraIntrinsicsObservation(
-                width=int(camera_value["width"]),
-                height=int(camera_value["height"]),
-                fx=float(camera_value["fx"]),
-                fy=float(camera_value["fy"]),
-                cx=float(camera_value["cx"]),
-                cy=float(camera_value["cy"]),
-                horizontal_fov=float(camera_value["horizontal_fov"]),
-                vertical_fov=float(camera_value["vertical_fov"]),
-                confidence=float(camera_value.get("confidence", 1.0)),
-                source=str(camera_value.get("source", "FALLBACK")),
-                bundle_revision=str(camera_value.get("bundle_revision", "")),
-                precision=str(camera_value.get("precision", "")),
-                valid=bool(camera_value.get("valid", True)),
-            )
-            if camera_value is not None
-            else None
-        ),
-        root_motion=(
-            RootMotionObservation(
-                translation=tuple(float(item) for item in root_value["translation"]),
-                rotation_matrix=(
-                    tuple(float(item) for item in root_value["rotation_matrix"])
-                    if root_value.get("rotation_matrix") is not None
-                    else None
-                ),
-                focal_length=float(root_value.get("focal_length", 0.0)),
-                scale=float(root_value.get("scale", 1.0)),
-                confidence=float(root_value.get("confidence", 1.0)),
-                valid=bool(root_value.get("valid", True)),
-            )
-            if root_value is not None
-            else None
-        ),
-        warnings=list(value.get("warnings", [])),
-    )
-
-
-def _numpy():
-    """Use Blender's built-in NumPy without activating capture providers."""
-    return importlib.import_module("numpy")
-
-
-def _write_chunk(path: Path, frames: list[CanonicalFrame]) -> None:
-    np = _numpy()
-    blobs = [
-        json.dumps(
-            _frame_to_plain(frame),
-            separators=(",", ":"),
-        ).encode("utf8")
-        for frame in frames
-    ]
-    offsets = [0]
-    for blob in blobs:
-        offsets.append(offsets[-1] + len(blob))
-    payload = np.frombuffer(b"".join(blobs), dtype=np.uint8)
-    indices = np.asarray(offsets, dtype=np.int64)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    with temporary.open("wb") as handle:
-        np.savez_compressed(handle, payload=payload, offsets=indices)
-    Path(temporary).replace(path)
-
-
-def _read_chunk(path: Path) -> list[CanonicalFrame]:
-    np = _numpy()
-    with np.load(str(path), allow_pickle=False) as archive:
-        payload = archive["payload"]
-        offsets = archive["offsets"]
-        raw = memoryview(payload)
-        return [
-            _frame_from_plain(
-                json.loads(
-                    bytes(raw[int(offsets[index]) : int(offsets[index + 1])]).decode(
-                        "utf8"
-                    )
-                )
-            )
-            for index in range(len(offsets) - 1)
-        ]
-
-
 def _promote(staging: Path) -> None:
     root = cache_root(create=True)
-    current = root / CURRENT_DIRECTORY
-    previous = root / ".previous"
     with _LOCK:
-        if previous.exists():
-            _safe_remove(previous)
-        if current.exists():
-            Path(current).replace(previous)
-        try:
-            Path(staging).replace(current)
-        except OSError:
-            if previous.exists() and not current.exists():
-                Path(previous).replace(current)
-            raise
-        if previous.exists():
-            _safe_remove(previous)
+        replace_directory(
+            staging,
+            root / CURRENT_DIRECTORY,
+            root / ".previous",
+            remove=_safe_remove,
+        )
     invalidate_ui_state()
 
 
@@ -999,7 +744,7 @@ class SequenceWriter:
         )
 
     def add(self, frame: CanonicalFrame) -> None:
-        self.buffer.append(_compact_frame(frame))
+        self.buffer.append(compact_frame(frame))
         if len(self.buffer) >= CHUNK_SIZE:
             self._flush()
 
@@ -1010,7 +755,7 @@ class SequenceWriter:
         start = self.count
         frames = self.buffer
         self.buffer = []
-        _write_chunk(self.directory / name, frames)
+        write_chunk(self.directory / name, frames)
         try:
             self.written_bytes += (self.directory / name).stat().st_size
         except OSError:
@@ -1039,7 +784,7 @@ class SequenceWriter:
             "chunks": self.chunks,
             "size_bytes": self.written_bytes + self.retained_source_bytes,
         }
-        _atomic_json(self.directory / MANIFEST_NAME, manifest)
+        atomic_json(self.directory / MANIFEST_NAME, manifest)
         if not self.overflow:
             _promote(self.directory)
             invalidate_ui_state()
@@ -1088,7 +833,7 @@ def store_point(
             )
         except OSError:
             existing_bytes = 0
-        _write_chunk(points / filename, [frame])
+        write_chunk(points / filename, [frame])
         try:
             written_bytes = (points / filename).stat().st_size
         except OSError:
@@ -1101,7 +846,7 @@ def store_point(
             0,
             int(manifest.get("size_bytes", 0)) - existing_bytes + written_bytes,
         )
-        _atomic_json(directory / MANIFEST_NAME, manifest)
+        atomic_json(directory / MANIFEST_NAME, manifest)
         if directory != current:
             _promote(directory)
         invalidate_ui_state()
@@ -1125,12 +870,12 @@ def load_frame(key: str, source_index: int) -> CanonicalFrame | None:
                 start = int(chunk["start"])
                 count = int(chunk["count"])
                 if start <= index < start + count:
-                    return _read_chunk(directory / chunk["file"])[index - start]
+                    return read_chunk(directory / chunk["file"])[index - start]
             return None
         point = manifest.get("points", {}).get(str(int(source_index)))
         if not point:
             return None
-        frames = _read_chunk(directory / point["file"])
+        frames = read_chunk(directory / point["file"])
         return frames[0] if frames else None
     except (OSError, ValueError, KeyError, TypeError, UnicodeError):
         return None
@@ -1149,7 +894,7 @@ def iter_frames(key: str) -> Iterator[CanonicalFrame] | None:
 
     def generate() -> Iterator[CanonicalFrame]:
         for chunk in manifest.get("chunks", []):
-            yield from _read_chunk(directory / chunk["file"])
+            yield from read_chunk(directory / chunk["file"])
 
     return generate()
 
@@ -1162,6 +907,6 @@ def iter_directory(directory: str) -> Iterator[CanonicalFrame]:
 
     def generate() -> Iterator[CanonicalFrame]:
         for chunk in manifest.get("chunks", []):
-            yield from _read_chunk(path / chunk["file"])
+            yield from read_chunk(path / chunk["file"])
 
     return generate()
