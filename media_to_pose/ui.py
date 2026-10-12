@@ -17,6 +17,7 @@ from .operators_mapping import (
     active_entry,
     active_mapping_section,
 )
+from .postprocess import settings_schema
 from .providers import descriptor
 from .registration import register_classes, unregister_classes
 
@@ -1334,32 +1335,30 @@ class MTP_PT_rig_setup(Panel):
         )
 
 
+def _schema_row_enabled(row, item, settings) -> bool:
+    if not row.enabled_by:
+        return True
+    if row.enabled_by == "@root_motion_automatic":
+        return settings.root_motion_mode == "AUTOMATIC"
+    value = getattr(item, row.enabled_by)
+    return bool(value.strip()) if isinstance(value, str) else bool(value)
+
+
 def _draw_cleanup_settings(layout, item, settings):
-    if item.module_id in {"SPINE_CORRECTION", "SHOULDER_CORRECTION"}:
-        layout.prop(item, "strength")
-        if item.module_id == "SHOULDER_CORRECTION":
-            row = layout.row(align=True)
-            row.prop(item, "start_elevation")
-            row.prop(item, "full_influence_elevation")
-            row = layout.row(align=True)
-            row.prop(item, "maximum_swing")
-            row.prop(item, "maximum_twist")
-            layout.prop(item, "repair_arm_silhouette")
-            repair = layout.column()
-            repair.enabled = item.repair_arm_silhouette
-            repair.prop(item, "maximum_arm_extension")
-    elif item.module_id == "ARM_AXIS_CORRECTION":
-        layout.prop(item, "hinge_projection")
-        layout.prop(item, "confidence_threshold")
-        layout.prop(item, "forearm_twist_limit")
-        layout.prop(item, "upper_arm_twist_limit")
-        layout.prop(item, "palm_roll_strength")
-    elif item.module_id == "LEG_AXIS_CORRECTION":
-        layout.prop(item, "hinge_projection")
-        layout.prop(item, "confidence_threshold")
-        layout.prop(item, "thigh_twist_limit")
-    elif item.module_id == "CAMERA_MOTION_CORRECTION":
-        layout.prop(item, "lateral_root_strength")
+    module = settings_schema.MODULES_BY_ID.get(item.module_id)
+    if module is None:
+        return
+    for row in module.layout:
+        if row.separator:
+            layout.separator()
+            continue
+        container = (
+            layout.row(align=True) if len(row.parameters) == 2 else layout.column()
+        )
+        container.enabled = _schema_row_enabled(row, item, settings)
+        for name in row.parameters:
+            container.prop(item, name)
+    if item.module_id == "CAMERA_MOTION_CORRECTION":
         layout.label(text=f"Camera track: {item.camera_track_status}", icon="INFO")
         if item.camera_tracked_frames or item.camera_rejected_frames:
             layout.label(
@@ -1373,40 +1372,13 @@ def _draw_cleanup_settings(layout, item, settings):
             text="Rebuild Camera Analysis",
             icon="FILE_REFRESH",
         )
-    elif item.module_id == "ROHM_CORRECTION":
-        layout.prop(item, "learned_pose_residual")
-        root = layout.row()
-        root.enabled = settings.root_motion_mode == "AUTOMATIC"
-        root.prop(item, "root_trajectory_cleanup")
-        layout.prop(item, "visibility_threshold")
-    elif item.module_id == "DETECTION_FILTER":
-        layout.prop(item, "reject_unreliable_limbs")
-        layout.prop(item, "reject_unusable_frames")
-        layout.prop(item, "maximum_motion_rejected")
-        layout.separator()
-        layout.prop(item, "manual_bad_frames")
-        manual_scope = layout.row()
-        manual_scope.enabled = bool(item.manual_bad_frames.strip())
-        manual_scope.prop(item, "manual_bad_scope")
-        if item.filter_frame_summary:
-            _draw_wrapped_labels(
-                layout,
-                f"Last animation frames · {item.filter_frame_summary}",
-                icon="INFO",
-                width=52,
-            )
-    elif item.module_id == "TEMPORAL_CORRECTION":
-        layout.prop(item, "smooth_motion")
-        layout.prop(item, "ground_contacts")
-        smoothing = layout.column()
-        smoothing.enabled = item.smooth_motion
-        smoothing.prop(item, "smoothing_strength")
-        layout.prop(item, "stabilize_hands")
-        hands = layout.column()
-        hands.enabled = item.stabilize_hands
-        hands.prop(item, "finger_max_angular_speed")
-        hands.prop(item, "wrist_max_angular_speed")
-        hands.prop(item, "hand_reacquire_delay")
+    elif item.module_id == "DETECTION_FILTER" and item.filter_frame_summary:
+        _draw_wrapped_labels(
+            layout,
+            f"Last animation frames · {item.filter_frame_summary}",
+            icon="INFO",
+            width=52,
+        )
 
 
 def _draw_cleanup_module(layout, item, settings, *, available=True):
@@ -1416,17 +1388,8 @@ def _draw_cleanup_module(layout, item, settings, *, available=True):
     header.enabled = available
     header.label(text=item.display_name or item.module_id, icon="MODIFIER")
     header.prop(item, "enabled", text="")
-    descriptions = {
-        "SPINE_CORRECTION": "Improves torso curvature from detected spine motion.",
-        "SHOULDER_CORRECTION": "Assists raised shoulders while preserving the pose.",
-        "ARM_AXIS_CORRECTION": "Stabilizes elbow bending and arm twist.",
-        "LEG_AXIS_CORRECTION": "Stabilizes knee bending and leg twist.",
-        "CAMERA_MOTION_CORRECTION": "Reduces sideways travel caused by a moving camera.",
-        "DETECTION_FILTER": "Rejects unreliable motion and fills gaps without a learned model.",
-        "ROHM_CORRECTION": "Optional learned residual for already-masked pose or root gaps.",
-        "TEMPORAL_CORRECTION": "Smooths motion and preserves planted feet.",
-    }
-    content.label(text=descriptions.get(item.module_id, item.description), icon="INFO")
+    module = settings_schema.MODULES_BY_ID.get(item.module_id)
+    content.label(text=module.summary if module else item.description, icon="INFO")
     if item.module_id == "ROHM_CORRECTION":
         backend = rohm_backend.backend_snapshot(settings.rohm_device)
         install = rohm_backend.install_status_snapshot()

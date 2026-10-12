@@ -52,7 +52,9 @@ class RegistrationTests(unittest.TestCase):
         self.assertFalse(scene_properties["use_hands"].default)
         self.assertFalse(scene_properties["use_face"].default)
         self.assertFalse(
-            self.addon.constants.POST_PROCESSING_DEFAULT_ENABLED["ROHM_CORRECTION"]
+            self.addon.post_processing.POST_PROCESSING_DEFAULT_ENABLED[
+                "ROHM_CORRECTION"
+            ]
         )
 
     def test_rohm_uses_managed_model_lifecycle_without_bypass_flags(self) -> None:

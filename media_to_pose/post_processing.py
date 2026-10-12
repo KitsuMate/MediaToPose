@@ -17,13 +17,16 @@ from typing import (
 from mathutils import Matrix, Quaternion, Vector
 
 from .constants import (
-    POST_PROCESSING_DEFAULT_ENABLED,
-    POST_PROCESSING_MODULES,
     PROFILE_ARP,
     PROFILE_GENERIC,
     PROFILE_RIGIFY,
 )
 from .core.requests import PostProcessConfig, PostProcessModuleConfig
+from .postprocess.settings_schema import (
+    MODULE_SETTING_FIELDS,
+    POST_PROCESSING_DEFAULT_ENABLED,
+    POST_PROCESSING_MODULES,
+)
 from .target_pose import (
     BoneChannel,
     TargetPose,
@@ -37,53 +40,6 @@ from .target_pose import (
 from .target_pose import (
     stable_orientation_delta as _stable_orientation_delta,
 )
-
-MODULE_SETTING_FIELDS = {
-    "SPINE_CORRECTION": ("strength",),
-    "SHOULDER_CORRECTION": (
-        "strength",
-        "start_elevation",
-        "full_influence_elevation",
-        "maximum_swing",
-        "maximum_twist",
-        "repair_arm_silhouette",
-        "maximum_arm_extension",
-    ),
-    "ARM_AXIS_CORRECTION": (
-        "hinge_projection",
-        "confidence_threshold",
-        "upper_arm_twist_limit",
-        "forearm_twist_limit",
-        "palm_roll_strength",
-    ),
-    "LEG_AXIS_CORRECTION": (
-        "hinge_projection",
-        "confidence_threshold",
-        "thigh_twist_limit",
-    ),
-    "CAMERA_MOTION_CORRECTION": ("lateral_root_strength",),
-    "DETECTION_FILTER": (
-        "reject_unreliable_limbs",
-        "reject_unusable_frames",
-        "maximum_motion_rejected",
-        "manual_bad_frames",
-        "manual_bad_scope",
-    ),
-    "TEMPORAL_CORRECTION": (
-        "smooth_motion",
-        "ground_contacts",
-        "smoothing_strength",
-        "stabilize_hands",
-        "finger_max_angular_speed",
-        "wrist_max_angular_speed",
-        "hand_reacquire_delay",
-    ),
-    "ROHM_CORRECTION": (
-        "learned_pose_residual",
-        "root_trajectory_cleanup",
-        "visibility_threshold",
-    ),
-}
 
 
 def ensure_module_configs(config) -> bool:

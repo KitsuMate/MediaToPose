@@ -94,11 +94,11 @@ class PostProcessCompilationTests(unittest.TestCase):
         self.assertEqual(constants.SCHEMA_VERSION, 18)
         self.assertIn("SPINE_CORRECTION", identifiers)
         self.assertNotIn("SPINE_RECONSTRUCTION", identifiers)
-        self.assertFalse(constants.POST_PROCESSING_DEFAULT_ENABLED["SPINE_CORRECTION"])
+        self.assertFalse(self.post.POST_PROCESSING_DEFAULT_ENABLED["SPINE_CORRECTION"])
         self.assertTrue(
-            constants.POST_PROCESSING_DEFAULT_ENABLED["CAMERA_MOTION_CORRECTION"]
+            self.post.POST_PROCESSING_DEFAULT_ENABLED["CAMERA_MOTION_CORRECTION"]
         )
-        self.assertFalse(constants.POST_PROCESSING_DEFAULT_ENABLED["ROHM_CORRECTION"])
+        self.assertFalse(self.post.POST_PROCESSING_DEFAULT_ENABLED["ROHM_CORRECTION"])
 
     def test_temporal_processor_is_sequence_only(self) -> None:
         config = self._config()

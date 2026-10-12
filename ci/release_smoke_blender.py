@@ -52,7 +52,7 @@ def _assert_registered(*, import_dependencies: bool = False) -> object:
             f"Installed extension version is {actual_version}, expected "
             f"{expected_version}"
         )
-    correction_ids = {item[0] for item in addon.constants.POST_PROCESSING_MODULES}
+    correction_ids = {item[0] for item in addon.post_processing.POST_PROCESSING_MODULES}
     required_corrections = {"ROHM_CORRECTION"}
     if not required_corrections.issubset(correction_ids):
         raise AssertionError("Installed extension does not expose RoHM correction")

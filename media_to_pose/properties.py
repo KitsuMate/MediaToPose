@@ -25,6 +25,7 @@ from .constants import (
     SECTIONS,
 )
 from .operation import COORDINATOR
+from .postprocess import settings_schema
 from .registration import register_classes, unregister_classes
 
 _MANUAL_LOCK_SUPPRESSED = ContextVar(
@@ -391,115 +392,8 @@ class MTPPostProcessingModuleConfig(PropertyGroup):
         default="VALID",
     )
     last_warning: StringProperty(name="Warning")
-    # Shoulder Correction.
-    strength: FloatProperty(name="Strength", default=1.0, min=0.0, max=2.0)
-    start_elevation: FloatProperty(
-        name="Start Elevation",
-        subtype="ANGLE",
-        default=0.5235987756,
-        min=0.0,
-        max=1.5707963268,
-    )
-    full_influence_elevation: FloatProperty(
-        name="Full Influence",
-        subtype="ANGLE",
-        default=1.5707963268,
-        min=0.0,
-        max=1.5707963268,
-    )
-    maximum_swing: FloatProperty(
-        name="Maximum Swing",
-        subtype="ANGLE",
-        default=0.6108652382,
-        min=0.0,
-        max=1.5707963268,
-    )
-    maximum_twist: FloatProperty(
-        name="Maximum Twist",
-        subtype="ANGLE",
-        default=0.1745329252,
-        min=0.0,
-        max=1.5707963268,
-    )
-    repair_arm_silhouette: BoolProperty(
-        name="Repair Arm Silhouette",
-        description=(
-            "Use SAM image-space joints to gently repair an arm that is "
-            "substantially more bent than its detected silhouette"
-        ),
-        default=True,
-    )
-    maximum_arm_extension: FloatProperty(
-        name="Maximum IK Shift",
-        description=(
-            "Maximum wrist or IK-target displacement as a fraction of the "
-            "complete arm length"
-        ),
-        subtype="PERCENTAGE",
-        default=0.02,
-        min=0.0,
-        max=0.05,
-    )
-
-    # Arm and Leg Axis Correction shared settings.
-    hinge_projection: BoolProperty(name="Hinge Projection", default=True)
-    confidence_threshold: FloatProperty(
-        name="Axis Confidence Threshold",
-        description=(
-            "Minimum confidence for upper-limb or thigh axis reconstruction; "
-            "palm roll is continuous and uses confidence only as a temporal weight"
-        ),
-        default=0.75,
-        min=0.0,
-        max=1.0,
-    )
-    upper_arm_twist_limit: FloatProperty(
-        name="Upper Arm Twist",
-        subtype="ANGLE",
-        default=1.308996939,
-        min=0.0,
-        max=3.1415926536,
-    )
-    forearm_twist_limit: FloatProperty(
-        name="Maximum Forearm Correction",
-        description=(
-            "Maximum palm-derived correction applied around the forearm; "
-            "this caps the result and never disables correction"
-        ),
-        subtype="ANGLE",
-        default=1.5707963268,
-        min=0.0,
-        max=3.1415926536,
-    )
-    palm_roll_strength: FloatProperty(
-        name="Palm Roll Influence",
-        description=(
-            "How strongly detected palm roll drives wrist and forearm twist; "
-            "reduce for occluded or low-detail hands"
-        ),
-        default=0.65,
-        min=0.0,
-        max=1.0,
-    )
-    thigh_twist_limit: FloatProperty(
-        name="Thigh Twist",
-        subtype="ANGLE",
-        default=1.0471975512,
-        min=0.0,
-        max=3.1415926536,
-    )
-    # Camera Motion Correction (video sequence only).
-    lateral_root_strength: FloatProperty(
-        name="Lateral Root Strength",
-        description=(
-            "Blend the original lateral root trajectory with background-camera "
-            "compensation"
-        ),
-        default=1.0,
-        min=0.0,
-        max=1.0,
-        subtype="FACTOR",
-    )
+    # Diagnostics written by the last video bake. Module settings themselves
+    # are generated from postprocess.settings_schema below the class.
     camera_track_status: StringProperty(
         name="Camera Track",
         default="Not Prepared",
@@ -509,53 +403,6 @@ class MTPPostProcessingModuleConfig(PropertyGroup):
     camera_rejected_frames: IntProperty(default=0, min=0, options={"HIDDEN"})
     camera_median_inliers: FloatProperty(default=0.0, min=0.0, options={"HIDDEN"})
     camera_corrected_intervals: IntProperty(default=0, min=0, options={"HIDDEN"})
-    # Detection Filter (video sequence only).
-    reject_unreliable_limbs: BoolProperty(
-        name="Reject Unreliable Limbs",
-        description=(
-            "Mask low-confidence limbs and isolated motion jumps before motion repair"
-        ),
-        default=True,
-    )
-    reject_unusable_frames: BoolProperty(
-        name="Reject Unusable Frames",
-        description=(
-            "Mask whole frames when their body evidence is broadly unreliable"
-        ),
-        default=True,
-    )
-    maximum_motion_rejected: FloatProperty(
-        name="Maximum Motion Rejected",
-        description=(
-            "Maximum share of otherwise available joint observations that this "
-            "filter may reject; detector-native missing data does not count"
-        ),
-        default=30.0,
-        min=0.0,
-        max=100.0,
-        subtype="PERCENTAGE",
-    )
-    manual_bad_frames: StringProperty(
-        name="Additional Bad Source Frames",
-        description=(
-            "Optional 1-based source frames or inclusive ranges, for example "
-            "12, 20-24; these explicit masks are not limited by the automatic "
-            "rejection budget"
-        ),
-        default="",
-    )
-    manual_bad_scope: EnumProperty(
-        name="Manual Mask Scope",
-        description="Body region masked on every additional bad source frame",
-        items=(
-            ("BODY", "Whole Body", "Mask the complete body and root observation"),
-            ("ARM_L", "Left Arm", "Mask the left shoulder and arm"),
-            ("ARM_R", "Right Arm", "Mask the right shoulder and arm"),
-            ("LEG_L", "Left Leg", "Mask the left leg"),
-            ("LEG_R", "Right Leg", "Mask the right leg"),
-        ),
-        default="BODY",
-    )
     filter_rejected_observations: IntProperty(default=0, min=0, options={"HIDDEN"})
     filter_rejected_limbs: IntProperty(default=0, min=0, options={"HIDDEN"})
     filter_rejected_frames: IntProperty(default=0, min=0, options={"HIDDEN"})
@@ -563,92 +410,34 @@ class MTPPostProcessingModuleConfig(PropertyGroup):
     filter_total_observations: IntProperty(default=0, min=0, options={"HIDDEN"})
     filter_manual_frames: IntProperty(default=0, min=0, options={"HIDDEN"})
     filter_frame_summary: StringProperty(default="", options={"HIDDEN"})
-    # Temporal Correction (video sequence only).
-    smooth_motion: BoolProperty(
-        name="Smooth Motion",
-        description="Apply symmetric, confidence-aware smoothing without filter lag",
-        default=True,
-    )
-    ground_contacts: BoolProperty(
-        name="Ground Contacts",
-        description="Stabilize root travel and planted foot positions without changing foot orientation",
-        default=True,
-    )
-    smoothing_strength: FloatProperty(
-        name="Smoothing Strength",
-        description="Blend between detected and stabilized video animation",
-        default=0.5,
-        min=0.0,
-        max=1.0,
-        subtype="FACTOR",
-    )
-    stabilize_hands: BoolProperty(
-        name="Stabilize Hands",
-        description=(
-            "Reject abrupt wrist and finger rotation bursts, then enforce a "
-            "bounded angular speed after smoothing"
-        ),
-        default=True,
-    )
-    finger_max_angular_speed: FloatProperty(
-        name="Finger Maximum Speed",
-        description=(
-            "Largest accepted finger rotation speed; faster detector jumps are "
-            "held until the pose becomes stable"
-        ),
-        subtype="ANGLE",
-        default=10.471975512,
-        min=1.0471975512,
-        max=25.132741229,
-    )
-    wrist_max_angular_speed: FloatProperty(
-        name="Wrist Maximum Speed",
-        description=(
-            "Largest accepted wrist rotation speed; faster detector jumps are "
-            "held until the pose becomes stable"
-        ),
-        subtype="ANGLE",
-        default=12.566370614,
-        min=1.0471975512,
-        max=25.132741229,
-    )
-    hand_reacquire_delay: FloatProperty(
-        name="Hand Reacquire Delay",
-        description=(
-            "How long a substantially different hand pose must remain stable "
-            "before a rejected jump is accepted"
-        ),
-        subtype="TIME",
-        default=0.3,
-        min=0.1,
-        max=10.0,
-    )
-    # RoHM Correction (video sequence only).
-    visibility_threshold: FloatProperty(
-        name="Visibility Threshold",
-        description="Confidence below this value is treated as occluded",
-        default=0.50,
-        min=0.0,
-        max=1.0,
-        subtype="FACTOR",
-    )
-    learned_pose_residual: BoolProperty(
-        name="AI Pose Cleanup (Alpha)",
-        description=(
-            "Alpha feature: use AI to adjust only masked anatomical-global joints, "
-            "with each change limited to two degrees from deterministic repair"
-        ),
-        default=False,
-    )
-    root_trajectory_cleanup: BoolProperty(
-        name="Root Trajectory Cleanup",
-        description=(
-            "Use RoHM only for masked root observations while Automatic Root "
-            "Motion is active"
-        ),
-        default=True,
-    )
     show_advanced: BoolProperty(name="Advanced", default=False)
+
+
+def _schema_property(parameter: settings_schema.Parameter):
+    """Build the RNA property for one schema parameter."""
+    common = {"name": parameter.label, "description": parameter.description}
+    if parameter.kind == "bool":
+        return BoolProperty(default=bool(parameter.default), **common)
+    if parameter.kind == "enum":
+        return EnumProperty(items=parameter.items, default=parameter.default, **common)
+    if parameter.kind == "string":
+        return StringProperty(default=str(parameter.default), **common)
+    numeric = {"default": parameter.default}
+    if parameter.minimum is not None:
+        numeric["min"] = parameter.minimum
+    if parameter.maximum is not None:
+        numeric["max"] = parameter.maximum
+    if parameter.subtype:
+        numeric["subtype"] = parameter.subtype
+    if parameter.kind == "int":
+        return IntProperty(**numeric, **common)
+    return FloatProperty(**numeric, **common)
+
+
+for _parameter in settings_schema.PARAMETERS.values():
+    MTPPostProcessingModuleConfig.__annotations__[_parameter.name] = _schema_property(
+        _parameter
+    )
 
 
 class MTPRigConfig(PropertyGroup):
