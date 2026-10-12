@@ -163,6 +163,12 @@ class CaptureRequest:
     options: Mapping[str, Any] = field(default_factory=dict)
     mapping_entries: Mapping[str, Any] = field(default_factory=dict)
     postprocess_config: PostProcessConfig | None = None
+    # Probed media (``models.MediaInfo``) and the identity the detection
+    # cache stores it under; set by the capture session.
+    media_info: Any = None
+    cache_media_info: Any = None
+    cache_key: str = ""
+    cache_identity: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "mode", CaptureMode(self.mode))
@@ -181,6 +187,9 @@ class CaptureRequest:
             self,
             "mapping_entries",
             _immutable_mapping(self.mapping_entries),
+        )
+        object.__setattr__(
+            self, "cache_identity", _immutable_mapping(self.cache_identity)
         )
 
     @property

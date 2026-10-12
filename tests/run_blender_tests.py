@@ -26,6 +26,7 @@ TEST_MODULES = (
     "tests.test_e2e_vroid",
     "tests.test_golden_retarget",
     "tests.test_capture_operations",
+    "tests.test_capture_session",
     "tests.test_registration",
     "tests.test_anycalib_backend",
     "tests.test_model_backends",
