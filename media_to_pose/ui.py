@@ -11,6 +11,7 @@ from . import cache_preview, postprocess
 from .backends.anycalib import backend as anycalib_backend
 from .backends.rohm import backend as rohm_backend
 from .backends.sam3d import backend as sam3d_backend
+from .blender.host import ADDON_PACKAGE
 from .capture_state import evaluate_apply_readiness
 from .operation import COORDINATOR, OperationKind
 from .operators_mapping import (
@@ -1629,7 +1630,7 @@ def _draw_model_preferences(layout, settings):
 
 
 class MTP_AddonPreferences(AddonPreferences):
-    bl_idname = __package__
+    bl_idname = ADDON_PACKAGE
 
     def draw(self, context):
         layout = self.layout

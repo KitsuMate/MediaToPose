@@ -28,6 +28,12 @@ class RegistrationTests(unittest.TestCase):
             self.addon.addon_lifecycle._state_watch_timer,
         )
 
+    def test_preferences_are_registered_under_the_addon_package(self) -> None:
+        self.addon.register()
+        self.assertEqual(
+            self.addon.ui.MTP_AddonPreferences.bl_idname, self.addon.__name__
+        )
+
     def test_restricted_install_context_defers_scene_access(self) -> None:
         self.addon.unregister()
         with RestrictBlend():
