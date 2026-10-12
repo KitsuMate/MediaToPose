@@ -296,7 +296,7 @@ class CaptureTransactionTests(unittest.TestCase):
         self.assertEqual(temporary.name, "TransactionRig_MediaToPose")
         frames = {
             round(float(point.co.x), 4)
-            for curve in self.addon.retarget._action_fcurves(temporary)
+            for curve in self.addon.retarget.keyframes._action_fcurves(temporary)
             for point in curve.keyframe_points
         }
         self.assertIn(2.0, frames)

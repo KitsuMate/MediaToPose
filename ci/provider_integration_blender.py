@@ -113,7 +113,7 @@ def _spine_quality(addon, armature, frame):
         source_segment = addon.post_processing._arc_point(
             samples, end_fraction
         ) - addon.post_processing._arc_point(samples, start_fraction)
-        intended = addon.retarget._to_target_direction(
+        intended = addon.retarget.solve.frames._to_target_direction(
             source_segment,
             source_basis,
             target_basis,
@@ -174,11 +174,13 @@ def _retarget_and_assert(addon, provider_name: str, frame) -> dict:
         raise AssertionError(
             f"SAM spine quality failed: tangent={tangents}, drift={drift}"
         )
-    head_errors = addon.retarget.normalized_head_position_errors(armature, frame)
+    head_errors = addon.retarget.diagnostics.normalized_head_position_errors(
+        armature, frame
+    )
     if not head_errors or max(head_errors.values()) >= 0.01:
         raise AssertionError(f"Head endpoint quality failed: {head_errors}")
     entries = addon.mapping.mapping_by_id(armature.mtp_rig_config)
-    finger_errors = addon.retarget.finger_world_position_errors(
+    finger_errors = addon.retarget.diagnostics.finger_world_position_errors(
         armature,
         entries,
         frame,

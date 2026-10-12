@@ -254,7 +254,8 @@ class PostProcessCompilationTests(unittest.TestCase):
                 timestamp_seconds=index / 30.0,
                 warning_sink=[],
                 rohm_confidence={
-                    semantic: 1.0 for semantic in retarget.motion_filter.SMPLX_SEMANTICS
+                    semantic: 1.0
+                    for semantic in load_addon().motion_filter.SMPLX_SEMANTICS
                 },
                 rohm_root_confidence=value,
             )
@@ -268,18 +269,18 @@ class PostProcessCompilationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            retarget._rohm_requested_work(samples, settings, "AUTOMATIC"),
+            retarget.rohm._rohm_requested_work(samples, settings, "AUTOMATIC"),
             (False, True),
         )
         samples[1].rohm_root_confidence = 1.0
         self.assertEqual(
-            retarget._rohm_requested_work(samples, settings, "AUTOMATIC"),
+            retarget.rohm._rohm_requested_work(samples, settings, "AUTOMATIC"),
             (False, False),
         )
         samples[1].rohm_confidence["UPPER_ARM_L"] = 0.0
         settings.learned_pose_residual = True
         self.assertEqual(
-            retarget._rohm_requested_work(samples, settings, "OFF"),
+            retarget.rohm._rohm_requested_work(samples, settings, "OFF"),
             (True, False),
         )
 
@@ -533,7 +534,7 @@ class PostProcessCompilationTests(unittest.TestCase):
             reject_unusable_frames=True,
             maximum_motion_rejected=30.0,
         )
-        stats = retarget.motion_filter.MotionFilterStats(
+        stats = load_addon().motion_filter.MotionFilterStats(
             total_observations=22,
             native_missing_observations=0,
             rejected_observations=0,
@@ -548,7 +549,8 @@ class PostProcessCompilationTests(unittest.TestCase):
                 timestamp_seconds=index / 30.0,
                 warning_sink=[],
                 rohm_confidence={
-                    semantic: 1.0 for semantic in retarget.motion_filter.SMPLX_SEMANTICS
+                    semantic: 1.0
+                    for semantic in load_addon().motion_filter.SMPLX_SEMANTICS
                 },
                 rohm_root_confidence=value,
             )
@@ -562,19 +564,21 @@ class PostProcessCompilationTests(unittest.TestCase):
         )
         with (
             mock.patch.object(
-                retarget.motion_filter,
+                load_addon().motion_filter,
                 "filter_motion_observations",
                 return_value=stats,
             ),
             mock.patch.object(
-                retarget.motion_filter,
+                load_addon().motion_filter,
                 "repair_body_gaps",
                 return_value=3,
             ) as repair_body,
-            mock.patch.object(retarget, "_repair_root_gaps_without_ai") as repair_root,
+            mock.patch.object(
+                retarget.detection_filter, "_repair_root_gaps_without_ai"
+            ) as repair_root,
         ):
             list(
-                retarget._iter_detection_filter(
+                retarget.detection_filter._iter_detection_filter(
                     samples,
                     settings,
                     rohm_settings=rohm_settings,
@@ -595,11 +599,11 @@ class PostProcessCompilationTests(unittest.TestCase):
                 }
             )
         ]
-        self.assertFalse(retarget._has_groundable_body_channels(face_only))
+        self.assertFalse(retarget.grounding._has_groundable_body_channels(face_only))
         body = [
             SimpleNamespace(bones={"leg": SimpleNamespace(semantic_id="LOWER_LEG_L")})
         ]
-        self.assertTrue(retarget._has_groundable_body_channels(body))
+        self.assertTrue(retarget.grounding._has_groundable_body_channels(body))
 
     def test_low_confidence_palm_roll_is_weighted_not_disabled(self) -> None:
         forearm = SimpleNamespace(
@@ -720,7 +724,7 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_generated_ik_controls_inherit_limb_confidence(self) -> None:
         retarget = self.addon.retarget
         target, pole, bend, toe = object(), object(), object(), object()
-        confidences = retarget._ik_bone_confidences(
+        confidences = retarget.capture._ik_bone_confidences(
             [
                 {
                     "target": target,
@@ -782,14 +786,16 @@ class PostProcessCompilationTests(unittest.TestCase):
         }
 
         with (
-            mock.patch.object(retarget, "PoseTranslationSolver", Solver),
+            mock.patch.object(retarget.solve.ik, "PoseTranslationSolver", Solver),
             mock.patch.object(
-                retarget,
+                retarget.solve.ik,
                 "evaluated_semantic_bone",
                 side_effect=lambda _armature, _entries, role: outputs[role],
             ),
         ):
-            retarget._commit_ik_output([proposal], scene_context=scene_context())
+            retarget.solve.ik._commit_ik_output(
+                [proposal], scene_context=scene_context()
+            )
 
         events = Solver.instances[0].events
         invalidation = events.index(("invalidate", pole.name))
@@ -844,7 +850,7 @@ class AnimationCleanupTests(unittest.TestCase):
         )
 
         result, constrained = (
-            self.addon.retarget._bounded_parent_relative_direction_delta(
+            self.addon.retarget.solve.common._bounded_parent_relative_direction_delta(
                 rest,
                 backward,
                 Quaternion(),
@@ -863,7 +869,7 @@ class AnimationCleanupTests(unittest.TestCase):
         retarget = load_addon().retarget
         timestamps = [index / 30.0 for index in range(8)]
         samples = [
-            retarget._BakedFrameSample(
+            retarget.samples._BakedFrameSample(
                 destination=float(index),
                 warning_sink=[],
                 timestamp_seconds=timestamp,
@@ -872,7 +878,7 @@ class AnimationCleanupTests(unittest.TestCase):
         ]
         bone = object()
         for index, degrees in ((0, 0.0), (7, 35.0)):
-            samples[index].bones["finger"] = retarget._BakedBoneSample(
+            samples[index].bones["finger"] = retarget.samples._BakedBoneSample(
                 bone=bone,
                 location=Vector(),
                 rotation=Quaternion((0.0, 1.0, 0.0), math.radians(degrees)),
@@ -882,7 +888,7 @@ class AnimationCleanupTests(unittest.TestCase):
                 confidence=0.9,
             )
 
-        retarget._fill_short_bone_gaps(samples, timestamps)
+        retarget.temporal._fill_short_bone_gaps(samples, timestamps)
 
         self.assertTrue(all("finger" in sample.bones for sample in samples))
         self.assertAlmostEqual(
@@ -895,11 +901,11 @@ class AnimationCleanupTests(unittest.TestCase):
         retarget = load_addon().retarget
         timestamps = [0.0, 1.0 / 30.0, 2.0 / 30.0, 1.0, 1.0 + 1.0 / 30.0]
         self.assertEqual(
-            retarget._continuous_runs(list(range(5)), timestamps),
+            retarget.samples._continuous_runs(list(range(5)), timestamps),
             [[0, 1, 2], [3, 4]],
         )
         self.assertEqual(
-            retarget._continuous_runs([0, 1, 3, 4], timestamps),
+            retarget.samples._continuous_runs([0, 1, 3, 4], timestamps),
             [[0, 1], [3, 4]],
         )
 

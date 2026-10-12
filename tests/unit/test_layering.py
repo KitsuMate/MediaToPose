@@ -87,7 +87,6 @@ LEGACY_LAYERS: dict[str, str] = {
     "post_processing": "postprocess",
     "properties": "blender",
     "registration": "blender",
-    "retarget": "retarget",
     "rig_planning": "rig",
     "rohm_correction": "core",
     "target_pose": "retarget",

@@ -118,7 +118,7 @@ class GoldenRetargetTests(unittest.TestCase):
 
     def _action_snapshot(self, action, result) -> dict:
         curves = {}
-        for curve in self.addon.retarget._action_fcurves(action):
+        for curve in self.addon.retarget.keyframes._action_fcurves(action):
             key = f"{curve.data_path}[{curve.array_index}]"
             curves[key] = [_round(point.co) for point in curve.keyframe_points]
         frames, bones, shapes, warnings = result

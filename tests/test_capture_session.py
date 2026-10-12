@@ -139,7 +139,7 @@ class CaptureSessionTests(unittest.TestCase):
         self.assertEqual(action.name, f"{self.armature.name}_MediaToPose")
         keys = {
             round(point.co.x)
-            for curve in self.addon.retarget._action_fcurves(action)
+            for curve in self.addon.retarget.keyframes._action_fcurves(action)
             for point in curve.keyframe_points
         }
         self.assertTrue(keys)
