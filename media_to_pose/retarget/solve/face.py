@@ -7,9 +7,7 @@ import math
 import bpy
 from mathutils import Quaternion, Vector
 
-from ... import (
-    mapping,
-)
+from ...rig.face_schemes import matching_shape_blocks
 from ..target_pose import TargetPose
 from .common import _mapped_bone
 
@@ -93,7 +91,7 @@ def facs_values(blendshapes: dict[str, float]) -> dict[str, float]:
 
 
 def _matching_shape_blocks(armature, entry):
-    yield from mapping.matching_shape_blocks(armature, entry)
+    yield from matching_shape_blocks(armature, entry)
 
 
 def _apply_shapes(armature, entries, frame, scheme: str, target_pose: TargetPose):

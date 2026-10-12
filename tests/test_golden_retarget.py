@@ -77,7 +77,7 @@ class GoldenRetargetTests(unittest.TestCase):
         cls.armature = next(
             obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"
         )
-        cls.addon.mapping.auto_map(cls.armature)
+        cls.addon.rig.mapping.auto_map(cls.armature)
 
     def setUp(self) -> None:
         for bone in self.armature.pose.bones:

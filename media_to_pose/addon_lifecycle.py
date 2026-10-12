@@ -58,7 +58,7 @@ def _reset_scene_state(data=None) -> bool:
     expected install context as an error.
     """
     global _scene_state_pending
-    from . import mapping
+    from .rig import mapping
     from .session.capture_options import clear_unrecoverable_media_selection
 
     data = bpy.data if data is None else data

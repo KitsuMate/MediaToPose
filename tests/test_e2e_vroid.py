@@ -23,7 +23,7 @@ class VroidFixtureTests(unittest.TestCase):
         cls.armature = next(
             obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"
         )
-        cls.addon.mapping.auto_map(cls.armature)
+        cls.addon.rig.mapping.auto_map(cls.armature)
 
     def setUp(self) -> None:
         for bone in self.armature.pose.bones:
@@ -50,7 +50,7 @@ class VroidFixtureTests(unittest.TestCase):
         return payload, frame, settings
 
     def _spine_quality(self, frame):
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
         samples, inferred = self.addon.postprocess.CORRECTION_REGISTRY[
             "SPINE_CORRECTION"
         ]._source_curve(SimpleNamespace(frame=frame))
@@ -130,7 +130,7 @@ class VroidFixtureTests(unittest.TestCase):
         )
         self.assertEqual(changed_bones, 51)
         self.assertEqual(changed_shapes, 0)
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
         for semantic_id in ("EYE_L", "EYE_R"):
             eye = self.armature.pose.bones[entries[semantic_id].target_name]
             self.assertEqual(eye.matrix_basis, Matrix.Identity(4))
@@ -162,7 +162,7 @@ class VroidFixtureTests(unittest.TestCase):
         _payload, frame, settings = self._recorded_frame(
             "mediapipe_ref_pose_realistic_output"
         )
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
         root = self.addon.retarget.solve.common._mapped_bone(
             self.armature, entries, "ROOT"
         )
@@ -258,7 +258,7 @@ class VroidFixtureTests(unittest.TestCase):
         self.assertEqual(point.motion_position, Vector((0.2, 0.0, -1.0)))
 
     def test_all_thirty_finger_controls_map(self) -> None:
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
         mapped = [
             entries[f"{finger}_{segment:02d}_{side}"].target_name
             for side in ("L", "R")
@@ -286,7 +286,7 @@ class VroidFixtureTests(unittest.TestCase):
         self.assertTrue(first.rig_plan.constraint_free)
         self.assertEqual(len(first.rig_plan.semantic_bones), 55)
         self.assertEqual(len(first.rig_plan.ik_chains), 4)
-        live_entry = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)[
+        live_entry = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)[
             "PELVIS"
         ]
         frozen_entry = first.rig_plan.entries["PELVIS"]
@@ -638,7 +638,7 @@ class VroidFixtureTests(unittest.TestCase):
             self.assertTrue(saw_temporal)
             self.assertEqual(result[:3], (3, 153, 0))
             self.assertEqual(payload["provider"], "SAM3D_BODY")
-            entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+            entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
             hand_channels = {
                 self.addon.retarget.solve.common._mapped_bone(
                     self.armature, entries, semantic_id
@@ -716,7 +716,7 @@ class VroidFixtureTests(unittest.TestCase):
         original = self.armature.animation_data_create().action
         staging = bpy.data.actions.new("SequenceSpoolTest")
         self.armature.animation_data.action = staging
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
         root = self.addon.retarget.solve.common._mapped_bone(
             self.armature, entries, "ROOT"
         )
@@ -762,7 +762,7 @@ class VroidFixtureTests(unittest.TestCase):
                 observation.translation[2],
             )
             samples.append(self.addon.retarget.root_motion._root_motion_sample(frame))
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
 
         deltas, _yaws, mode, warnings = (
             self.addon.retarget.root_motion._root_motion_deltas(
@@ -801,7 +801,7 @@ class VroidFixtureTests(unittest.TestCase):
             def matrix_basis(self, value):
                 self._matrix = value.copy()
 
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
         upper = self.addon.retarget.evaluated_semantic_bone(
             self.armature, entries, "UPPER_LEG_L"
         )
@@ -920,7 +920,7 @@ class VroidFixtureTests(unittest.TestCase):
         )
 
     def test_camera_motion_changes_only_root_location(self) -> None:
-        entries = self.addon.mapping.mapping_by_id(self.armature.mtp_rig_config)
+        entries = self.addon.rig.mapping.mapping_by_id(self.armature.mtp_rig_config)
         root_kind, root_target = self.addon.retarget.root_motion._sequence_root_target(
             self.armature, entries
         )

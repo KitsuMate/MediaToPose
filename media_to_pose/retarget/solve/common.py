@@ -7,11 +7,9 @@ from collections.abc import Sequence
 
 from mathutils import Quaternion, Vector
 
-from ... import (
-    mapping,
-)
 from ...constants import PROFILE_ARP, PROFILE_RIGIFY
 from ...models import CanonicalFrame, Landmark
+from ...rig.profiles.common import profile_identifier
 
 _PROFILE_OUTPUT_BONES = {
     PROFILE_ARP: {
@@ -241,7 +239,7 @@ def _mapped_bone(armature, entries, semantic_id: str):
 
 
 def _profile_id(config) -> str:
-    return mapping.profile_identifier(config)
+    return profile_identifier(config)
 
 
 def evaluated_semantic_bone(armature, entries, semantic_id: str):

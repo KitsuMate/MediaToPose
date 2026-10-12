@@ -15,9 +15,9 @@ def _descriptor(provider: str):
 
 
 def _fk_switch_issues(armature, *, include_arms: bool, include_legs: bool):
-    from . import mapping
+    from .rig.profiles.fk_switches import fk_switch_issues
 
-    return mapping.fk_switch_issues(
+    return fk_switch_issues(
         armature, include_arms=include_arms, include_legs=include_legs
     )
 

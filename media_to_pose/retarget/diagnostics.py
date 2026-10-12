@@ -6,11 +6,9 @@ import math
 
 from mathutils import Vector
 
-from .. import (
-    mapping,
-)
 from ..constants import BODY_JOINT_PAIRS, HAND_JOINT_PAIRS
 from ..models import CanonicalFrame
+from ..rig import mapping
 from .solve.common import (
     _FINGER_ARTICULATION_LIMITS,
     _bounded_parent_relative_direction_delta,

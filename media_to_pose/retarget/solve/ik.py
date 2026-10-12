@@ -6,10 +6,9 @@ import math
 
 from mathutils import Matrix, Quaternion, Vector
 
-from ... import (
-    mapping,
-)
 from ...core.scene import SceneContext
+from ...rig.profiles.common import profile_identifier
+from ...rig.profiles.fk_switches import configure_fk_switches
 from ..keyframes import _action_fcurves
 from ..target_pose import TargetPose
 from .common import evaluated_semantic_bone
@@ -19,9 +18,9 @@ from .translation import PoseTranslationSolver
 
 def prepare_limb_ownership(armature) -> None:
     """Populate metadata without changing or keying FK/IK switches."""
-    mapping.configure_fk_switches(
+    configure_fk_switches(
         armature,
-        mapping.profile_identifier(armature.mtp_rig_config),
+        profile_identifier(armature.mtp_rig_config),
     )
 
 

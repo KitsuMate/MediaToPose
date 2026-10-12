@@ -71,7 +71,6 @@ LEGACY_LAYERS: dict[str, str] = {
     "dependency_bootstrap": "core",
     "geometry": "core",
     "grounded_cleanup": "core",
-    "mapping": "rig",
     "media_io": "core",
     "models": "core",
     "motion_filter": "core",

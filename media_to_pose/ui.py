@@ -7,7 +7,7 @@ import textwrap
 import bpy
 from bpy.types import AddonPreferences, Panel, UIList
 
-from . import cache_preview, mapping, postprocess
+from . import cache_preview, postprocess
 from .backends.anycalib import backend as anycalib_backend
 from .backends.rohm import backend as rohm_backend
 from .backends.sam3d import backend as sam3d_backend
@@ -20,6 +20,7 @@ from .operators_mapping import (
 from .postprocess import settings_schema
 from .providers import descriptor
 from .registration import register_classes, unregister_classes
+from .rig.profiles.common import PROFILE_LABELS, detect_profile, profile_label
 from .session import capture_options
 
 STATUS_ICONS = {
@@ -1236,16 +1237,14 @@ class MTP_PT_rig_setup(Panel):
             )
             operator.method = value
         expected = (
-            mapping.detect_profile(armature)
-            if config.profile == "AUTO"
-            else config.profile
+            detect_profile(armature) if config.profile == "AUTO" else config.profile
         )
         pending = bool(config.mappings and config.detected_profile != expected)
         methods.label(
             text=(
-                f"Detected: {mapping.profile_label(config)}"
+                f"Detected: {profile_label(config)}"
                 if config.profile == "AUTO"
-                else f"Selected: {mapping.PROFILE_LABELS.get(expected, expected)}"
+                else f"Selected: {PROFILE_LABELS.get(expected, expected)}"
             ),
             icon="INFO",
         )

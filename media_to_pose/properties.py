@@ -21,10 +21,10 @@ from .constants import (
     PROFILE_AUTO,
     SECTIONS,
 )
-from .mapping import manual_locks_suppressed
 from .operation import COORDINATOR
 from .postprocess import settings_schema
 from .registration import register_classes, unregister_classes
+from .rig.locks import manual_locks_suppressed
 
 
 def _mapping_edited(self, context) -> None:
@@ -37,7 +37,7 @@ def _mapping_edited(self, context) -> None:
     settings = getattr(getattr(context, "scene", None), "mtp_settings", None)
     armature = getattr(settings, "target_armature", None) if settings else None
     if armature is not None:
-        from . import mapping
+        from .rig import mapping
 
         mapping.validate_mapping(armature, settings=settings)
         from .postprocess import validate_modules
@@ -51,8 +51,8 @@ def _fk_switch_edited(self, context) -> None:
         settings = getattr(getattr(context, "scene", None), "mtp_settings", None)
         armature = getattr(settings, "target_armature", None) if settings else None
         if armature is not None:
-            from . import mapping
             from .postprocess import validate_modules
+            from .rig import mapping
 
             mapping.validate_mapping(armature, settings=settings)
             validate_modules(armature)
@@ -78,7 +78,7 @@ def _shape_override_edited(self, context) -> None:
     entry.manual_lock = True
     entry.source = "MANUAL"
     entry.confidence = 1.0
-    from . import mapping
+    from .rig import mapping
 
     mapping.validate_mapping(armature, settings=settings)
     from .postprocess import validate_modules
@@ -95,7 +95,7 @@ def _target_armature_changed(self, _context) -> None:
     if armature is None:
         return
     try:
-        from . import mapping
+        from .rig import mapping
 
         mapping.refresh_auto_mapping(armature, settings=self)
     except (AttributeError, ReferenceError, RuntimeError):
@@ -139,7 +139,7 @@ def _capture_scope_edited(self, context) -> None:
     armature = getattr(self, "target_armature", None)
     if armature is None:
         return
-    from . import mapping
+    from .rig import mapping
 
     mapping.validate_mapping(armature, settings=self)
 

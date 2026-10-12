@@ -44,7 +44,7 @@ class CaptureSessionTests(unittest.TestCase):
         cls.armature = next(
             obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"
         )
-        cls.addon.mapping.auto_map(cls.armature)
+        cls.addon.rig.mapping.auto_map(cls.armature)
         rohm = cls.addon.postprocess.module_config(
             cls.armature.mtp_rig_config, "ROHM_CORRECTION"
         )

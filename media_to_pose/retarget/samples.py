@@ -8,12 +8,9 @@ from dataclasses import dataclass, field
 
 from mathutils import Matrix, Quaternion, Vector
 
-from .. import (
-    camera_motion_correction,
-    grounded_cleanup,
-    mapping,
-)
+from .. import camera_motion_correction, grounded_cleanup
 from ..core.scene import SceneContext
+from ..rig.face_schemes import matching_shape_blocks
 
 
 @dataclass
@@ -89,7 +86,7 @@ def _shape_blocks_for_config(armature):
     for entry in armature.mtp_rig_config.mappings:
         if entry.section != "SHAPES" or not entry.target_name:
             continue
-        yield from mapping.matching_shape_blocks(armature, entry)
+        yield from matching_shape_blocks(armature, entry)
 
 
 def _sequence_state(armature, *, scene_context: SceneContext) -> dict:

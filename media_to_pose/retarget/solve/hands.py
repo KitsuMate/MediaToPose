@@ -7,10 +7,8 @@ import math
 import bpy
 from mathutils import Quaternion, Vector
 
-from ... import (
-    mapping,
-)
 from ...constants import HAND_JOINT_PAIRS, PROFILE_ARP
+from ...rig.profiles.common import profile_identifier
 from ..target_pose import TargetPose
 from .common import (
     _FINGER_ARTICULATION_LIMITS,
@@ -36,7 +34,7 @@ def _apply_hands(
     target_pose: TargetPose,
 ) -> set[bpy.types.PoseBone]:
     changed = set()
-    profile = mapping.profile_identifier(armature.mtp_rig_config)
+    profile = profile_identifier(armature.mtp_rig_config)
     for side_name, side_suffix in (("LEFT", "L"), ("RIGHT", "R")):
         hand = frame.hands.get(side_name)
         if not hand:

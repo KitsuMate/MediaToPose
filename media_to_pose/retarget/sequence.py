@@ -7,11 +7,7 @@ from contextlib import suppress
 
 from mathutils import Matrix, Vector
 
-from .. import (
-    camera_motion_correction,
-    mapping,
-    rig_planning,
-)
+from .. import camera_motion_correction, rig_planning
 from ..core.cache.stream import FrameSpool
 from ..core.errors import MediaError
 from ..core.requests import MediaKind, RootMotionMode
@@ -23,6 +19,7 @@ from ..postprocess import (
     compile_postprocess_config,
     iter_sequence_pipeline,
 )
+from ..rig import mapping
 from .camera_motion import (
     _iter_camera_motion_correction,
     _iter_prepare_camera_motion_track,

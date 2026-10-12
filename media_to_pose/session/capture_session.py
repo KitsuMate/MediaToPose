@@ -20,7 +20,7 @@ from pathlib import Path
 
 import bpy
 
-from .. import mapping, rig_planning
+from .. import rig_planning
 from ..capture_state import (
     enabled_capture_scope,
     face_output_warning,
@@ -55,6 +55,7 @@ from ..retarget import (
     prepare_limb_ownership,
     validate_limb_switch_interval,
 )
+from ..rig import mapping
 from . import capture_options
 from .progress import (
     rohm_may_run,

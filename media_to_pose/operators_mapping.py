@@ -10,9 +10,18 @@ from bpy.props import EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-from . import mapping
 from .operation import COORDINATOR
 from .registration import register_classes, unregister_classes
+from .rig import mapping
+from .rig.face_schemes import (
+    associated_meshes,
+    matching_shape_blocks,
+    shape_override_for_object,
+    shape_scheme,
+)
+from .rig.locks import suppress_manual_locks
+from .rig.names import normalize_name
+from .rig.presets import copy_section, load_json, save_json
 
 
 class _IdleMutationMixin:
@@ -191,7 +200,7 @@ class MTP_OT_use_selected_bone(_IdleMutationMixin, Operator):
         if not pose_bone or not entry:
             self.report({"ERROR"}, "Select a pose bone and mapping row")
             return {"CANCELLED"}
-        with mapping.suppress_manual_locks():
+        with suppress_manual_locks():
             entry.target_kind = "BONE"
             entry.target_name = pose_bone.name
             entry.source = "MANUAL"
@@ -215,17 +224,17 @@ class MTP_OT_use_active_shape_key(_IdleMutationMixin, Operator):
         if not armature or not entry or entry.section != "SHAPES" or not block:
             self.report({"ERROR"}, "Select a mesh with an active shape key")
             return {"CANCELLED"}
-        scheme = mapping.shape_scheme(block.name)
+        scheme = shape_scheme(block.name)
         if entry.shape_scheme in {"ARKIT", "FACS"} and scheme != entry.shape_scheme:
             self.report(
                 {"ERROR"},
                 f"Selected key is {scheme or 'unclassified'}, expected {entry.shape_scheme}",
             )
             return {"CANCELLED"}
-        with mapping.suppress_manual_locks():
+        with suppress_manual_locks():
             entry.target_kind = "SHAPE_KEY"
             if entry.target_object in {"", "*"} and entry.target_name:
-                override = mapping.shape_override_for_object(entry, obj.name)
+                override = shape_override_for_object(entry, obj.name)
                 if override is None:
                     override = entry.shape_overrides.add()
                 override.semantic_id = entry.semantic_id
@@ -277,14 +286,14 @@ class MTP_OT_add_shape_override(_IdleMutationMixin, Operator):
             or entry.section != "SHAPES"
             or not obj
             or obj.type != "MESH"
-            or obj not in mapping.associated_meshes(armature)
+            or obj not in associated_meshes(armature)
         ):
             self.report(
                 {"ERROR"},
                 "Choose a mesh associated with the target armature",
             )
             return {"CANCELLED"}
-        existing = mapping.shape_override_for_object(entry, obj.name)
+        existing = shape_override_for_object(entry, obj.name)
         if existing is not None:
             entry.active_shape_override_index = list(entry.shape_overrides).index(
                 existing
@@ -296,15 +305,15 @@ class MTP_OT_add_shape_override(_IdleMutationMixin, Operator):
         target_name = entry.target_name
         keys = obj.data.shape_keys
         if keys:
-            normalized = mapping.normalize_name(entry.target_name, shape=True)
+            normalized = normalize_name(entry.target_name, shape=True)
             match = next(
                 (
                     block.name
                     for block in keys.key_blocks
-                    if mapping.normalize_name(block.name, shape=True) == normalized
+                    if normalize_name(block.name, shape=True) == normalized
                     and (
                         entry.shape_scheme == "NONE"
-                        or mapping.shape_scheme(block.name) == entry.shape_scheme
+                        or shape_scheme(block.name) == entry.shape_scheme
                     )
                 ),
                 None,
@@ -379,8 +388,8 @@ class MTP_OT_select_shape_override(Operator):
             (
                 candidate
                 for candidate in obj.data.shape_keys.key_blocks
-                if mapping.normalize_name(candidate.name, shape=True)
-                == mapping.normalize_name(override.target_name, shape=True)
+                if normalize_name(candidate.name, shape=True)
+                == normalize_name(override.target_name, shape=True)
             ),
             None,
         )
@@ -421,7 +430,7 @@ class MTP_OT_select_mapping_target(Operator):
             armature.data.bones.active = target_bone.bone
             return {"FINISHED"}
         match = next(
-            mapping.matching_shape_blocks(armature, entry),
+            matching_shape_blocks(armature, entry),
             None,
         )
         if not match:
@@ -566,11 +575,11 @@ class MTP_OT_reset_section(_IdleMutationMixin, Operator):
                 "leg_ik_pole_bone_r",
                 "leg_ik_toe_bone_r",
             )
-            with mapping.suppress_manual_locks():
+            with suppress_manual_locks():
                 for field in properties_to_clear:
                     setattr(armature.mtp_rig_config, field, "")
                 armature.mtp_rig_config.fk_switches_manual = False
-        with mapping.suppress_manual_locks():
+        with suppress_manual_locks():
             for entry in armature.mtp_rig_config.mappings:
                 if entry.section != section:
                     continue
@@ -625,7 +634,7 @@ class MTP_OT_mirror_mapping(_IdleMutationMixin, Operator):
             ("_L", "_R") if self.direction == "L_TO_R" else ("_R", "_L")
         )
         copied = 0
-        with mapping.suppress_manual_locks():
+        with suppress_manual_locks():
             for semantic_id, source in entries.items():
                 if not semantic_id.endswith(source_suffix):
                     continue
@@ -667,7 +676,7 @@ class MTP_OT_export_preset(Operator, ExportHelper):
         armature = active_armature(context)
         if not armature:
             return {"CANCELLED"}
-        mapping.save_json(self.filepath, armature)
+        save_json(self.filepath, armature)
         self.report({"INFO"}, f"Exported {Path(self.filepath).name}")
         return {"FINISHED"}
 
@@ -685,9 +694,7 @@ class MTP_OT_import_preset(_IdleMutationMixin, Operator, ImportHelper):
         if not armature:
             return {"CANCELLED"}
         try:
-            mapping.load_json(
-                self.filepath, armature, settings=context.scene.mtp_settings
-            )
+            load_json(self.filepath, armature, settings=context.scene.mtp_settings)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             self.report({"ERROR"}, str(exc))
             return {"CANCELLED"}
@@ -714,7 +721,7 @@ class MTP_OT_duplicate_mapping(_IdleMutationMixin, Operator):
         if not target or not source or source.type != "ARMATURE" or source == target:
             self.report({"ERROR"}, "Choose a different source armature")
             return {"CANCELLED"}
-        mapping.copy_section(source, target, settings=context.scene.mtp_settings)
+        copy_section(source, target, settings=context.scene.mtp_settings)
         return {"FINISHED"}
 
 
@@ -746,7 +753,7 @@ class MTP_OT_duplicate_post_processing(_IdleMutationMixin, Operator):
                 "Choose a different source armature",
             )
             return {"CANCELLED"}
-        mapping.copy_section(
+        copy_section(
             source,
             target,
             section="POST_PROCESSING",

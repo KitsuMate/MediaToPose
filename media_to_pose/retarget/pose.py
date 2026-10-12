@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from .. import (
-    mapping,
-    rig_planning,
-)
+from .. import rig_planning
 from ..core.requests import FaceOutput
 from ..core.scene import SceneContext
 from ..models import CanonicalFrame
@@ -17,6 +14,7 @@ from ..postprocess import (
     iter_pipeline,
     run_pipeline,
 )
+from ..rig import mapping
 from .keyframes import _key_bone, _key_shape, _set_key_interpolation
 from .root_motion import _reset_root_location, _sequence_root_target
 from .samples import SequenceApplyProgress

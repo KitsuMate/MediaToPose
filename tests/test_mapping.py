@@ -16,7 +16,7 @@ class GenericMappingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = register_addon()
-        cls.mapping = cls.addon.mapping
+        cls.mapping = cls.addon.rig.mapping
 
     def setUp(self) -> None:
         data = bpy.data.armatures.new("MappingTestData")
@@ -820,7 +820,8 @@ class GenericMappingTests(unittest.TestCase):
 class VrmMetadataTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.mapping = register_addon().mapping
+        cls.addon = register_addon()
+        cls.mapping = cls.addon.rig.mapping
 
     @staticmethod
     def _node(name):
@@ -859,7 +860,7 @@ class VrmMetadataTests(unittest.TestCase):
 
     def test_vrm_metadata_remains_part_of_the_generic_profile(self) -> None:
         self.assertEqual(
-            set(self.mapping.PROFILE_LABELS),
+            set(self.addon.rig.profiles.common.PROFILE_LABELS),
             {"AUTO", "AUTO_RIG_PRO", "RIGIFY", "GENERIC"},
         )
 
