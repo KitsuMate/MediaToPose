@@ -89,7 +89,7 @@ class PostProcessCompilationTests(unittest.TestCase):
             compiled.modules[0].values["strength"] = 0.0
 
     def test_required_cleanup_modules_and_optional_rohm_are_configured(self) -> None:
-        constants = importlib.import_module(f"{self.addon.__name__}.constants")
+        constants = importlib.import_module(f"{self.addon.__name__}.core.constants")
         identifiers = [item[0] for item in self.post.POST_PROCESSING_MODULES]
         self.assertEqual(constants.SCHEMA_VERSION, 18)
         self.assertIn("SPINE_CORRECTION", identifiers)
@@ -145,7 +145,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_detection_filter_caps_only_new_rejections_and_repairs_boundary(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         samples = []
         for frame_index in range(3):
@@ -212,7 +214,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_manual_source_frame_ranges_mask_requested_scope_outside_budget(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         frames = motion_filter.parse_source_frame_ranges("1, 3-5, 99", 6)
         self.assertEqual(frames, frozenset({0, 2, 3, 4}))
         self.assertEqual(
@@ -255,7 +259,7 @@ class PostProcessCompilationTests(unittest.TestCase):
                 warning_sink=[],
                 rohm_confidence={
                     semantic: 1.0
-                    for semantic in load_addon().motion_filter.SMPLX_SEMANTICS
+                    for semantic in load_addon().core.motion.motion_filter.SMPLX_SEMANTICS
                 },
                 rohm_root_confidence=value,
             )
@@ -285,7 +289,9 @@ class PostProcessCompilationTests(unittest.TestCase):
         )
 
     def test_detection_filter_rejects_confident_source_pose_collapse(self) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         stable = {
             "LEFT_SHOULDER": Vector((-0.3, 0.0, 1.4)),
@@ -357,7 +363,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_detection_filter_rejects_consecutive_confident_scale_collapse(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         stable = {
             "LEFT_SHOULDER": Vector((-0.3, 0.0, 1.4)),
@@ -421,7 +429,9 @@ class PostProcessCompilationTests(unittest.TestCase):
     def test_detection_filter_rejects_consecutive_confident_bad_geometry(
         self,
     ) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantics = motion_filter.SMPLX_SEMANTICS
         stable = {
             "LEFT_SHOULDER": Vector((-0.3, 0.0, 1.4)),
@@ -485,7 +495,9 @@ class PostProcessCompilationTests(unittest.TestCase):
         self.assertTrue({4, 5}.issubset(stats.rejected_root_frames))
 
     def test_fallback_interpolates_consecutive_internal_body_gaps(self) -> None:
-        motion_filter = importlib.import_module(f"{self.addon.__name__}.motion_filter")
+        motion_filter = importlib.import_module(
+            f"{self.addon.__name__}.core.motion.motion_filter"
+        )
         semantic = "UPPER_ARM_L"
         samples = []
         for frame_index in range(5):
@@ -534,7 +546,7 @@ class PostProcessCompilationTests(unittest.TestCase):
             reject_unusable_frames=True,
             maximum_motion_rejected=30.0,
         )
-        stats = load_addon().motion_filter.MotionFilterStats(
+        stats = load_addon().core.motion.motion_filter.MotionFilterStats(
             total_observations=22,
             native_missing_observations=0,
             rejected_observations=0,
@@ -550,7 +562,7 @@ class PostProcessCompilationTests(unittest.TestCase):
                 warning_sink=[],
                 rohm_confidence={
                     semantic: 1.0
-                    for semantic in load_addon().motion_filter.SMPLX_SEMANTICS
+                    for semantic in load_addon().core.motion.motion_filter.SMPLX_SEMANTICS
                 },
                 rohm_root_confidence=value,
             )
@@ -564,12 +576,12 @@ class PostProcessCompilationTests(unittest.TestCase):
         )
         with (
             mock.patch.object(
-                load_addon().motion_filter,
+                load_addon().core.motion.motion_filter,
                 "filter_motion_observations",
                 return_value=stats,
             ),
             mock.patch.object(
-                load_addon().motion_filter,
+                load_addon().core.motion.motion_filter,
                 "repair_body_gaps",
                 return_value=3,
             ) as repair_body,
@@ -838,7 +850,7 @@ class AnimationCleanupTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
-        cls.cleanup = cls.addon.animation_cleanup
+        cls.cleanup = cls.addon.core.motion.animation_cleanup
 
     def test_anatomical_finger_hinge_allows_only_small_hyperextension(self) -> None:
         rest = Vector((1.0, 0.0, 0.0))

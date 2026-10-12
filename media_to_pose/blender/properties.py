@@ -15,16 +15,11 @@ from bpy.props import (
 )
 from bpy.types import PropertyGroup
 
-from .constants import (
-    MAPPING_FILTERS,
-    MAPPING_TABS,
-    PROFILE_AUTO,
-    SECTIONS,
-)
-from .operation import COORDINATOR
-from .postprocess import settings_schema
-from .registration import register_classes, unregister_classes
-from .rig.locks import manual_locks_suppressed
+from ..core.constants import MAPPING_FILTERS, MAPPING_TABS, PROFILE_AUTO, SECTIONS
+from ..core.coordinator import COORDINATOR
+from ..postprocess import settings_schema
+from ..rig.locks import manual_locks_suppressed
+from .classes import register_classes, unregister_classes
 
 
 def _mapping_edited(self, context) -> None:
@@ -37,10 +32,10 @@ def _mapping_edited(self, context) -> None:
     settings = getattr(getattr(context, "scene", None), "mtp_settings", None)
     armature = getattr(settings, "target_armature", None) if settings else None
     if armature is not None:
-        from .rig import mapping
+        from ..rig import mapping
 
         mapping.validate_mapping(armature, settings=settings)
-        from .postprocess import validate_modules
+        from ..postprocess import validate_modules
 
         validate_modules(armature)
 
@@ -51,8 +46,8 @@ def _fk_switch_edited(self, context) -> None:
         settings = getattr(getattr(context, "scene", None), "mtp_settings", None)
         armature = getattr(settings, "target_armature", None) if settings else None
         if armature is not None:
-            from .postprocess import validate_modules
-            from .rig import mapping
+            from ..postprocess import validate_modules
+            from ..rig import mapping
 
             mapping.validate_mapping(armature, settings=settings)
             validate_modules(armature)
@@ -78,10 +73,10 @@ def _shape_override_edited(self, context) -> None:
     entry.manual_lock = True
     entry.source = "MANUAL"
     entry.confidence = 1.0
-    from .rig import mapping
+    from ..rig import mapping
 
     mapping.validate_mapping(armature, settings=settings)
-    from .postprocess import validate_modules
+    from ..postprocess import validate_modules
 
     validate_modules(armature)
 
@@ -95,7 +90,7 @@ def _target_armature_changed(self, _context) -> None:
     if armature is None:
         return
     try:
-        from .rig import mapping
+        from ..rig import mapping
 
         mapping.refresh_auto_mapping(armature, settings=self)
     except (AttributeError, ReferenceError, RuntimeError):
@@ -107,15 +102,15 @@ def _cache_enabled_edited(self, _context) -> None:
         return
     # Property callbacks run on Blender's main thread. File removal is kept
     # out of panel draw callbacks, which Blender treats as read-only.
-    from . import cache_preview
-    from .core.cache import store as cache_store
+    from ..core.cache import store as cache_store
+    from . import preview as cache_preview
 
     cache_store.clear_cache()
     cache_preview.refresh_after_cache_update()
 
 
 def _preview_edited(_self, _context) -> None:
-    from . import cache_preview
+    from . import preview as cache_preview
 
     cache_preview.schedule_refresh()
 
@@ -139,14 +134,14 @@ def _capture_scope_edited(self, context) -> None:
     armature = getattr(self, "target_armature", None)
     if armature is None:
         return
-    from .rig import mapping
+    from ..rig import mapping
 
     mapping.validate_mapping(armature, settings=self)
 
 
 def _media_path_edited(self, _context) -> None:
-    from . import cache_preview
-    from .core.cache import media_source as cache_media
+    from ..core.cache import media_source as cache_media
+    from . import preview as cache_preview
 
     self.video_frame = 1
     self.last_camera_vertical_fov = 0.0
@@ -178,7 +173,7 @@ def _provider_edited(self, context) -> None:
 
 
 def _sam3d_model_edited(_self, _context) -> None:
-    from . import cache_preview
+    from . import preview as cache_preview
 
     cache_preview.schedule_refresh()
 
@@ -189,7 +184,7 @@ _SAM3D_VITH_ITEM = ("VITH", "ViT-H", "Default immutable ONNX graph bundle")
 def _sam3d_device_items(_self, _context):
     # Keep this callback read-only so panel draw never probes hardware.
     try:
-        from .backends.sam3d import backend as sam3d_backend
+        from ..backends.sam3d import backend as sam3d_backend
 
         return sam3d_backend.sam3d_device_enum_items()
     except (AttributeError, ImportError, RuntimeError):
@@ -207,7 +202,7 @@ def _sam3d_device_items(_self, _context):
 def _rohm_device_items(_self, _context):
     """Return fixed provider-neutral choices without probing hardware."""
     try:
-        from .backends.rohm import backend as rohm_backend
+        from ..backends.rohm import backend as rohm_backend
 
         return rohm_backend.rohm_device_enum_items()
     except (AttributeError, ImportError, RuntimeError):

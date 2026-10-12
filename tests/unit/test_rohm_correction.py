@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from media_to_pose import rohm_correction
-from media_to_pose.geometry import Quaternion, Vector
+from media_to_pose.core.geometry import Quaternion, Vector
+from media_to_pose.core.motion import rohm_correction
 
 
 class _IdentityRuntime:

@@ -4,12 +4,7 @@ from __future__ import annotations
 
 import bpy
 
-from ...constants import (
-    PROFILE_ARP,
-    PROFILE_AUTO,
-    PROFILE_GENERIC,
-    PROFILE_RIGIFY,
-)
+from ...core.constants import PROFILE_ARP, PROFILE_AUTO, PROFILE_GENERIC, PROFILE_RIGIFY
 
 PROFILE_LABELS = {
     PROFILE_AUTO: "Automatic",

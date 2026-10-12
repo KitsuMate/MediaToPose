@@ -46,7 +46,7 @@ def _assert_registered(*, import_dependencies: bool = False) -> object:
     expected_version = os.environ.get("MTP_EXPECTED_VERSION", "")
     if not expected_version:
         raise AssertionError("Expected extension version was not provided")
-    actual_version = addon.constants.extension_version()
+    actual_version = addon.core.constants.extension_version()
     if actual_version != expected_version:
         raise AssertionError(
             f"Installed extension version is {actual_version}, expected "
@@ -71,11 +71,11 @@ def _assert_registered(*, import_dependencies: bool = False) -> object:
         raise AssertionError(
             f"Installed extension is missing RoHM lifecycle operators: {missing_rohm_operators}"
         )
-    available, message = addon.dependency_bootstrap.ensure_bundled_dependencies()
+    available, message = addon.core.dependencies.ensure_bundled_dependencies()
     if not available:
         raise AssertionError(message)
     if import_dependencies:
-        dependencies = addon.dependency_bootstrap.import_runtime_dependencies()
+        dependencies = addon.core.dependencies.import_runtime_dependencies()
         _assert_native_dependency_origins(*dependencies[:2])
     return addon
 
@@ -106,7 +106,7 @@ def _toggle_registration() -> object:
 
 
 def _exercise_fake_capture(addon: object) -> None:
-    operators = addon.operators_capture
+    operators = addon.blender.operators.capture
 
     class FakeProvider:
         closed = False
@@ -115,7 +115,7 @@ def _exercise_fake_capture(addon: object) -> None:
             del _options
 
         def detect_image(self, _path):
-            return addon.models.CanonicalFrame(timestamp_ms=0)
+            return addon.core.types.CanonicalFrame(timestamp_ms=0)
 
         def close(self):
             type(self).closed = True
@@ -130,7 +130,7 @@ def _exercise_fake_capture(addon: object) -> None:
         def progress(self, current, total, status):
             self.progress_updates.append((current, total, status))
 
-    media = addon.models.MediaInfo(path="ignored.png", kind="IMAGE")
+    media = addon.core.types.MediaInfo(path="ignored.png", kind="IMAGE")
     job = FakeJob()
     original_descriptor = operators.descriptor
     operators.descriptor = lambda _provider_id: SimpleNamespace(
@@ -166,8 +166,8 @@ def _exercise_fake_capture(addon: object) -> None:
 
 
 def _exercise_onnxruntime(addon: object) -> None:
-    runtime = addon.dependency_bootstrap.import_onnxruntime()
-    diagnostics = addon.dependency_bootstrap.onnxruntime_diagnostics()
+    runtime = addon.core.dependencies.import_onnxruntime()
+    diagnostics = addon.core.dependencies.onnxruntime_diagnostics()
     expected_version = EXPECTED_ORT_VERSIONS.get(sys.platform)
     if diagnostics["version"] != expected_version:
         raise AssertionError(
@@ -280,7 +280,7 @@ def _exercise_rohm_bundle(addon: object) -> None:
             "upstream_revision"
         ],
     )
-    runtime = addon.dependency_bootstrap.import_onnxruntime()
+    runtime = addon.core.dependencies.import_onnxruntime()
     session = addon.backends.rohm.runtime.RohmSession(
         bundle,
         "CPU",
@@ -311,11 +311,11 @@ def main() -> None:
     if "--verify-only" not in sys.argv:
         addon = _toggle_registration()
         _exercise_fake_capture(addon)
-    cv2, mediapipe, _numpy = addon.dependency_bootstrap.import_runtime_dependencies()
+    cv2, mediapipe, _numpy = addon.core.dependencies.import_runtime_dependencies()
     _assert_native_dependency_origins(cv2, mediapipe)
     _exercise_onnxruntime(addon)
     _exercise_rohm_bundle(addon)
-    if addon.operation.COORDINATOR.is_busy():
+    if addon.core.coordinator.COORDINATOR.is_busy():
         raise AssertionError("Release smoke left an operation lease active")
     print("MTP_RELEASE_SMOKE_OK")
 

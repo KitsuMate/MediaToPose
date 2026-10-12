@@ -20,32 +20,32 @@ class RegistrationTests(unittest.TestCase):
         callbacks = [
             callback
             for callback in bpy.app.handlers.load_post
-            if callback is self.addon.addon_lifecycle._initialize_scene_state
+            if callback is self.addon.blender.registration._initialize_scene_state
         ]
         self.assertEqual(len(callbacks), 1)
         self.assertIs(
-            bpy.app.driver_namespace[self.addon.addon_lifecycle._STATE_TIMER_KEY],
-            self.addon.addon_lifecycle._state_watch_timer,
+            bpy.app.driver_namespace[self.addon.blender.registration._STATE_TIMER_KEY],
+            self.addon.blender.registration._state_watch_timer,
         )
 
     def test_preferences_are_registered_under_the_addon_package(self) -> None:
         self.addon.register()
         self.assertEqual(
-            self.addon.ui.MTP_AddonPreferences.bl_idname, self.addon.__name__
+            self.addon.blender.ui.MTP_AddonPreferences.bl_idname, self.addon.__name__
         )
 
     def test_restricted_install_context_defers_scene_access(self) -> None:
         self.addon.unregister()
         with RestrictBlend():
             self.addon.register()
-        self.assertTrue(self.addon.addon_lifecycle._scene_state_pending)
-        self.assertTrue(self.addon.addon_lifecycle._reset_scene_state(bpy.data))
+        self.assertTrue(self.addon.blender.registration._scene_state_pending)
+        self.assertTrue(self.addon.blender.registration._reset_scene_state(bpy.data))
 
     def test_capture_and_cleanup_use_safe_defaults(self) -> None:
-        scene_properties = self.addon.properties.MTPSceneSettings.bl_rna.properties
-        module_properties = (
-            self.addon.properties.MTPPostProcessingModuleConfig.bl_rna.properties
+        scene_properties = (
+            self.addon.blender.properties.MTPSceneSettings.bl_rna.properties
         )
+        module_properties = self.addon.blender.properties.MTPPostProcessingModuleConfig.bl_rna.properties
         self.assertEqual(scene_properties["root_motion_mode"].default, "AUTOMATIC")
         self.assertFalse(scene_properties["keep_original_root_position"].default)
         self.assertTrue(module_properties["reject_unreliable_limbs"].default)
@@ -62,10 +62,10 @@ class RegistrationTests(unittest.TestCase):
         )
 
     def test_rohm_uses_managed_model_lifecycle_without_bypass_flags(self) -> None:
-        scene_properties = self.addon.properties.MTPSceneSettings.bl_rna.properties
-        module_properties = (
-            self.addon.properties.MTPPostProcessingModuleConfig.bl_rna.properties
+        scene_properties = (
+            self.addon.blender.properties.MTPSceneSettings.bl_rna.properties
         )
+        module_properties = self.addon.blender.properties.MTPPostProcessingModuleConfig.bl_rna.properties
         self.assertIn("rohm_device", scene_properties)
         self.assertNotIn("confidence_threshold", scene_properties)
         self.assertNotIn("missing_detection_policy", scene_properties)

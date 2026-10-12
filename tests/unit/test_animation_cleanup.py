@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 import unittest
 
-from media_to_pose import animation_cleanup
-from media_to_pose.geometry import Quaternion, Vector
+from media_to_pose.core.geometry import Quaternion, Vector
+from media_to_pose.core.motion import animation_cleanup
 
 
 class AnimationCleanupTests(unittest.TestCase):

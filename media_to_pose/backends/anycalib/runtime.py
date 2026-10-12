@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from ... import camera_calibration
+from ...core.camera import calibration as camera_calibration
 from ..sam3d import ort_runtime as sam3d_ort_runtime
 
 BUNDLE_CONTRACT = "media_to_pose.anycalib_onnx.v1"

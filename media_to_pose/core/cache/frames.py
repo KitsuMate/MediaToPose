@@ -13,7 +13,8 @@ from typing import cast
 
 import numpy as np
 
-from ...models import (
+from ..fs import atomic_npz
+from ..types import (
     CameraIntrinsicsObservation,
     CanonicalFrame,
     JointFrameObservation,
@@ -21,7 +22,6 @@ from ...models import (
     Mat3,
     RootMotionObservation,
 )
-from ..fs import atomic_npz
 
 
 def compact_frame(frame: CanonicalFrame) -> CanonicalFrame:

@@ -7,7 +7,7 @@ import time
 import unittest
 from dataclasses import FrozenInstanceError
 
-from media_to_pose import operation
+from media_to_pose.core import coordinator as operation
 from media_to_pose.core import requests
 
 

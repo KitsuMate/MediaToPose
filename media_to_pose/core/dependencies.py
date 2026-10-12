@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .core.errors import DependencyMissing
+from .errors import DependencyMissing
 
 REQUIRED_MODULES = ("mediapipe", "cv2", "onnxruntime")
 EXPECTED_ONNX_ACCELERATOR = {

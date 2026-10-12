@@ -8,7 +8,7 @@ from collections.abc import Sequence
 
 import bpy
 
-from ..constants import (
+from ..core.constants import (
     ALL_ROLES,
     FACE_BLENDSHAPES,
     FACS_ACTION_UNITS,

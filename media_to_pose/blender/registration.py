@@ -5,23 +5,19 @@ from __future__ import annotations
 import bpy
 from bpy.app.handlers import persistent
 
-from . import (
-    cache_preview,
-    camera_calibration,
-    camera_motion_correction,
-    operators_capture,
-    operators_mapping,
-    properties,
-    rohm_correction,
-    ui,
-)
-from .backends.anycalib import runtime as anycalib_ort_runtime
-from .backends.rohm import runtime as rohm_ort_runtime
-from .blender import host
-from .blender.operators import models as model_operators
-from .core.log import configure_logging, get_logger
-from .operation import COORDINATOR
-from .rig_planning import clear_rig_solve_plans
+from ..backends.anycalib import runtime as anycalib_ort_runtime
+from ..backends.rohm import runtime as rohm_ort_runtime
+from ..core.camera import calibration as camera_calibration
+from ..core.camera import motion_correction as camera_motion_correction
+from ..core.coordinator import COORDINATOR
+from ..core.log import configure_logging, get_logger
+from ..core.motion import rohm_correction
+from ..rig.planning import clear_rig_solve_plans
+from . import host, properties, ui
+from . import preview as cache_preview
+from .operators import capture as operators_capture
+from .operators import mapping as operators_mapping
+from .operators import models as model_operators
 
 LOGGER = get_logger(__name__)
 
@@ -58,8 +54,8 @@ def _reset_scene_state(data=None) -> bool:
     expected install context as an error.
     """
     global _scene_state_pending
-    from .rig import mapping
-    from .session.capture_options import clear_unrecoverable_media_selection
+    from ..rig import mapping
+    from ..session.capture_options import clear_unrecoverable_media_selection
 
     data = bpy.data if data is None else data
     scenes = getattr(data, "scenes", None)

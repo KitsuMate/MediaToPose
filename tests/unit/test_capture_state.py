@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from media_to_pose import capture_state
+from media_to_pose.session import readiness as capture_state
 
 MEDIAPIPE = SimpleNamespace(
     label="MediaPipe", capabilities=frozenset({"BODY", "HANDS", "FACE"})

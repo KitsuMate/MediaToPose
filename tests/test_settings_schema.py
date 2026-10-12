@@ -16,7 +16,9 @@ class SettingsSchemaTests(unittest.TestCase):
         cls.schema = importlib.import_module(
             f"{cls.addon.__name__}.postprocess.settings_schema"
         )
-        cls.rna = cls.addon.properties.MTPPostProcessingModuleConfig.bl_rna.properties
+        cls.rna = (
+            cls.addon.blender.properties.MTPPostProcessingModuleConfig.bl_rna.properties
+        )
 
     def test_every_parameter_matches_its_rna_property(self) -> None:
         kinds = {

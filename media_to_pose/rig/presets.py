@@ -7,7 +7,7 @@ from pathlib import Path
 
 import bpy
 
-from ..constants import (
+from ..core.constants import (
     PROFILE_ARP,
     PROFILE_GENERIC,
     PROFILE_RIGIFY,

@@ -13,7 +13,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from statistics import median
 
-from .geometry import Quaternion, Vector
+from ..geometry import Quaternion, Vector
 
 
 @dataclass

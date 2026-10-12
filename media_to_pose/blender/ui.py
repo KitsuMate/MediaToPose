@@ -7,22 +7,20 @@ import textwrap
 import bpy
 from bpy.types import AddonPreferences, Panel, UIList
 
-from . import cache_preview, postprocess
-from .backends.anycalib import backend as anycalib_backend
-from .backends.rohm import backend as rohm_backend
-from .backends.sam3d import backend as sam3d_backend
-from .blender.host import ADDON_PACKAGE
-from .capture_state import evaluate_apply_readiness
-from .operation import COORDINATOR, OperationKind
-from .operators_mapping import (
-    active_entry,
-    active_mapping_section,
-)
-from .postprocess import settings_schema
-from .providers import descriptor
-from .registration import register_classes, unregister_classes
-from .rig.profiles.common import PROFILE_LABELS, detect_profile, profile_label
-from .session import capture_options
+from .. import postprocess
+from ..backends.anycalib import backend as anycalib_backend
+from ..backends.rohm import backend as rohm_backend
+from ..backends.sam3d import backend as sam3d_backend
+from ..core.coordinator import COORDINATOR, OperationKind
+from ..postprocess import settings_schema
+from ..providers import descriptor
+from ..rig.profiles.common import PROFILE_LABELS, detect_profile, profile_label
+from ..session import capture_options
+from ..session.readiness import evaluate_apply_readiness
+from . import preview as cache_preview
+from .classes import register_classes, unregister_classes
+from .host import ADDON_PACKAGE
+from .operators.mapping import active_entry, active_mapping_section
 
 STATUS_ICONS = {
     "VALID": "CHECKMARK",

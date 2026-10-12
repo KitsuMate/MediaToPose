@@ -214,7 +214,7 @@ class RohmSession:
         session_factory=None,
     ):
         if ort_module is None:
-            from ... import dependency_bootstrap
+            from ...core import dependencies as dependency_bootstrap
 
             ort_module = dependency_bootstrap.import_onnxruntime()
         available = tuple(ort_module.get_available_providers())

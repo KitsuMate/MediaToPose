@@ -8,21 +8,21 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Operator
 
-from . import cache_preview
-from .core.cache import media_source as cache_media
-from .core.cache import store as cache_store
-from .core.errors import MtpError
-from .core.requests import CaptureMode, CaptureSettings
-from .core.scene import SceneContext
-from .operation import COORDINATOR, OperationKind, OperationState
-from .operators_mapping import active_armature
-from .registration import register_classes, unregister_classes
-from .session.capture_session import (
+from ...core.cache import media_source as cache_media
+from ...core.cache import store as cache_store
+from ...core.coordinator import COORDINATOR, OperationKind, OperationState
+from ...core.errors import MtpError
+from ...core.requests import CaptureMode, CaptureSettings
+from ...core.scene import SceneContext
+from ...session.capture_session import (
     CaptureSession,
     SessionUpdate,
     active_session,
     shutdown_sessions,
 )
+from .. import preview as cache_preview
+from ..classes import register_classes, unregister_classes
+from .mapping import active_armature
 
 
 def _set_status(settings, message: str, kind: str = "INFO") -> None:

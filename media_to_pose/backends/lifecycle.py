@@ -29,10 +29,15 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..core import paths
+from ..core.coordinator import (
+    COORDINATOR,
+    OperationKind,
+    OperationState,
+    OperationToken,
+)
 from ..core.errors import BackendError, Cancelled, OperationBusy
 from ..core.fs import atomic_json, read_json, remove_tree, replace_directory
 from ..core.log import get_logger
-from ..operation import COORDINATOR, OperationKind, OperationState, OperationToken
 
 LOGGER = get_logger(__name__)
 

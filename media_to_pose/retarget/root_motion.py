@@ -9,7 +9,7 @@ from mathutils import Matrix, Quaternion, Vector
 
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
-from ..models import CanonicalFrame
+from ..core.types import CanonicalFrame
 from .samples import _BakedFrameSample, _RootMotionSample, _translate_grounding
 from .solve.common import _canonical_vector, _mapped_bone, body_points
 from .solve.frames import source_root_basis, target_basis

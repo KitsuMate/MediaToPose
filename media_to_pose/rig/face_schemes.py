@@ -6,9 +6,7 @@ import re
 
 import bpy
 
-from ..constants import (
-    FACE_BLENDSHAPES,
-)
+from ..core.constants import FACE_BLENDSHAPES
 from .names import normalize_name
 
 _ARKIT_NORMALIZED = {

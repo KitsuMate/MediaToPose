@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from types import SimpleNamespace
 
-from ...models import CanonicalFrame, Landmark
+from ...core.types import CanonicalFrame, Landmark
 
 
 class FaceMixin:

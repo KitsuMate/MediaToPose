@@ -5,10 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from ...constants import (
-    PROFILE_ARP,
-    PROFILE_RIGIFY,
-)
+from ...core.constants import PROFILE_ARP, PROFILE_RIGIFY
 from ..names import normalize_name, side_from_role
 
 GENERIC_ALIASES = {

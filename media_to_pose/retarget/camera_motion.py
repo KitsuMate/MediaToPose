@@ -6,9 +6,9 @@ from collections.abc import Iterator, Sequence
 
 from mathutils import Matrix, Vector
 
-from .. import camera_motion_correction
 from ..core.cache import media_source as cache_media
 from ..core.cache import store as cache_store
+from ..core.camera import motion_correction as camera_motion_correction
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
 from .samples import (
@@ -167,7 +167,7 @@ def _iter_prepare_camera_motion_track(
     source_identity = dict(getattr(request, "source_identity", {}) or {})
     expected_key = camera_motion_correction.cache_key(source_identity, inputs)
     directory = cache_store.camera_motion_directory(create_root=False)
-    from ..dependency_bootstrap import import_camera_dependencies
+    from ..core.dependencies import import_camera_dependencies
 
     try:
         cv2, np = import_camera_dependencies()

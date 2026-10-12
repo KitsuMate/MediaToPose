@@ -66,7 +66,7 @@ class CaptureSessionTests(unittest.TestCase):
         self.capture = importlib.import_module(
             f"{self.addon.__name__}.session.capture_session"
         )
-        self.coordinator = self.addon.operation.COORDINATOR
+        self.coordinator = self.addon.core.coordinator.COORDINATOR
 
     def _settings(self, media: Path, **overrides):
         values = {

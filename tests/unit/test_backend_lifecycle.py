@@ -12,8 +12,8 @@ from pathlib import Path
 from unittest import mock
 
 from media_to_pose.backends import lifecycle
+from media_to_pose.core.coordinator import COORDINATOR, OperationKind
 from media_to_pose.core.errors import BackendError, Cancelled, OperationBusy
-from media_to_pose.operation import COORDINATOR, OperationKind
 
 
 class _Response:

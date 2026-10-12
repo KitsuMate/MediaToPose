@@ -6,17 +6,15 @@ from collections.abc import Iterator, Sequence
 
 from mathutils import Matrix, Vector
 
-from .. import (
-    camera_motion_correction,
-    motion_filter,
-    rig_planning,
-)
+from ..core.camera import motion_correction as camera_motion_correction
+from ..core.motion import motion_filter
 from ..core.scene import SceneContext
-from ..models import CanonicalFrame
+from ..core.types import CanonicalFrame
 from ..postprocess import (
     PostProcessingSession,
     iter_pipeline,
 )
+from ..rig import planning as rig_planning
 from .grounding import _capture_grounding_frame
 from .pose import _iter_commit_target_pose, build_target_pose
 from .root_motion import _target_body_height
@@ -62,7 +60,7 @@ def _capture_rohm_frame_input(
     deliberately not Blender ``matrix_basis`` values: RoHM converts these
     globals through the official SMPL-X hierarchy before inference.
     """
-    from ..rohm_correction import SMPLX_SEMANTICS
+    from ..core.motion.rohm_correction import SMPLX_SEMANTICS
 
     result = _RohmFrameInput()
     pelvis = evaluated_semantic_bone(armature, target_pose.entries, "PELVIS")

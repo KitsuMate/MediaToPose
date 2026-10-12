@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ...core.coordinator import OperationKind
 from ...core.errors import Cancelled, ModelMissing, MtpError
-from ...operation import OperationKind
 from .. import lifecycle
 from ..lifecycle import (
     BackgroundJob,

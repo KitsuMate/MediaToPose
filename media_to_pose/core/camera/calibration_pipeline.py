@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from . import camera_calibration
-from .core.errors import Cancelled, MediaError
-from .core.log import get_logger
-from .dependency_bootstrap import import_runtime_dependencies
+from ..dependencies import import_runtime_dependencies
+from ..errors import Cancelled, MediaError
+from ..log import get_logger
+from . import calibration as camera_calibration
 
 LOGGER = get_logger(__name__)
 

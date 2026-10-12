@@ -6,7 +6,7 @@ import math
 
 from mathutils import Matrix, Quaternion, Vector
 
-from ...models import CanonicalFrame
+from ...core.types import CanonicalFrame
 from .common import _canonical_vector, _mapped_bone, body_points
 
 

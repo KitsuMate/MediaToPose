@@ -12,10 +12,10 @@ import threading
 import traceback
 
 from ..core.cache.stream import FrameSpool
+from ..core.coordinator import COORDINATOR, OperationToken
 from ..core.errors import Cancelled
 from ..core.log import get_logger
 from ..core.requests import CaptureMode, CaptureRequest, MediaKind
-from ..operation import COORDINATOR, OperationToken
 from ..providers import descriptor
 from .progress import capture_progress_plan
 
@@ -143,7 +143,8 @@ def _cancelled(job) -> None:
 
 
 def _calibrated_options(job, request: CaptureRequest) -> dict:
-    from .. import camera_calibration, camera_calibration_pipeline
+    from ..core.camera import calibration as camera_calibration
+    from ..core.camera import calibration_pipeline as camera_calibration_pipeline
 
     options = dict(request.options)
     media = request.media_info

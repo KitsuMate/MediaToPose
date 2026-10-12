@@ -11,7 +11,7 @@ from typing import (
 
 from mathutils import Vector
 
-from ..constants import PROFILE_ARP, PROFILE_GENERIC, PROFILE_RIGIFY
+from ..core.constants import PROFILE_ARP, PROFILE_GENERIC, PROFILE_RIGIFY
 from ..retarget.target_pose import TargetPose
 
 

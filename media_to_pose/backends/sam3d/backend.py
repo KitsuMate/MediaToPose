@@ -14,13 +14,13 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
-from ...constants import CAPTURE_CONFIDENCE, extension_version
 from ...core import paths
+from ...core.constants import CAPTURE_CONFIDENCE, extension_version
+from ...core.coordinator import OperationKind
 from ...core.errors import BackendError, Cancelled, InvalidRequest, ModelMissing
 from ...core.fs import atomic_json, read_json, remove_tree
 from ...core.log import get_logger
 from ...core.requests import SamSetupRequest
-from ...operation import OperationKind
 from .. import lifecycle
 from ..lifecycle import (
     BackgroundJob,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import tomllib
 from functools import lru_cache
 
-from .core import paths
+from . import paths
 
 
 @lru_cache(maxsize=1)

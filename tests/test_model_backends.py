@@ -55,7 +55,7 @@ class ModelBackendOperatorTests(unittest.TestCase):
                 self.assertEqual(getattr(bpy.ops.mtp, name)(), {"CANCELLED"})
 
     def test_unload_without_a_loaded_model_succeeds_and_frees_the_lease(self) -> None:
-        coordinator = self.addon.operation.COORDINATOR
+        coordinator = self.addon.core.coordinator.COORDINATOR
         for name in ("anycalib_unload", "rohm_unload", "sam3d_unload"):
             with self.subTest(operator=name):
                 self.assertEqual(getattr(bpy.ops.mtp, name)(), {"FINISHED"})

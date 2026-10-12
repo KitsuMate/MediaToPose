@@ -13,16 +13,16 @@ from pathlib import Path
 import bpy
 import bpy.utils.previews
 
-from .blender import context as blender_context
-from .constants import HAND_LANDMARK_NAMES
-from .core.cache import store as cache_store
-from .core.log import get_logger
-from .media_io import (
+from ..core.cache import store as cache_store
+from ..core.constants import HAND_LANDMARK_NAMES
+from ..core.log import get_logger
+from ..core.media_io import (
     decode_image,
     decode_video_frame_index_with_timestamp,
     probe_media,
 )
-from .session import capture_options
+from ..session import capture_options
+from . import context as blender_context
 
 LOGGER = get_logger(__name__)
 
@@ -193,7 +193,7 @@ def _render_overlay(request: _PreviewRequest) -> _PreviewResult:
     media_kind = ""
     frame_count = 0
     try:
-        from .dependency_bootstrap import import_runtime_dependencies
+        from ..core.dependencies import import_runtime_dependencies
 
         cv2, _mp, np = import_runtime_dependencies()
         media_info = probe_media(request.media_path)

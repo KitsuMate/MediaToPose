@@ -7,13 +7,10 @@ from collections.abc import Iterator, Sequence
 
 from mathutils import Matrix, Vector
 
-from .. import (
-    animation_cleanup,
-    grounded_cleanup,
-)
+from ..core.motion import animation_cleanup, grounded_cleanup
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
-from ..models import CanonicalFrame, Landmark
+from ..core.types import CanonicalFrame, Landmark
 from .root_motion import _target_body_height
 from .samples import (
     SequenceApplyProgress,

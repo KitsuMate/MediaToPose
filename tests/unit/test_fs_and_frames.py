@@ -12,7 +12,7 @@ import numpy as np
 
 from media_to_pose.core import fs
 from media_to_pose.core.cache import frames
-from media_to_pose.models import (
+from media_to_pose.core.types import (
     CameraIntrinsicsObservation,
     CanonicalFrame,
     JointFrameObservation,

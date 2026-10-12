@@ -60,30 +60,7 @@ BLENDER_MODULES = {"bpy", "mathutils", "bmesh", "gpu", "gpu_extras", "blf", "bl_
 
 # Modules that still live outside the target layout, mapped to the layer
 # they will move into. Empty once Phase 7 has finished.
-LEGACY_LAYERS: dict[str, str] = {
-    "addon_lifecycle": "blender",
-    "animation_cleanup": "core",
-    "cache_preview": "blender",
-    "camera_calibration": "core",
-    "camera_calibration_pipeline": "core",
-    "camera_motion_correction": "core",
-    "capture_state": "session",
-    "constants": "core",
-    "dependency_bootstrap": "core",
-    "geometry": "core",
-    "grounded_cleanup": "core",
-    "media_io": "core",
-    "models": "core",
-    "motion_filter": "core",
-    "operation": "core",
-    "operators_capture": "blender",
-    "operators_mapping": "blender",
-    "properties": "blender",
-    "registration": "blender",
-    "rig_planning": "rig",
-    "rohm_correction": "core",
-    "ui": "blender",
-}
+LEGACY_LAYERS: dict[str, str] = {}
 
 # (module, rule, detail) tuples for known violations.
 ALLOWLIST: set[tuple[str, str, str]] = set()

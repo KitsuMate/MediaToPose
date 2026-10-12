@@ -10,18 +10,18 @@ from bpy.props import EnumProperty, IntProperty, StringProperty
 from bpy.types import Operator
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-from .operation import COORDINATOR
-from .registration import register_classes, unregister_classes
-from .rig import mapping
-from .rig.face_schemes import (
+from ...core.coordinator import COORDINATOR
+from ...rig import mapping
+from ...rig.face_schemes import (
     associated_meshes,
     matching_shape_blocks,
     shape_override_for_object,
     shape_scheme,
 )
-from .rig.locks import suppress_manual_locks
-from .rig.names import normalize_name
-from .rig.presets import copy_section, load_json, save_json
+from ...rig.locks import suppress_manual_locks
+from ...rig.names import normalize_name
+from ...rig.presets import copy_section, load_json, save_json
+from ..classes import register_classes, unregister_classes
 
 
 class _IdleMutationMixin:
@@ -491,7 +491,7 @@ class MTP_OT_reset_all_post_processing(_IdleMutationMixin, Operator):
         armature = active_armature(context)
         if not armature:
             return {"CANCELLED"}
-        from .postprocess import (
+        from ...postprocess import (
             ensure_module_configs,
             reset_module_defaults,
             validate_modules,

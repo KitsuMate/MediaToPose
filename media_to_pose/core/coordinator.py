@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from .core.errors import OperationBusy
-from .core.log import get_logger
+from .errors import OperationBusy
+from .log import get_logger
 
 LOGGER = get_logger(__name__)
 

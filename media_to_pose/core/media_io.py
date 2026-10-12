@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from .core.errors import Cancelled, MediaError
-from .dependency_bootstrap import import_runtime_dependencies
-from .models import MediaInfo
+from .dependencies import import_runtime_dependencies
+from .errors import Cancelled, MediaError
+from .types import MediaInfo
 
 
 def decode_image(path: str, cv2, np):

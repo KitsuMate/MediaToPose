@@ -6,8 +6,8 @@ import unittest
 from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 
-from media_to_pose import rig_planning
-from media_to_pose.geometry import Matrix, Vector
+from media_to_pose.core.geometry import Matrix, Vector
+from media_to_pose.rig import planning as rig_planning
 
 
 class _Bones(list):

@@ -6,18 +6,15 @@ from collections.abc import Iterable
 from pathlib import Path
 from threading import Event
 
-from ... import camera_calibration
+from ...core.camera import calibration as camera_calibration
+from ...core.dependencies import dependency_snapshot, import_runtime_dependencies
 from ...core.errors import ModelMissing
-from ...dependency_bootstrap import (
-    dependency_snapshot,
-    import_runtime_dependencies,
-)
-from ...media_io import (
+from ...core.media_io import (
     decode_image,
     decode_video_frame_index_with_timestamp,
     iter_video_frames,
 )
-from ...models import CanonicalFrame, Landmark
+from ...core.types import CanonicalFrame, Landmark
 from .body import PoseMixin, _estimate_root_motion
 from .face import FaceMixin
 from .hands import HandsMixin

@@ -5,7 +5,7 @@ import unittest
 
 import numpy as np
 
-from media_to_pose import camera_calibration
+from media_to_pose.core.camera import calibration as camera_calibration
 
 
 class CameraCalibrationTests(unittest.TestCase):

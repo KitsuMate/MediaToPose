@@ -9,8 +9,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .core.errors import BackendError
-from .core.motion.rohm_format import (
+from ..errors import BackendError
+from ..geometry import Matrix, Quaternion, Vector
+from .rohm_format import (
     BETAS_SLICE,
     FEATURE_COUNT,
     MODEL_FPS,
@@ -21,7 +22,6 @@ from .core.motion.rohm_format import (
     TRAJECTORY_COUNT,
     visibility_vector,
 )
-from .geometry import Matrix, Quaternion, Vector
 
 SMPLX_SEMANTICS = (
     "PELVIS",

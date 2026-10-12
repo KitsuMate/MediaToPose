@@ -12,8 +12,8 @@ import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
-from ...models import CanonicalFrame
 from ..fs import remove_tree
+from ..types import CanonicalFrame
 from .frames import read_chunk, write_chunk
 
 DEFAULT_CHUNK_FRAMES = 64

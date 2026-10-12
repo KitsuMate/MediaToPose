@@ -202,14 +202,14 @@ class VroidFixtureTests(unittest.TestCase):
             self.armature.matrix_basis.decompose()
         )
         world_root = self.armature.matrix_world.translation.copy()
-        point = self.addon.grounded_cleanup.ContactPoint(
+        point = self.addon.core.motion.grounded_cleanup.ContactPoint(
             position=world_root + Vector((0.2, 0.0, -1.0)),
             image=Vector((0.5, 0.8)),
             confidence=1.0,
             motion_position=Vector((0.2, 0.0, -1.0)),
         )
         point_position = point.position.copy()
-        grounding = self.addon.grounded_cleanup.GroundFrame(
+        grounding = self.addon.core.motion.grounded_cleanup.GroundFrame(
             timestamp=0.0,
             root=world_root.copy(),
             points={"L_HEEL": point},
@@ -857,14 +857,14 @@ class VroidFixtureTests(unittest.TestCase):
         )
         heel_target = current_heel + offset
         toe_target = heel_target + planted_direction
-        point = self.addon.grounded_cleanup.ContactPoint(
+        point = self.addon.core.motion.grounded_cleanup.ContactPoint(
             position=current_heel.copy(),
             image=Vector((0.5, 0.9)),
             confidence=1.0,
             direction=(current_toe - current_heel).normalized(),
             motion_position=Vector(),
         )
-        sample.grounding = self.addon.grounded_cleanup.GroundFrame(
+        sample.grounding = self.addon.core.motion.grounded_cleanup.GroundFrame(
             timestamp=0.0,
             root=upper.head.copy(),
             points={"L_HEEL": point, "L_TOE": copy.deepcopy(point)},
@@ -873,7 +873,7 @@ class VroidFixtureTests(unittest.TestCase):
         result = SimpleNamespace(contacts={}, segments=[], warnings=[])
         with (
             mock.patch.object(
-                self.addon.grounded_cleanup,
+                self.addon.core.motion.grounded_cleanup,
                 "analyze_grounding",
                 return_value=result,
             ),
@@ -946,7 +946,7 @@ class VroidFixtureTests(unittest.TestCase):
                     key_rotation=True,
                     semantic_id=semantic,
                 )
-            item = self.addon.camera_motion_correction.CameraMotionInput(
+            item = self.addon.core.camera.motion_correction.CameraMotionInput(
                 timestamp_ms=index * 50,
                 root_translation=(root_x, 0.0, 2.0),
                 focal_length=1000.0,
@@ -954,14 +954,14 @@ class VroidFixtureTests(unittest.TestCase):
             sample.camera_motion_input = item
             inputs.append(item)
             samples.append(sample)
-        track = self.addon.camera_motion_correction.CameraMotionTrack(
+        track = self.addon.core.camera.motion_correction.CameraMotionTrack(
             width=1000,
             height=600,
             frames=(
-                self.addon.camera_motion_correction.CameraTrackFrame(
+                self.addon.core.camera.motion_correction.CameraTrackFrame(
                     timestamp_ms=0, valid=True
                 ),
-                self.addon.camera_motion_correction.CameraTrackFrame(
+                self.addon.core.camera.motion_correction.CameraTrackFrame(
                     timestamp_ms=50,
                     translation_x=50.0,
                     confidence=1.0,

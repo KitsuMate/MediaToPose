@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from threading import Event
 from typing import Any, Protocol
 
-from ..models import CanonicalFrame
+from ..core.types import CanonicalFrame
 
 ProgressCallback = Callable[[int, int, str], None]
 DependencyStatus = Callable[[dict[str, Any]], tuple[bool, str]]

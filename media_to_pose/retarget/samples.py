@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 
 from mathutils import Matrix, Quaternion, Vector
 
-from .. import camera_motion_correction, grounded_cleanup
+from ..core.camera import motion_correction as camera_motion_correction
+from ..core.motion import grounded_cleanup
 from ..core.scene import SceneContext
 from ..rig.face_schemes import matching_shape_blocks
 

@@ -6,8 +6,8 @@ import math
 from itertools import permutations
 from types import SimpleNamespace
 
-from ...constants import HAND_LANDMARK_NAMES
-from ...models import CanonicalFrame, Landmark
+from ...core.constants import HAND_LANDMARK_NAMES
+from ...core.types import CanonicalFrame, Landmark
 from .body import _landmark
 
 

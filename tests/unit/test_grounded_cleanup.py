@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from media_to_pose import grounded_cleanup
-from media_to_pose.geometry import Vector
+from media_to_pose.core.geometry import Vector
+from media_to_pose.core.motion import grounded_cleanup
 
 
 class GroundedCleanupTests(unittest.TestCase):

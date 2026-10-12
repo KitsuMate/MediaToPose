@@ -208,8 +208,8 @@ class GenericMappingTests(unittest.TestCase):
                 ],
             ],
         )
-        frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
-        frame.body["NOSE"] = self.addon.models.Landmark(
+        frame = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
+        frame.body["NOSE"] = self.addon.core.types.Landmark(
             position=(0.0, 0.0, 0.0),
             image=(0.5, 0.5),
         )
@@ -221,7 +221,7 @@ class GenericMappingTests(unittest.TestCase):
             {"eyeLookOutLeft": 0.75, "mouthSmileLeft": 0.9},
         )
         self.assertEqual(len(frame.face_overlay), 2)
-        missing = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        missing = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         provider._convert_face(None, missing)
         self.assertEqual(missing.warnings, ["No face detected"])
 
@@ -229,13 +229,21 @@ class GenericMappingTests(unittest.TestCase):
         provider = object.__new__(self.addon.providers.MediaPipeProvider)
         provider.confidence = 0.5
         provider.mirror = False
-        frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        frame = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         frame.body.update(
             {
-                "LEFT_ELBOW": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.2, 0.5)),
-                "LEFT_WRIST": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.3, 0.5)),
-                "RIGHT_ELBOW": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.8, 0.5)),
-                "RIGHT_WRIST": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.7, 0.5)),
+                "LEFT_ELBOW": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.2, 0.5)
+                ),
+                "LEFT_WRIST": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.3, 0.5)
+                ),
+                "RIGHT_ELBOW": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.8, 0.5)
+                ),
+                "RIGHT_WRIST": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.7, 0.5)
+                ),
             }
         )
 
@@ -287,14 +295,14 @@ class GenericMappingTests(unittest.TestCase):
             "LEFT_ANKLE": (0.20, 1.00, 0.13),
             "RIGHT_ANKLE": (-0.19, 0.98, -0.11),
         }
-        frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        frame = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         for name, position in positions.items():
             camera = np.asarray(position, dtype=float) + expected
             image = (
                 0.5 + focal * camera[0] / camera[2] / width,
                 0.5 + focal * camera[1] / camera[2] / height,
             )
-            frame.body[name] = self.addon.models.Landmark(
+            frame.body[name] = self.addon.core.types.Landmark(
                 position,
                 image,
                 confidence=0.95,
@@ -314,9 +322,9 @@ class GenericMappingTests(unittest.TestCase):
         self.assertGreater(observation.confidence, 0.85)
 
     def test_mediapipe_pose_alignment_rejects_degenerate_observations(self) -> None:
-        frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        frame = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         for name in self.addon.providers.mediapipe.body._ROOT_MOTION_LANDMARKS:
-            frame.body[name] = self.addon.models.Landmark(
+            frame.body[name] = self.addon.core.types.Landmark(
                 (0.0, 0.0, 0.0),
                 (0.5, 0.5),
             )
@@ -355,7 +363,7 @@ class GenericMappingTests(unittest.TestCase):
             "PINKY_TIP": (-0.65, 1.78, 0.0),
         }
         return {
-            name: self.addon.models.Landmark(
+            name: self.addon.core.types.Landmark(
                 position,
                 (image_x + position[0] * 0.02, 0.5 + position[1] * 0.02),
             )
@@ -366,13 +374,21 @@ class GenericMappingTests(unittest.TestCase):
         provider = object.__new__(self.addon.providers.MediaPipeProvider)
         provider.video_mode = False
         provider._trusted_hands = {}
-        frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        frame = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         frame.body.update(
             {
-                "LEFT_ELBOW": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.2, 0.5)),
-                "LEFT_WRIST": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.3, 0.5)),
-                "RIGHT_ELBOW": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.8, 0.5)),
-                "RIGHT_WRIST": self.addon.models.Landmark((0.0, 0.0, 0.0), (0.7, 0.5)),
+                "LEFT_ELBOW": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.2, 0.5)
+                ),
+                "LEFT_WRIST": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.3, 0.5)
+                ),
+                "RIGHT_ELBOW": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.8, 0.5)
+                ),
+                "RIGHT_WRIST": self.addon.core.types.Landmark(
+                    (0.0, 0.0, 0.0), (0.7, 0.5)
+                ),
             }
         )
         first = self._detailed_hand(0.31)
@@ -389,7 +405,7 @@ class GenericMappingTests(unittest.TestCase):
         provider = object.__new__(self.addon.providers.MediaPipeProvider)
         provider.video_mode = True
         provider._trusted_hands = {}
-        first = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        first = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
 
         self.assertTrue(provider._trust_hand("RIGHT", self._detailed_hand(), first))
 
@@ -398,11 +414,11 @@ class GenericMappingTests(unittest.TestCase):
         provider.video_mode = False
         provider._trusted_hands = {}
         first_hand = self._detailed_hand()
-        first = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        first = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         self.assertTrue(provider._trust_hand("RIGHT", first_hand, first))
         malformed = self._detailed_hand(ring_tip=(4.0, 4.0, 0.0))
         original_middle_tip = malformed["MIDDLE_FINGER_TIP"].position
-        second = self.addon.models.CanonicalFrame(timestamp_ms=33)
+        second = self.addon.core.types.CanonicalFrame(timestamp_ms=33)
 
         self.assertTrue(provider._trust_hand("RIGHT", malformed, second))
 
@@ -421,9 +437,9 @@ class GenericMappingTests(unittest.TestCase):
         provider.video_mode = False
         provider._trusted_hands = {}
         trusted = self._detailed_hand()
-        first = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        first = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         self.assertTrue(provider._trust_hand("LEFT", trusted, first))
-        missing = self.addon.models.CanonicalFrame(timestamp_ms=100)
+        missing = self.addon.core.types.CanonicalFrame(timestamp_ms=100)
 
         provider._hold_recent_hands(missing)
 
@@ -442,22 +458,22 @@ class GenericMappingTests(unittest.TestCase):
         provider.video_mode = False
         provider._mp_image = lambda image, apply_mirror=False: image
         provider._hand_crop_task = lambda _side: object()
-        frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
+        frame = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
         frame.body.update(
             {
-                "RIGHT_ELBOW": self.addon.models.Landmark(
+                "RIGHT_ELBOW": self.addon.core.types.Landmark(
                     (0.0, 0.0, 0.0), (0.60, 0.52)
                 ),
-                "RIGHT_WRIST": self.addon.models.Landmark(
+                "RIGHT_WRIST": self.addon.core.types.Landmark(
                     (0.0, 0.0, 0.0), (0.70, 0.50)
                 ),
-                "RIGHT_THUMB": self.addon.models.Landmark(
+                "RIGHT_THUMB": self.addon.core.types.Landmark(
                     (0.0, 0.0, 0.0), (0.74, 0.47)
                 ),
-                "RIGHT_INDEX": self.addon.models.Landmark(
+                "RIGHT_INDEX": self.addon.core.types.Landmark(
                     (0.0, 0.0, 0.0), (0.77, 0.45)
                 ),
-                "RIGHT_PINKY": self.addon.models.Landmark(
+                "RIGHT_PINKY": self.addon.core.types.Landmark(
                     (0.0, 0.0, 0.0), (0.76, 0.53)
                 ),
             }
@@ -494,7 +510,7 @@ class GenericMappingTests(unittest.TestCase):
         provider._trusted_hands = {}
 
         def landmark(position):
-            return self.addon.models.Landmark(position, (0.5, 0.5))
+            return self.addon.core.types.Landmark(position, (0.5, 0.5))
 
         first = {
             "WRIST": landmark((0.0, 0.0, 0.0)),
@@ -508,8 +524,8 @@ class GenericMappingTests(unittest.TestCase):
             "INDEX_FINGER_MCP": landmark((-1.0, 1.0, 0.0)),
             "PINKY_MCP": landmark((1.0, 1.0, 0.0)),
         }
-        first_frame = self.addon.models.CanonicalFrame(timestamp_ms=0)
-        flipped_frame = self.addon.models.CanonicalFrame(timestamp_ms=40)
+        first_frame = self.addon.core.types.CanonicalFrame(timestamp_ms=0)
+        flipped_frame = self.addon.core.types.CanonicalFrame(timestamp_ms=40)
 
         self.assertTrue(provider._trust_hand("RIGHT", first, first_frame))
         self.assertTrue(provider._trust_hand("RIGHT", flipped, flipped_frame))

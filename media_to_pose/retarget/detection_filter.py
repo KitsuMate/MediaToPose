@@ -5,10 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import suppress
 
-from .. import (
-    motion_filter,
-)
 from ..core.errors import InvalidRequest
+from ..core.motion import motion_filter
 from .rohm import _rohm_requested_work
 from .root_motion import _root_transform, _set_root_transform
 from .samples import (

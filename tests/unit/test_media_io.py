@@ -9,7 +9,7 @@ from unittest import mock
 
 import numpy as np
 
-from media_to_pose import media_io
+from media_to_pose.core import media_io
 
 
 class _Capture:

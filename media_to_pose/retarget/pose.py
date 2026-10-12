@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from .. import rig_planning
 from ..core.requests import FaceOutput
 from ..core.scene import SceneContext
-from ..models import CanonicalFrame
+from ..core.types import CanonicalFrame
 from ..postprocess import (
     PostProcessingSession,
     compile_postprocess_config,
@@ -15,6 +14,7 @@ from ..postprocess import (
     run_pipeline,
 )
 from ..rig import mapping
+from ..rig import planning as rig_planning
 from .keyframes import _key_bone, _key_shape, _set_key_interpolation
 from .root_motion import _reset_root_location, _sequence_root_target
 from .samples import SequenceApplyProgress

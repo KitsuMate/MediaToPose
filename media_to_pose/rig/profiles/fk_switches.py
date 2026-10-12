@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import bpy
 
-from ...constants import (
-    PROFILE_ARP,
-    PROFILE_RIGIFY,
-)
+from ...core.constants import PROFILE_ARP, PROFILE_RIGIFY
 from ..locks import suppress_manual_locks
 
 FK_SWITCH_FIELDS = (

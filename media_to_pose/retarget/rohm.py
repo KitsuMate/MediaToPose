@@ -6,13 +6,11 @@ from collections.abc import Iterator, Sequence
 
 from mathutils import Quaternion, Vector
 
-from .. import (
-    motion_filter,
-    rig_planning,
-)
 from ..core.errors import BackendError
+from ..core.motion import motion_filter
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
+from ..rig import planning as rig_planning
 from .capture import _ik_bone_confidences
 from .pose import _commit_target_pose
 from .samples import (
@@ -261,8 +259,8 @@ def _iter_rohm_correction(
     scene_context: SceneContext,
 ) -> Iterator[SequenceApplyProgress]:
     """Run the explicitly enabled verified RoHM correction backend."""
-    from .. import rohm_correction
     from ..backends.rohm import backend as rohm_backend
+    from ..core.motion import rohm_correction
 
     correct_pose, correct_root = _rohm_requested_work(samples, settings, effective_mode)
     if not correct_pose and not correct_root:

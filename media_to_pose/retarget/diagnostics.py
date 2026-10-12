@@ -6,8 +6,8 @@ import math
 
 from mathutils import Vector
 
-from ..constants import BODY_JOINT_PAIRS, HAND_JOINT_PAIRS
-from ..models import CanonicalFrame
+from ..core.constants import BODY_JOINT_PAIRS, HAND_JOINT_PAIRS
+from ..core.types import CanonicalFrame
 from ..rig import mapping
 from .solve.common import (
     _FINGER_ARTICULATION_LIMITS,

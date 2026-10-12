@@ -9,13 +9,13 @@ from typing import Any
 def _descriptor(provider: str):
     # Provider descriptors pull in the inference backends; import on use so
     # the readiness rules stay importable (and testable) without Blender.
-    from .providers import descriptor
+    from ..providers import descriptor
 
     return descriptor(provider)
 
 
 def _fk_switch_issues(armature, *, include_arms: bool, include_legs: bool):
-    from .rig.profiles.fk_switches import fk_switch_issues
+    from ..rig.profiles.fk_switches import fk_switch_issues
 
     return fk_switch_issues(
         armature, include_arms=include_arms, include_legs=include_legs
@@ -117,8 +117,8 @@ def evaluate_apply_readiness(
     media_source=None,
 ) -> CaptureReadiness:
     """Evaluate the exact side-effect-free state shared by UI and Apply."""
-    from .backends.sam3d import backend as sam3d_backend
-    from .session import capture_options
+    from ..backends.sam3d import backend as sam3d_backend
+    from . import capture_options
 
     provider = provider or _descriptor(settings.provider)
     source = (

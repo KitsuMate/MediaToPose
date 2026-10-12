@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
 
-from .core.fs import remove_tree, replace_directory
+from ..fs import remove_tree, replace_directory
 
 TRACK_SCHEMA_VERSION = 1
 ALGORITHM_VERSION = "tier1-camera-motion-v1"

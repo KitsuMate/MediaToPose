@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 
-from ..constants import CAPTURE_CONFIDENCE
 from ..core import paths
 from ..core.cache import identity as cache_identity
 from ..core.cache.media_source import (
@@ -23,6 +22,7 @@ from ..core.cache.store import (
     _read_manifest,
     _status_from_manifest,
 )
+from ..core.constants import CAPTURE_CONFIDENCE
 from ..providers import descriptor
 
 _UI_STATE_TTL_SECONDS = 0.5

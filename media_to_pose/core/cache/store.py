@@ -10,11 +10,11 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...models import CanonicalFrame, MediaInfo
 from .. import paths
 from ..errors import InvalidRequest, MediaError
 from ..fs import atomic_json, replace_directory
 from ..log import get_logger
+from ..types import CanonicalFrame, MediaInfo
 from .frames import compact_frame, read_chunk, write_chunk
 
 LOGGER = get_logger(__name__)

@@ -20,10 +20,10 @@ from ...backends.anycalib import backend as anycalib_backend
 from ...backends.lifecycle import BackgroundJob, JobKind, ModelBackend
 from ...backends.rohm import backend as rohm_backend
 from ...backends.sam3d import backend as sam3d_backend
+from ...core.coordinator import COORDINATOR
 from ...core.errors import MtpError, OperationBusy
 from ...core.log import get_logger
-from ...operation import COORDINATOR
-from ...registration import register_classes, unregister_classes
+from ..classes import register_classes, unregister_classes
 
 LOGGER = get_logger(__name__)
 BUSY = "Media to Pose is busy with another operation"

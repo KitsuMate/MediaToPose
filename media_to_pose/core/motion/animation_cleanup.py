@@ -12,7 +12,7 @@ import statistics
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Sequence
 
-from .geometry import Quaternion, Vector
+from ..geometry import Quaternion, Vector
 
 
 def _median(values: Iterable[float]) -> float:

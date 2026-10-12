@@ -48,7 +48,7 @@ class MediaFrameSelectionTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         addon = load_addon()
         cls.media_io = __import__(
-            f"{addon.__name__}.media_io",
+            f"{addon.__name__}.core.media_io",
             fromlist=["decode_video_frame_index_with_timestamp"],
         )
 
@@ -105,7 +105,7 @@ class DetectionCacheTests(unittest.TestCase):
             f"{cls.addon.__name__}.session.capture_options"
         )
         cls.models = __import__(
-            f"{cls.addon.__name__}.models", fromlist=["CanonicalFrame"]
+            f"{cls.addon.__name__}.core.types", fromlist=["CanonicalFrame"]
         )
 
     def setUp(self) -> None:
@@ -320,7 +320,7 @@ class CachePreviewWorkerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
-        cls.preview = cls.addon.cache_preview
+        cls.preview = cls.addon.blender.preview
 
     def test_bounded_queue_coalesces_to_latest_request(self) -> None:
         target = queue.Queue(maxsize=1)
@@ -365,7 +365,7 @@ class CachePreviewWorkerTests(unittest.TestCase):
             mirror=False,
         )
         dependency_module = __import__(
-            f"{self.addon.__name__}.dependency_bootstrap",
+            f"{self.addon.__name__}.core.dependencies",
             fromlist=["import_runtime_dependencies"],
         )
         with mock.patch.object(

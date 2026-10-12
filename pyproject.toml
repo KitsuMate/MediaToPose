@@ -43,16 +43,23 @@ typeCheckingMode = "basic"
 pythonVersion = "3.13"
 include = [
   "media_to_pose/backends/lifecycle.py",
-  "media_to_pose/camera_motion_correction.py",
-  "media_to_pose/constants.py",
-  "media_to_pose/core",
-  "media_to_pose/dependency_bootstrap.py",
-  "media_to_pose/media_io.py",
-  "media_to_pose/models.py",
-  "media_to_pose/operation.py",
-  "media_to_pose/providers/base.py",
   "media_to_pose/backends/rohm/runtime.py",
-  "media_to_pose/sam3d_state.py",
+  "media_to_pose/core/__init__.py",
+  "media_to_pose/core/cache",
+  "media_to_pose/core/camera/motion_correction.py",
+  "media_to_pose/core/constants.py",
+  "media_to_pose/core/coordinator.py",
+  "media_to_pose/core/dependencies.py",
+  "media_to_pose/core/errors.py",
+  "media_to_pose/core/fs.py",
+  "media_to_pose/core/log.py",
+  "media_to_pose/core/media_io.py",
+  "media_to_pose/core/motion/rohm_format.py",
+  "media_to_pose/core/paths.py",
+  "media_to_pose/core/requests.py",
+  "media_to_pose/core/scene.py",
+  "media_to_pose/core/types.py",
+  "media_to_pose/providers/base.py",
 ]
 
 [tool.pytest.ini_options]

@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import math
 
-from ... import camera_calibration
-from ...constants import (
-    BODY_JOINT_PAIRS,
-    POSE_LANDMARK_NAMES,
-)
-from ...models import CanonicalFrame, Landmark, RootMotionObservation
+from ...core.camera import calibration as camera_calibration
+from ...core.constants import BODY_JOINT_PAIRS, POSE_LANDMARK_NAMES
+from ...core.types import CanonicalFrame, Landmark, RootMotionObservation
 
 _ROOT_MOTION_LANDMARKS = (
     "LEFT_SHOULDER",

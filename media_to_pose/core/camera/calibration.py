@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping, Sequence
 
-from .models import CameraIntrinsicsObservation
+from ..types import CameraIntrinsicsObservation
 
 
 def _fovs(width: int, height: int, fx: float, fy: float) -> tuple[float, float]:

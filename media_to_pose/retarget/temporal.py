@@ -7,9 +7,7 @@ from collections.abc import Iterator, Sequence
 
 from mathutils import Matrix, Vector
 
-from .. import (
-    animation_cleanup,
-)
+from ..core.motion import animation_cleanup
 from ..core.scene import SceneContext
 from .grounding import _has_groundable_body_channels, _iter_ground_contacts
 from .samples import (

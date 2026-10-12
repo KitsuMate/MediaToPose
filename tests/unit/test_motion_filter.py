@@ -6,9 +6,9 @@ import math
 import unittest
 from types import SimpleNamespace
 
-from media_to_pose import motion_filter
-from media_to_pose.geometry import Quaternion, Vector
-from media_to_pose.rohm_correction import SMPLX_SEMANTICS
+from media_to_pose.core.geometry import Quaternion, Vector
+from media_to_pose.core.motion import motion_filter
+from media_to_pose.core.motion.rohm_correction import SMPLX_SEMANTICS
 
 
 def _channel(semantic: str, degrees: float, confidence: float = 1.0):

@@ -7,8 +7,8 @@ from collections.abc import Sequence
 
 from mathutils import Quaternion, Vector
 
-from ...constants import PROFILE_ARP, PROFILE_RIGIFY
-from ...models import CanonicalFrame, Landmark
+from ...core.constants import PROFILE_ARP, PROFILE_RIGIFY
+from ...core.types import CanonicalFrame, Landmark
 from ...rig.profiles.common import profile_identifier
 
 _PROFILE_OUTPUT_BONES = {

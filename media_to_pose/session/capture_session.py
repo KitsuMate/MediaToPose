@@ -20,13 +20,8 @@ from pathlib import Path
 
 import bpy
 
-from .. import rig_planning
-from ..capture_state import (
-    enabled_capture_scope,
-    face_output_warning,
-    mapping_scope_issues,
-)
 from ..core.cache import store as cache_store
+from ..core.coordinator import COORDINATOR, OperationKind, OperationState
 from ..core.errors import (
     InvalidRequest,
     MappingIncomplete,
@@ -36,6 +31,7 @@ from ..core.errors import (
     OperationBusy,
 )
 from ..core.log import get_logger
+from ..core.media_io import probe_media
 from ..core.requests import (
     CaptureMode,
     CaptureRequest,
@@ -44,9 +40,7 @@ from ..core.requests import (
     RootMotionMode,
 )
 from ..core.scene import SceneContext
-from ..media_io import probe_media
-from ..models import CanonicalFrame, MediaInfo
-from ..operation import COORDINATOR, OperationKind, OperationState
+from ..core.types import CanonicalFrame, MediaInfo
 from ..postprocess import compile_postprocess_config
 from ..providers import descriptor
 from ..retarget import (
@@ -56,6 +50,7 @@ from ..retarget import (
     validate_limb_switch_interval,
 )
 from ..rig import mapping
+from ..rig import planning as rig_planning
 from . import capture_options
 from .progress import (
     rohm_may_run,
@@ -63,6 +58,7 @@ from .progress import (
     sequence_progress_percent,
     sequence_progress_status,
 )
+from .readiness import enabled_capture_scope, face_output_warning, mapping_scope_issues
 from .transaction import CaptureTransaction
 from .worker import DetectionJob, run_detection
 
@@ -379,7 +375,7 @@ class CaptureSession:
         # Cached detections do not require provider imports. Probe
         # dependencies only when inference is actually about to start.
         if settings.provider == "MEDIAPIPE":
-            from ..dependency_bootstrap import refresh_dependency_snapshot
+            from ..core.dependencies import refresh_dependency_snapshot
 
             refresh_dependency_snapshot()
         available, message = provider.dependency_status(options)

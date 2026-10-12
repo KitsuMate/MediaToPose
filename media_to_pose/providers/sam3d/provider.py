@@ -6,18 +6,18 @@ import math
 from collections.abc import Iterable
 from threading import Event
 
-from ... import camera_calibration
 from ...backends.sam3d import ort_runtime as sam3d_ort_runtime
-from ...constants import HAND_LANDMARK_NAMES
 from ...core import paths
+from ...core.camera import calibration as camera_calibration
+from ...core.constants import HAND_LANDMARK_NAMES
+from ...core.dependencies import import_runtime_dependencies
 from ...core.errors import InvalidRequest, MediaError, ModelMissing
-from ...dependency_bootstrap import import_runtime_dependencies
-from ...media_io import (
+from ...core.media_io import (
     decode_image,
     decode_video_frame_index_with_timestamp,
     iter_video_frames,
 )
-from ...models import (
+from ...core.types import (
     CanonicalFrame,
     JointFrameObservation,
     Landmark,

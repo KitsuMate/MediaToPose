@@ -7,7 +7,7 @@ import math
 import bpy
 from mathutils import Quaternion, Vector
 
-from ...constants import HAND_JOINT_PAIRS, PROFILE_ARP
+from ...core.constants import HAND_JOINT_PAIRS, PROFILE_ARP
 from ...rig.profiles.common import profile_identifier
 from ..target_pose import TargetPose
 from .common import (

@@ -207,7 +207,7 @@ def main() -> None:
     if not image.is_file():
         raise FileNotFoundError(image)
     addon = _installed_addon()
-    available, message = addon.dependency_bootstrap.ensure_bundled_dependencies()
+    available, message = addon.core.dependencies.ensure_bundled_dependencies()
     if not available:
         raise RuntimeError(message)
     frame = _detect(addon, arguments.provider, image, arguments.sam_device)
