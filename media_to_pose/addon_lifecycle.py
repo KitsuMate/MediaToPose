@@ -59,7 +59,7 @@ def _reset_scene_state(data=None) -> bool:
     """
     global _scene_state_pending
     from . import mapping
-    from .detection_cache import clear_unrecoverable_media_selection
+    from .session.capture_options import clear_unrecoverable_media_selection
 
     data = bpy.data if data is None else data
     scenes = getattr(data, "scenes", None)

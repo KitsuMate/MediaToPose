@@ -70,7 +70,6 @@ LEGACY_LAYERS: dict[str, str] = {
     "constants": "core",
     "dependency_bootstrap": "core",
     "geometry": "core",
-    "detection_cache": "core",
     "grounded_cleanup": "core",
     "mapping": "rig",
     "media_io": "core",
@@ -88,11 +87,7 @@ LEGACY_LAYERS: dict[str, str] = {
 
 # (module, rule, detail) tuples for known violations.
 ALLOWLIST: set[tuple[str, str, str]] = {
-    ("detection_cache", "upward-import", "backends.anycalib.backend"),
-    ("detection_cache", "upward-import", "backends.sam3d.backend"),
     ("cache_preview", "reads-bpy-context", "bpy.context"),
-    ("detection_cache", "upward-import", "providers"),
-    ("detection_cache", "uses-bpy", "bpy"),
     ("mapping", "imports-blender", "properties"),
     ("mapping", "reads-bpy-context", "bpy.context"),
     ("ui", "reads-bpy-context", "bpy.context"),

@@ -7,7 +7,7 @@ import textwrap
 import bpy
 from bpy.types import AddonPreferences, Panel, UIList
 
-from . import cache_preview, detection_cache, mapping, postprocess
+from . import cache_preview, mapping, postprocess
 from .backends.anycalib import backend as anycalib_backend
 from .backends.rohm import backend as rohm_backend
 from .backends.sam3d import backend as sam3d_backend
@@ -20,6 +20,7 @@ from .operators_mapping import (
 from .postprocess import settings_schema
 from .providers import descriptor
 from .registration import register_classes, unregister_classes
+from .session import capture_options
 
 STATUS_ICONS = {
     "VALID": "CHECKMARK",
@@ -1008,7 +1009,7 @@ class MTP_PT_create_from_media(Panel):
             )
             return
 
-        media_source, cache_status = detection_cache.ui_state_for_settings(settings)
+        media_source, cache_status = capture_options.ui_state_for_settings(settings)
         details = cache_preview.preview_details()
         is_video = _is_video_source(settings, details, cache_status)
         source = layout.box()
@@ -1479,7 +1480,7 @@ class MTP_PT_pose_motion_cleanup(Panel):
             layout.label(text="Cleanup settings are not initialized", icon="INFO")
             return
         by_id = {item.module_id: item for item in modules}
-        _media_source, cache_status = detection_cache.ui_state_for_settings(settings)
+        _media_source, cache_status = capture_options.ui_state_for_settings(settings)
         details = cache_preview.preview_details()
         video_cleanup_available = _video_cleanup_available(
             settings, details, cache_status
@@ -1643,7 +1644,7 @@ class MTP_AddonPreferences(AddonPreferences):
         storage = layout.box()
         storage.label(text="Stored Analysis", icon="DISK_DRIVE")
         storage.prop(settings, "cache_limit_mb", text="Limit (MiB)")
-        _source, status = detection_cache.ui_state_for_settings(settings)
+        _source, status = capture_options.ui_state_for_settings(settings)
         storage.label(text=f"Current source: {_cache_size_label(status.size_bytes)}")
         clear = storage.row()
         clear.alert = True

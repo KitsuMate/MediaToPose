@@ -8,7 +8,9 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 from bpy.types import Operator
 
-from . import cache_preview, detection_cache
+from . import cache_preview
+from .core.cache import media_source as cache_media
+from .core.cache import store as cache_store
 from .core.errors import MtpError
 from .core.requests import CaptureMode, CaptureSettings
 from .core.scene import SceneContext
@@ -241,14 +243,14 @@ class MTP_OT_select_media(Operator):
 
     def execute(self, context):
         settings = context.scene.mtp_settings
-        selected = detection_cache.existing_media_path(self.filepath)
+        selected = cache_media.existing_media_path(self.filepath)
         if not selected:
             message = "Choose an existing image or video"
             _set_status(settings, message, "ERROR")
             self.report({"ERROR"}, message)
             return {"CANCELLED"}
         try:
-            if not detection_cache.record_media_selection(settings, selected):
+            if not cache_media.record_media_selection(settings, selected):
                 raise ValueError("Choose an existing image or video")
         except (OSError, RuntimeError, ValueError) as exc:
             _set_status(settings, str(exc), "ERROR")
@@ -283,7 +285,7 @@ class MTP_OT_clear_detection_cache(Operator):
             self.report({"WARNING"}, "Media to Pose is already busy")
             return {"CANCELLED"}
         try:
-            detection_cache.clear_cache()
+            cache_store.clear_cache()
             cache_preview.refresh_after_cache_update()
         except (OSError, RuntimeError, ValueError) as exc:
             COORDINATOR.finish(token, OperationState.FAILED, str(exc))
@@ -324,7 +326,7 @@ class MTP_OT_rebuild_camera_motion_track(Operator):
             self.report({"WARNING"}, "Media to Pose is already busy")
             return {"CANCELLED"}
         try:
-            detection_cache.clear_camera_motion_cache()
+            cache_store.clear_camera_motion_cache()
             armature = getattr(context.scene.mtp_settings, "target_armature", None)
             if armature is not None:
                 item = next(

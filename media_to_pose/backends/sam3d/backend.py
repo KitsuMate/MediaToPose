@@ -462,7 +462,7 @@ def resolve_device_name(requested: str) -> str:
 
 def provider_options_from_settings(settings) -> dict:
     options = {
-        "model_directory": str(Path(__file__).parent / "assets" / "models"),
+        "model_directory": str(paths.BUNDLED_MODELS),
         "use_body": bool(settings.use_body),
         "use_hands": bool(settings.use_hands),
         "use_face": False,

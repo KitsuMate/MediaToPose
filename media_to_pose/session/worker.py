@@ -199,11 +199,11 @@ def _detect_single(job, request: CaptureRequest, provider) -> None:
 
 
 def _detect_sequence(job, request: CaptureRequest, provider) -> None:
-    from .. import detection_cache
+    from ..core.cache import store as cache_store
 
     media = request.media_info
     if request.keep_detection_cache:
-        writer = detection_cache.SequenceWriter(
+        writer = cache_store.SequenceWriter(
             request.cache_key,
             dict(request.cache_identity),
             request.cache_media_info,

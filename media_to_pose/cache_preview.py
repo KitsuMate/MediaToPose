@@ -13,14 +13,15 @@ from pathlib import Path
 import bpy
 import bpy.utils.previews
 
-from . import detection_cache
 from .constants import HAND_LANDMARK_NAMES
+from .core.cache import store as cache_store
 from .core.log import get_logger
 from .media_io import (
     decode_image,
     decode_video_frame_index_with_timestamp,
     probe_media,
 )
+from .session import capture_options
 
 LOGGER = get_logger(__name__)
 
@@ -204,9 +205,7 @@ def _render_overlay(request: _PreviewRequest) -> _PreviewResult:
             if frame_count > 0:
                 source_index = min(source_index, frame_count - 1)
         frame = (
-            detection_cache.load_frame(request.key, source_index)
-            if request.key
-            else None
+            cache_store.load_frame(request.key, source_index) if request.key else None
         )
         if media_info.kind == "IMAGE":
             image = decode_image(request.media_path, cv2, np)
@@ -357,7 +356,7 @@ def _ensure_worker() -> None:
 
 def schedule_refresh() -> None:
     global _REQUEST_VERSION, _DEBOUNCE_REGISTERED, _PREVIEW_LOADING
-    detection_cache.invalidate_ui_state()
+    cache_store.invalidate_ui_state()
     _REQUEST_VERSION += 1
     _PREVIEW_LOADING = True
     if _DEBOUNCE_REGISTERED:
@@ -387,7 +386,7 @@ def _begin_refresh():
     if not settings:
         _PREVIEW_LOADING = False
         return
-    source, status = detection_cache.ui_state_for_settings(settings)
+    source, status = capture_options.ui_state_for_settings(settings)
     if not source.analysis_path:
         clear_preview()
         _PREVIEW_LOADING = False
@@ -436,7 +435,7 @@ def _poll_results():
         _POLL_REGISTERED = False
         _PREVIEW_LOADING = False
         return None
-    source = detection_cache.resolve_media_source(settings)
+    source = capture_options.resolve_media_source(settings)
     if source.analysis_path != latest.media_path:
         # The result is terminal for its request, but the user selected new
         # media before it arrived. Stop this poll timer and enqueue a fresh

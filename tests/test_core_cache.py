@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import queue
 import shutil
@@ -99,7 +100,10 @@ class DetectionCacheTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.addon = load_addon()
-        cls.cache = cls.addon.detection_cache
+        cls.cache = importlib.import_module(f"{cls.addon.__name__}.core.cache.store")
+        cls.options = importlib.import_module(
+            f"{cls.addon.__name__}.session.capture_options"
+        )
         cls.models = __import__(
             f"{cls.addon.__name__}.models", fromlist=["CanonicalFrame"]
         )
@@ -248,26 +252,26 @@ class DetectionCacheTests(unittest.TestCase):
         status = self.cache.CacheStatus(key="cache-key")
         with (
             mock.patch.object(
-                self.cache,
+                self.options,
                 "resolve_media_source",
                 return_value=source,
             ) as resolve,
             mock.patch.object(
-                self.cache,
+                self.options,
                 "status_for_settings",
                 return_value=status,
             ) as cache_status,
         ):
             self.cache.invalidate_ui_state()
-            first = self.cache.ui_state_for_settings(settings)
-            second = self.cache.ui_state_for_settings(settings)
+            first = self.options.ui_state_for_settings(settings)
+            second = self.options.ui_state_for_settings(settings)
             self.assertIs(first[0], second[0])
             self.assertIs(first[1], second[1])
             resolve.assert_called_once()
             cache_status.assert_called_once()
 
             self.cache.invalidate_ui_state()
-            self.cache.ui_state_for_settings(settings)
+            self.options.ui_state_for_settings(settings)
             self.assertEqual(resolve.call_count, 2)
             self.assertEqual(cache_status.call_count, 2)
 
@@ -280,12 +284,12 @@ class DetectionCacheTests(unittest.TestCase):
             mirror_input=False,
             smoothing=0.8,
         )
-        options = self.cache.options_from_settings(settings)
+        options = self.options.options_from_settings(settings)
         self.assertEqual(options["smoothing"], 0.8)
         self.assertEqual(options["confidence"], 0.35)
         self.assertNotIn(
             "smoothing",
-            self.cache._identity_options_from_settings(settings),
+            self.options._identity_options_from_settings(settings),
         )
 
     def test_cache_status_uses_size_accounted_during_writes(self) -> None:

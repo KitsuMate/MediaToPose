@@ -6,10 +6,9 @@ from collections.abc import Iterator, Sequence
 
 from mathutils import Matrix, Vector
 
-from .. import (
-    camera_motion_correction,
-    detection_cache,
-)
+from .. import camera_motion_correction
+from ..core.cache import media_source as cache_media
+from ..core.cache import store as cache_store
 from ..core.requests import RootMotionMode
 from ..core.scene import SceneContext
 from .samples import (
@@ -167,7 +166,7 @@ def _iter_prepare_camera_motion_track(
     """Load or compute the derived RGB camera track before animation writes."""
     source_identity = dict(getattr(request, "source_identity", {}) or {})
     expected_key = camera_motion_correction.cache_key(source_identity, inputs)
-    directory = detection_cache.camera_motion_directory(create_root=False)
+    directory = cache_store.camera_motion_directory(create_root=False)
     from ..dependency_bootstrap import import_camera_dependencies
 
     try:
@@ -180,7 +179,7 @@ def _iter_prepare_camera_motion_track(
             yield SequenceApplyProgress("Camera Motion: loaded cached track", 1, 1)
             return cached, "Ready", ""
 
-    source_path = detection_cache.existing_media_path(
+    source_path = cache_media.existing_media_path(
         str(getattr(request, "analysis_path", "") or "")
     )
     if not source_path:
@@ -206,7 +205,7 @@ def _iter_prepare_camera_motion_track(
     warning = ""
     if bool(getattr(request, "keep_detection_cache", False)):
         try:
-            directory = detection_cache.camera_motion_directory(create_root=True)
+            directory = cache_store.camera_motion_directory(create_root=True)
             camera_motion_correction.store_sidecar(
                 directory,
                 expected_key,
@@ -214,8 +213,8 @@ def _iter_prepare_camera_motion_track(
                 np,
             )
             limit = max(0, int(getattr(request, "cache_limit_bytes", 0)))
-            if limit and detection_cache.cache_usage_bytes() > limit:
-                detection_cache.clear_camera_motion_cache()
+            if limit and cache_store.cache_usage_bytes() > limit:
+                cache_store.clear_camera_motion_cache()
                 status = "Computed (not cached)"
                 warning = (
                     "Camera track was used but not retained because the cache limit "

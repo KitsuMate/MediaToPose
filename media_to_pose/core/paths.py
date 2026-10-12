@@ -13,6 +13,11 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
+# The installed extension folder and the files shipped inside it.
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+BUNDLED_MODELS = PACKAGE_ROOT / "assets" / "models"
+MANIFEST_PATH = PACKAGE_ROOT / "blender_manifest.toml"
+
 UserDirectory = Callable[[str, bool], "str | None"]
 PathExpander = Callable[[str], str]
 
@@ -54,4 +59,11 @@ def expand_user_path(value: str) -> Path:
     return Path(expanded)
 
 
-__all__ = ["configure", "expand_user_path", "user_directory"]
+__all__ = [
+    "BUNDLED_MODELS",
+    "MANIFEST_PATH",
+    "PACKAGE_ROOT",
+    "configure",
+    "expand_user_path",
+    "user_directory",
+]

@@ -124,9 +124,10 @@ def _cache_enabled_edited(self, _context) -> None:
         return
     # Property callbacks run on Blender's main thread. File removal is kept
     # out of panel draw callbacks, which Blender treats as read-only.
-    from . import cache_preview, detection_cache
+    from . import cache_preview
+    from .core.cache import store as cache_store
 
-    detection_cache.clear_cache()
+    cache_store.clear_cache()
     cache_preview.refresh_after_cache_update()
 
 
@@ -161,15 +162,16 @@ def _capture_scope_edited(self, context) -> None:
 
 
 def _media_path_edited(self, _context) -> None:
-    from . import cache_preview, detection_cache
+    from . import cache_preview
+    from .core.cache import media_source as cache_media
 
     self.video_frame = 1
     self.last_camera_vertical_fov = 0.0
     self.last_camera_source = ""
-    resolved = detection_cache.existing_media_path(self.media_path)
+    resolved = cache_media.existing_media_path(self.media_path)
     if resolved:
         try:
-            detection_cache.record_media_selection(
+            cache_media.record_media_selection(
                 self,
                 resolved,
                 assign_path=False,

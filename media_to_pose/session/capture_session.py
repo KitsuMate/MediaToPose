@@ -20,12 +20,13 @@ from pathlib import Path
 
 import bpy
 
-from .. import detection_cache, mapping, rig_planning
+from .. import mapping, rig_planning
 from ..capture_state import (
     enabled_capture_scope,
     face_output_warning,
     mapping_scope_issues,
 )
+from ..core.cache import store as cache_store
 from ..core.errors import (
     InvalidRequest,
     MappingIncomplete,
@@ -54,6 +55,7 @@ from ..retarget import (
     prepare_limb_ownership,
     validate_limb_switch_interval,
 )
+from . import capture_options
 from .progress import (
     rohm_may_run,
     sequence_progress_group,
@@ -256,10 +258,10 @@ class CaptureSession:
                 f"Enable a capture type supported by {provider.label}",
                 show_status=False,
             )
-        source = detection_cache.resolve_media_source(settings)
+        source = capture_options.resolve_media_source(settings)
         if not source.usable:
             raise MediaError(source.message)
-        options = detection_cache.options_from_settings(settings)
+        options = capture_options.options_from_settings(settings)
         # Sequence analysis stores raw observations. Temporal Correction owns
         # baked-video filtering; provider smoothing remains preview-only.
         if mode != CaptureMode.POSE:
@@ -305,7 +307,7 @@ class CaptureSession:
             )
             if issue:
                 raise MappingIncomplete(issue)
-        cache_key, cache_identity = detection_cache.cache_identity_from_media(
+        cache_key, cache_identity = capture_options.cache_identity_from_media(
             source.source_media, settings.provider, options
         )
         source_index = selected_index if media_info.kind == MediaKind.VIDEO else 0
@@ -326,7 +328,7 @@ class CaptureSession:
         common = {"notices": tuple(notices)}
         if settings.keep_detection_cache:
             if mode in {CaptureMode.POSE, CaptureMode.KEYFRAMES}:
-                cached = detection_cache.load_frame(
+                cached = cache_store.load_frame(
                     cache_key, source_index if mode == CaptureMode.POSE else 0
                 )
                 if mode == CaptureMode.POSE and cached is not None:
@@ -342,7 +344,7 @@ class CaptureSession:
                     frames = (
                         iter((cached,))
                         if media_info.kind == MediaKind.IMAGE and cached is not None
-                        else detection_cache.iter_frames(cache_key)
+                        else cache_store.iter_frames(cache_key)
                     )
                     if frames is not None:
                         return cls(
@@ -354,7 +356,7 @@ class CaptureSession:
                             **common,
                         )
             elif not force_analysis:
-                status = detection_cache.status_for_settings(settings)
+                status = capture_options.status_for_settings(settings)
                 if status.matches and (
                     status.complete
                     or media_info.kind == MediaKind.IMAGE
@@ -391,10 +393,10 @@ class CaptureSession:
                 return probe_media(source.analysis_path)
             except (MtpError, OSError) as exc:
                 raise MediaError(str(exc)) from exc
-        status = detection_cache.status_for_settings(settings)
+        status = capture_options.status_for_settings(settings)
         if not status.matches or not status.cached_frames:
             raise MediaError(source.message)
-        return detection_cache.media_info_from_status(status)
+        return cache_store.media_info_from_status(status)
 
     @staticmethod
     def _build_request(
@@ -593,7 +595,7 @@ class CaptureSession:
             return self._finish(cancelled=True)
         if request.keep_detection_cache and kind in {"FRAME", "FRAMES"}:
             detected = payload if kind == "FRAME" else payload[0]
-            detection_cache.store_point(
+            cache_store.store_point(
                 request.cache_key,
                 dict(request.cache_identity),
                 request.cache_media_info,
@@ -613,7 +615,7 @@ class CaptureSession:
             self._begin_sequence(iter(spool))
         elif kind == "CACHE_DIR":
             path, _count, _persisted = payload
-            self._begin_sequence(detection_cache.iter_directory(path))
+            self._begin_sequence(cache_store.iter_directory(path))
         else:
             raise InvalidRequest(f"Unexpected worker result: {kind}")
         return self._update()
@@ -873,7 +875,7 @@ class CaptureSession:
             if job.temp_path:
                 path = Path(job.temp_path)
                 try:
-                    detection_cache.discard_temporary(str(path))
+                    cache_store.discard_temporary(str(path))
                 except (OSError, ValueError):
                     LOGGER.warning("Could not remove temporary capture data: %s", path)
 
