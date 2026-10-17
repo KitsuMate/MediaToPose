@@ -73,12 +73,13 @@ def _face_points(armature, center: Vector, radius: float) -> list[Vector]:
     return points
 
 
-def face_camera(scene, armature):
+def face_camera(scene, armature, camera=None):
     """A temporary camera in front of the rig's face, framing the head.
 
     The shot is sized from the face mesh around the eyes when there is one
     (eye bones can sit deep inside the head, close together), else from the
     eye distance or the head bone.
+    Reuse ``camera`` to follow the posed head after advancing the scene frame.
     """
     entries = mapping.mapping_by_id(armature.mtp_rig_config)
     space = face_frame(armature, entries)
@@ -86,6 +87,8 @@ def face_camera(scene, armature):
     eye_left = _mapped_bone(armature, entries, "EYE_L")
     eye_right = _mapped_bone(armature, entries, "EYE_R")
     head = _mapped_bone(armature, entries, "HEAD")
+    if head is not None and armature.data.pose_position == "POSE":
+        world = world @ head.matrix @ head.bone.matrix_local.inverted()
     head_length = head.bone.length if head is not None else 0.0
     if eye_left is not None and eye_right is not None:
         eyes = (
@@ -115,10 +118,12 @@ def face_camera(scene, armature):
         center = eyes - space.up * (space.scale * 0.5)
         size = reach * 2.0
         front = space.scale
-    data = bpy.data.cameras.new("MediaToPose_FaceComparison")
+    if camera is None:
+        data = bpy.data.cameras.new("MediaToPose_FaceComparison")
+        camera = bpy.data.objects.new("MediaToPose_FaceComparison", data)
+        scene.collection.objects.link(camera)
+    data = camera.data
     data.lens = 50.0
-    camera = bpy.data.objects.new("MediaToPose_FaceComparison", data)
-    scene.collection.objects.link(camera)
     half_angle = math.atan(data.sensor_width / (2.0 * data.lens))
     # From the back of the framed region: the face's front sits ``front``
     # closer, so the whole face width fits at the front plane.

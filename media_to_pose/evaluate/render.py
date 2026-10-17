@@ -222,6 +222,8 @@ def render_comparison(
                 else:
                     _draw_detection(source, detected, cv2)
                 scene.frame_set(int(timeline_frame))
+                if bars is not None:
+                    face_camera(scene, armature, camera)
                 rig = _render_rig(
                     scene,
                     size,

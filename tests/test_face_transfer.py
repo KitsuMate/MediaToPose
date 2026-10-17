@@ -496,6 +496,48 @@ class VroidExpressionTests(unittest.TestCase):
             bpy.data.objects.remove(camera)
             bpy.data.cameras.remove(data)
 
+    def test_face_camera_follows_posed_head_and_reuses_camera(self) -> None:
+        scene = bpy.context.scene
+        entries = self.addon.rig.mapping.mapping_by_id(self.rig.mtp_rig_config)
+        head = self.rig.pose.bones[entries["HEAD"].target_name]
+        position = self.rig.data.pose_position
+        rotation_mode = head.rotation_mode
+        self.rig.data.pose_position = "POSE"
+        bpy.context.view_layer.update()
+        camera = self.addon.evaluate.face_render.face_camera(scene, self.rig)
+        bpy.context.view_layer.update()
+        original = camera.matrix_world.copy()
+        pose = head.matrix.copy()
+        basis = head.matrix_basis.copy()
+        try:
+            head.location.x += 0.35
+            head.rotation_mode = "XYZ"
+            head.rotation_euler.z += 0.4
+            bpy.context.view_layer.update()
+            delta = self.rig.matrix_world @ head.matrix @ pose.inverted()
+            delta = delta @ self.rig.matrix_world.inverted()
+            reused = self.addon.evaluate.face_render.face_camera(
+                scene, self.rig, camera
+            )
+            bpy.context.view_layer.update()
+            self.assertIs(reused, camera)
+            expected = delta @ original
+            self.assertLess((camera.location - expected.translation).length, 1e-5)
+            self.assertLess(
+                camera.matrix_world.to_quaternion()
+                .rotation_difference(expected.to_quaternion())
+                .angle,
+                1e-3,
+            )
+        finally:
+            head.rotation_mode = rotation_mode
+            head.matrix_basis = basis
+            self.rig.data.pose_position = position
+            bpy.context.view_layer.update()
+            data = camera.data
+            bpy.data.objects.remove(camera)
+            bpy.data.cameras.remove(data)
+
     def test_every_vrm_expression_is_mapped(self) -> None:
         described = self.addon.api.describe_rig(self.rig.name)
         self.assertEqual(described["completeness"]["vrm"], 1.0)

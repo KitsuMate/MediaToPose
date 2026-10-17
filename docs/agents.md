@@ -235,6 +235,9 @@ through as a one-sided squint rather than a one-sided blink; extreme
 close-ups where the face fills the frame can be misfitted. Sparse bone controls
 can produce a weaker broad smile than ARKit keys even when the expression
 bars agree; prefer ARKit on rigs with suitable keys when likeness matters.
+VRoid's authored joy key can open the mouth even for a closed-mouth smile;
+combining it with visemes can exaggerate that opening. Expression bars measure
+mapped values, not visual likeness to the source.
 
 ### Run from the Blender MCP server
 
