@@ -199,12 +199,26 @@ least a quarter of the key's motion (`explained` >= 0.25), so a control
 that moves differently from its key keeps the default. The Auto-Rig Pro
 defaults come from this fit on the project's FaceFX test rig.
 
+Fitting temporarily uses pose mode and restores the original mode, pose and
+shape values, including on evaluation failure. It raises `OperationBusy`
+while another capture or model operation is running. `controls=None` fits
+all supported controls; an empty list selects none; unknown names raise
+`InvalidRequest`.
+
 Video captures run **Face Expression Cleanup** (`FACE_CORRECTION`) before
 retargeting: it removes each expression's resting level (`neutral_calibration`),
 zeroes small values (`face_deadzone`), smooths without lag while keeping
 blinks (`smooth_face`, `face_smoothing`, `preserve_blinks`) and holds the
 face briefly when it is lost (`face_hold`). Temporal smoothing then leaves
 face channels alone.
+
+In 0.2.1, VRM output targets VRoid-style `Fcl_*` shape keys. VRM preset
+metadata and arbitrary preset-named keys are not resolved. Face confidence
+currently reports detection presence, not a calibrated occlusion or
+head-turn score. Cleanup uses fixed relative smoothing per expression
+group and a shared deadzone; independent group settings and selecting a
+neutral reference frame are not implemented. Capture face summaries report
+requested strengths before cleanup, not per-frame evaluated target values.
 
 | Symptom | Look at | Change |
 | --- | --- | --- |
@@ -218,7 +232,9 @@ face channels alone.
 Known limits: MediaPipe reports a resting brow raise of about 0.5 on many
 relaxed faces, which only video captures can calibrate away; a wink comes
 through as a one-sided squint rather than a one-sided blink; extreme
-close-ups where the face fills the frame can be misfitted.
+close-ups where the face fills the frame can be misfitted. Sparse bone controls
+can produce a weaker broad smile than ARKit keys even when the expression
+bars agree; prefer ARKit on rigs with suitable keys when likeness matters.
 
 ### Run from the Blender MCP server
 

@@ -218,9 +218,11 @@ def fit_face_controls(
     report: dict[str, dict] = {}
     saved_pose = {bone.name: bone.matrix_basis.copy() for bone in armature.pose.bones}
     saved_keys = [(block, block.value) for block in _blocks(meshes)]
-    _reset(armature, meshes)
-    rest = meshes.positions()
+    saved_position = armature.data.pose_position
     try:
+        armature.data.pose_position = "POSE"
+        _reset(armature, meshes)
+        rest = meshes.positions()
         for semantic_id, (positive, negative) in FIT_SHAPES.items():
             if controls is not None and semantic_id not in controls:
                 continue
@@ -256,6 +258,7 @@ def fit_face_controls(
                     if opposite is not None and opposite.accepted:
                         entry.output_negative = opposite.output
     finally:
+        armature.data.pose_position = saved_position
         for bone in armature.pose.bones:
             bone.matrix_basis = saved_pose[bone.name]
         for block, value in saved_keys:

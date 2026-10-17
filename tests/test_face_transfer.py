@@ -14,6 +14,7 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import bpy
 from mathutils import Vector
@@ -111,6 +112,8 @@ class FaceTransferTests(unittest.TestCase):
         scheme = self.addon.rig.face_schemes.shape_scheme
         self.assertEqual(scheme("facs_bs_EyeBlinkLeft"), "ARKIT")
         self.assertEqual(scheme("arkit_EyeBlinkLeft"), "ARKIT")
+        self.assertEqual(scheme("blendShape.EyeBlinkLeft"), "ARKIT")
+        self.assertEqual(scheme("blendShape.facs_cbs_EyeBlinkLeft"), "NONE")
         self.assertEqual(scheme("facs_ctrl_MouthPucker"), "ARKIT")
         self.assertEqual(scheme("facs_cbs_EyeFullCompressionLeft"), "NONE")
         self.assertEqual(scheme("facs_ctrl_vAA"), "NONE")
@@ -311,6 +314,55 @@ class FaceTransferTests(unittest.TestCase):
         self.assertAlmostEqual(entry.input_full, 0.25)
         self.assertAlmostEqual(lid.output_full, 0.34 * scale, delta=1e-6)
 
+    def test_fit_restores_pose_when_initial_evaluation_fails(self) -> None:
+        module = self.addon.rig.face_fit
+        bone = self.rig.pose.bones[0]
+        bone.location.x = 0.123
+        block = self.meshes[0].data.shape_keys.key_blocks[-1]
+        block.value = 0.37
+        self.rig.data.pose_position = "REST"
+        try:
+            with (
+                mock.patch.object(
+                    module._Meshes,
+                    "positions",
+                    side_effect=RuntimeError("evaluation failed"),
+                ),
+                self.assertRaisesRegex(RuntimeError, "evaluation failed"),
+            ):
+                self.addon.api.fit_face_controls(self.rig.name, apply=False)
+            self.assertAlmostEqual(bone.location.x, 0.123)
+            self.assertAlmostEqual(block.value, 0.37)
+            self.assertEqual(self.rig.data.pose_position, "REST")
+        finally:
+            self.rig.data.pose_position = "POSE"
+
+    def test_fit_refuses_active_capture_and_invalid_controls(self) -> None:
+        coordinator = self.addon.core.coordinator
+        token = coordinator.COORDINATOR.acquire(
+            coordinator.OperationKind.CAPTURE, "test"
+        )
+        try:
+            with self.assertRaises(self.addon.core.errors.OperationBusy):
+                self.addon.api.fit_face_controls(self.rig.name, apply=False)
+        finally:
+            coordinator.COORDINATOR.release(token)
+        with self.assertRaises(self.addon.core.errors.InvalidRequest):
+            self.addon.api.fit_face_controls(self.rig.name, controls=["typo"])
+        report = self.addon.api.fit_face_controls(self.rig.name, controls=[])
+        self.assertEqual(report["controls"], {})
+
+    def test_fit_uses_pose_evaluation_and_restores_rest_mode(self) -> None:
+        self.rig.data.pose_position = "REST"
+        try:
+            report = self.addon.api.fit_face_controls(
+                self.rig.name, controls=["FACE_JAW_OPEN"], apply=False
+            )
+            self.assertTrue(report["controls"]["FACE_JAW_OPEN"]["full"]["accepted"])
+            self.assertEqual(self.rig.data.pose_position, "REST")
+        finally:
+            self.rig.data.pose_position = "POSE"
+
     def test_default_bone_ranges_match_the_shape_keys(self) -> None:
         # The Auto-Rig Pro defaults were fitted on this rig: each control at
         # its default output is as close to its ARKit key as the best fit.
@@ -496,7 +548,7 @@ class FaceSequenceTests(unittest.TestCase):
         cls.mesh = bpy.data.objects["FaceFX"]
 
     def _run(
-        self, face_cleanup: bool, face_output: str = "ARKIT"
+        self, face_cleanup: bool, face_output: str = "ARKIT", *, clip=None
     ) -> dict[str, list[float]]:
         config = self.rig.mtp_rig_config
         module_config = self.addon.postprocess.module_config
@@ -515,7 +567,7 @@ class FaceSequenceTests(unittest.TestCase):
             self.addon.core.types.CanonicalFrame(
                 timestamp_ms=round(index * step_ms), blendshapes=values
             )
-            for index, values in enumerate(_blink_clip())
+            for index, values in enumerate(_blink_clip() if clip is None else clip)
         ]
         self.detections = [(1.0 + index, frame) for index, frame in enumerate(frames)]
         settings = SimpleNamespace(
@@ -560,6 +612,14 @@ class FaceSequenceTests(unittest.TestCase):
             for role, name in names.items():
                 values[role].append(keys.key_blocks[name].value)
         return values
+
+    def test_lost_face_keys_neutral_after_fading(self) -> None:
+        # Fewer than ten detections avoids neutral calibration; the long gap
+        # must end in explicit zero keys instead of holding the last smile.
+        clip = [{"mouthSmileLeft": 0.8, "eyeBlinkLeft": 0.0}] * 3 + [{}] * 60
+        values = self._run(face_cleanup=True, clip=clip)
+        self.assertGreater(values["mouthSmileLeft"][0], 0.5)
+        self.assertAlmostEqual(values["mouthSmileLeft"][-1], 0.0, places=6)
 
     def test_blink_survives_and_expressions_are_calibrated(self) -> None:
         values = self._run(face_cleanup=True)

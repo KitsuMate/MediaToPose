@@ -33,9 +33,15 @@ class FaceFilterTests(unittest.TestCase):
         self.assertAlmostEqual(result[5]["jawOpen"], 0.8)
         # Held for 0.3 s (9 frames), faded over the next 0.3 s, then gone.
         self.assertLess(result[16]["jawOpen"], 0.8)
-        self.assertEqual(result[-1], {})
+        self.assertEqual(result[-1], {"jawOpen": 0.0})
         self.assertEqual(stats.frames_without_face, 30)
         self.assertEqual(stats.held_frames, 9)
+
+    def test_leading_missing_frames_stay_empty(self) -> None:
+        track = [None, None, {"jawOpen": 0.8}, None]
+        result, _ = face_filter.filter_face_track(track, _times(4), _settings())
+        self.assertEqual(result[:2], [{}, {}])
+        self.assertEqual(result[-1], {"jawOpen": 0.0})
 
     def test_neutral_calibration_removes_a_resting_bias(self) -> None:
         # Arched brows rest at 0.8 and rise to 1.0 for a moment.

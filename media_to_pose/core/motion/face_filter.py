@@ -216,10 +216,13 @@ def filter_face_track(
                     smoothed[index] = max(smoothed[index], original[index])
             columns[name] = smoothed
 
-    # A frame without a face stays empty once its held face has faded out.
+    # Keep explicit neutral values after a detected face has faded out.
+    # An empty dict makes the solver skip the face, leaving the last nonzero
+    # key held for the rest of the gap. Leading missing frames stay empty.
+    first_detected = detected[0] if detected else len(frames)
     result = [
         {name: min(max(columns[name][index], 0.0), 1.0) for name in names}
-        if track[index] or any(columns[name][index] > 0.0 for name in names)
+        if index >= first_detected
         else {}
         for index in range(len(frames))
     ]

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -129,6 +131,16 @@ class PathTests(unittest.TestCase):
 
 
 class LockTests(TemporaryDirectoryTestCase):
+    def test_live_process_probe_does_not_signal_the_owner(self) -> None:
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            self.assertTrue(lifecycle._pid_running(child.pid))
+            self.assertIsNone(child.poll())
+        finally:
+            child.terminate()
+            child.wait(timeout=5)
+        self.assertFalse(lifecycle._pid_running(child.pid))
+
     def test_second_owner_is_busy_until_release(self) -> None:
         first = lifecycle.model_installation_lock(self.root / "store", "RoHM")
         second = lifecycle.model_installation_lock(self.root / "store", "RoHM")

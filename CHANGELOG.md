@@ -37,12 +37,19 @@ checked with numbers and face close-ups.
 - `describe_rig` reports the face: expressions mapped and unmapped per
   scheme, bone controls, eye bones with their look-at targets, face scale,
   and shape keys per scheme.
-- Test fixtures: an Auto-Rig Pro face rig with ARKit and FACS keys, and 13
-  CC0 face photos with checks against the real detector; golden snapshots of
-  ARKit, bone and VRM face output and of a face video sequence.
+- Test fixtures: an Auto-Rig Pro face rig with prefixed ARKit keys, generated
+  FACS AU targets, and 13 CC0 face photos with checks against the real
+  detector; golden snapshots of ARKit, FACS, bone and VRM face output and
+  of a face video sequence.
 
 ### Fixed
 
+- Model-install lock checks no longer signal or terminate Windows processes.
+- Face fitting evaluates bones in pose mode, restores pose mode and values
+  even if initial mesh evaluation fails, and refuses an active capture or
+  model operation. Unknown control names are rejected.
+- Lost faces finish fading with explicit neutral keyframes.
+- ARKit names behind `blendShape.` prefixes are recognised.
 - ARKit keys with prefixes (`arkit_`, `facs_bs_`, `ctrl_`) are recognised,
   correctives are left alone, and only one key per mesh is driven for each
   expression.

@@ -28,7 +28,7 @@ _FACS_NAME_RE = re.compile(
 # (``cbs``) is combined automatically by the rig and is never driven
 # directly; a control (``ctrl``) is a fallback when no base shape exists.
 _PREFIX_RE = re.compile(
-    r"^(?P<scheme>facs|arkit|ar)?[_-]?(?P<kind>bs|cbs|ctrl)?[_-]",
+    r"^(?:blendshape[._-])?(?P<scheme>facs|arkit|ar)?[_-]?(?P<kind>bs|cbs|ctrl)?[_-]",
     re.IGNORECASE,
 )
 

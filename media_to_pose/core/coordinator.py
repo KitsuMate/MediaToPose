@@ -28,6 +28,7 @@ class OperationKind(str, Enum):
     CACHE_MAINTENANCE = "cache_maintenance"
     POSTPROCESS_PREVIEW = "postprocess_preview"
     POSTPROCESS_APPLY = "postprocess_apply"
+    FACE_FIT = "face_fit"
     SAM3D_INSTALL = "sam3d_install"
     SAM3D_MODEL_LOAD = "sam3d_model_load"
     SAM3D_MODEL_UNLOAD = "sam3d_model_unload"

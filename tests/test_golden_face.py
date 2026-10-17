@@ -164,6 +164,41 @@ class GoldenFaceTests(unittest.TestCase):
         rig = self._open("facefx_face_rig", "FaceFX.Rig")
         self._check("still_face_bones", self._still(rig, "BONES"))
 
+    def test_still_face_facs(self) -> None:
+        rig = self._open("facefx_face_rig", "FaceFX.Rig")
+        self._add_facs_keys(rig)
+        actual = self._still(rig, "FACS")
+        self.assertTrue(actual["shapes"], "FACS must drive shape keys")
+        self._check("still_face_facs", actual)
+
+    def _add_facs_keys(self, rig) -> None:
+        # FaceFX's facs_bs_* names are ARKit coefficients, not FACS AUs.
+        # Generate actual AU targets, each moving a distinct vertex.
+        mesh = bpy.data.objects["FaceFX"]
+        for index, (name, _label) in enumerate(
+            self.addon.core.constants.FACS_ACTION_UNITS
+        ):
+            block = mesh.shape_key_add(name=name, from_mix=False)
+            block.data[index].co.z += 0.01
+        self.addon.api.auto_map(rig.name)
+
+    def test_real_face_reaches_facs_targets(self) -> None:
+        rig = self._open("facefx_face_rig", "FaceFX.Rig")
+        self._add_facs_keys(rig)
+        result = self.addon.api.capture(
+            str(fixture_path("face_laugh_jaw_open")),
+            rig.name,
+            parts={"face"},
+            face_output="FACS",
+            keep_cache=True,
+        )
+        self.assertTrue(result.succeeded, result.message)
+        keys = bpy.data.objects["FaceFX"].data.shape_keys.key_blocks
+        self.assertGreater(keys["AU26"].value, 0.1)
+        self.assertLess(
+            self.addon.api.evaluate(rig.name, result=result).expression_fit, 0.01
+        )
+
     def test_still_face_vrm(self) -> None:
         rig = self._open("vroid_test_rig", "Armature")
         self._check("still_face_vrm", self._still(rig, "VRM"))
