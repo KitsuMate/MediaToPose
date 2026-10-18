@@ -66,6 +66,7 @@ class MTPMappingEntry(PropertyGroup):
             ("NONE", "None", "Not a morph mapping"),
             ("ARKIT", "ARKit", "Apple ARKit-compatible blendshape"),
             ("FACS", "FACS", "FACS-compatible morph"),
+            ("VRM", "VRM", "VRM / VRoid expression morph"),
         ),
         default="NONE",
     )
@@ -98,13 +99,55 @@ class MTPMappingEntry(PropertyGroup):
         default="X",
         update=_mapping_edited,
     )
-    gain: FloatProperty(name="Gain", default=1.0, soft_min=-4.0, soft_max=4.0)
-    offset: FloatProperty(
-        name="Neutral Offset", default=0.0, soft_min=-1.0, soft_max=1.0
+    # Face ranges (core/face_ranges.py): detected values between input_zero
+    # and input_full drive the target from output_zero to output_full, in
+    # the target's units (key value, metres, degrees or property value).
+    input_zero: FloatProperty(
+        name="Detected at Rest",
+        description="Detected value treated as no expression",
+        default=0.0,
+        soft_min=-1.0,
+        soft_max=1.0,
+        update=_mapping_edited,
     )
-    clamp_min: FloatProperty(name="Minimum", default=0.0)
-    clamp_max: FloatProperty(name="Maximum", default=1.0)
-    invert: BoolProperty(name="Invert", default=False)
+    input_full: FloatProperty(
+        name="Detected at Full",
+        description="Detected value treated as the full expression",
+        default=1.0,
+        soft_min=0.0,
+        soft_max=1.0,
+        update=_mapping_edited,
+    )
+    output_zero: FloatProperty(
+        name="Output at Rest",
+        description="Target value with no expression",
+        default=0.0,
+        precision=4,
+        update=_mapping_edited,
+    )
+    output_full: FloatProperty(
+        name="Output at Full",
+        description=(
+            "Target value at the full expression: shape key value, metres along "
+            "the axis, degrees about it, or the property value"
+        ),
+        default=1.0,
+        precision=4,
+        update=_mapping_edited,
+    )
+    output_negative: FloatProperty(
+        name="Output at Negative Full",
+        description=(
+            "Target value at the full opposite expression (brows down, frown); "
+            "only signed controls use it"
+        ),
+        default=-1.0,
+        precision=4,
+        update=_mapping_edited,
+    )
+    # 0: saved by 0.2.0 (gain / offset / clamp / invert), migrated on load;
+    # -1: defaults pending until the entry has a target; 1: ranges set.
+    ranges_version: IntProperty(name="Ranges Version", default=0)
     influence: FloatProperty(name="Influence", default=1.0, min=0.0, max=1.0)
     correction_euler: FloatVectorProperty(
         name="Correction",
@@ -254,6 +297,7 @@ class MTPRigConfig(PropertyGroup):
     shapes_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     arkit_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     facs_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
+    vrm_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     face_complete: FloatProperty(default=0.0, min=0.0, max=1.0)
     arm_fk_switch_bone_l: StringProperty(
         name="Left Arm Switch Bone", update=_fk_switch_edited

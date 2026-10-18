@@ -141,6 +141,12 @@ class MTPSceneSettings(PropertyGroup):
                 "Experimental: drive only FACS-compatible shape keys",
             ),
             (
+                "VRM",
+                "VRM / VRoid Expressions (Experimental)",
+                "Experimental: drive VRoid expression keys (Fcl_*) from ARKit "
+                "coefficients",
+            ),
+            (
                 "BONES",
                 "Facial Bones (Experimental)",
                 "Experimental: drive only mapped facial controls",

@@ -28,6 +28,11 @@ TEST_MODULES = (
     "tests.test_capture_operations",
     "tests.test_capture_session",
     "tests.test_api",
+    "tests.test_face_detection",
+    "tests.test_face_transfer",
+    "tests.test_face_video",
+    "tests.test_face_capture",
+    "tests.test_golden_face",
     "tests.test_registration",
     "tests.test_settings_schema",
     "tests.test_anycalib_backend",
@@ -44,7 +49,11 @@ def main() -> None:
         os.environ["MTP_UPDATE_GOLDEN"] = "1"
     loader = unittest.defaultTestLoader
     suite = unittest.TestSuite()
+    # Bare arguments select modules by name, e.g. ``-- test_face_transfer``.
+    selected = [name for name in arguments if not name.startswith("--")]
     for module_name in TEST_MODULES:
+        if selected and module_name.removeprefix("tests.") not in selected:
+            continue
         suite.addTests(loader.loadTestsFromName(module_name))
     try:
         result = unittest.TextTestRunner(verbosity=1).run(suite)

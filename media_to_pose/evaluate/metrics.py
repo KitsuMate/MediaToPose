@@ -18,9 +18,11 @@ from typing import Any
 from mathutils import Vector
 
 from ..core.errors import InvalidRequest
+from ..core.requests import FaceOutput
 from ..core.scene import SceneContext
 from ..core.types import CanonicalFrame
 from ..rig import mapping
+from .face_metrics import FaceSampler
 
 METRICS_SCHEMA_VERSION = 1
 
@@ -85,6 +87,10 @@ class Metrics:
     root_speed_spikes: int = 0
     max_root_speed_m_per_s: float = 0.0
     landmark_fit_error_deg: float | None = None
+    expression_fit: float | None = None
+    blink_recall: float | None = None
+    face_jitter: float | None = None
+    asymmetry: float | None = None
     worst_frames: dict[str, list[int]] = field(default_factory=dict)
     schema_version: int = METRICS_SCHEMA_VERSION
 
@@ -170,14 +176,18 @@ def evaluate(
     frame_range: tuple[int, int] | None = None,
     ground_height: float = 0.0,
     detections: Iterable[tuple[float, CanonicalFrame]] | None = None,
+    face_output: FaceOutput | str | None = None,
 ) -> Metrics:
     """Sample ``armature`` over ``frame_range`` (inclusive timeline frames).
 
     The armature is evaluated with whatever animation it currently has.
     ``detections`` pairs timeline frames with the detected frames applied
     there; with it, ``landmark_fit_error_deg`` compares elbow and knee bends.
-    The scene frame is restored afterwards.
+    ``face_output`` names the face output the capture used; with it the
+    face metrics are measured (see ``face_metrics``). The scene frame is
+    restored afterwards.
     """
+    detections = list(detections) if detections is not None else None
     scene = scene_context.scene
     animation_data = armature.animation_data
     action = animation_data.action if animation_data else None
@@ -218,6 +228,9 @@ def evaluate(
         if (bone := _bone(armature, entries, semantic)) is not None
     ]
     root = _bone(armature, entries, "PELVIS")
+    face = FaceSampler(armature, entries, face_output) if face_output else None
+    if face is not None and not face.active:
+        face = None
     saved_frame = (scene.frame_current, scene.frame_subframe)
 
     foot_points: dict[str, list[Vector]] = {side: [] for side in feet}
@@ -239,6 +252,8 @@ def evaluate(
             for track, bone in zip(joint_tracks, jitter_bones, strict=True):
                 track.append(world @ bone.head)
             root_track.append(world @ (root.head if root else Vector()))
+            if face is not None:
+                face.sample(frame)
             bends = {}
             for name, (upper, lower) in limb_bones.items():
                 if upper is None or lower is None:
@@ -359,6 +374,17 @@ def evaluate(
         metrics.landmark_fit_error_deg = (
             round(statistics.fmean(errors), 3) if errors else None
         )
+
+    if face is not None:
+        detected_faces = (
+            {int(round(frame)): found for frame, found in detections}
+            if detections is not None
+            else None
+        )
+        measures = face.finish(detected_faces, fps)
+        for name in ("expression_fit", "blink_recall", "face_jitter", "asymmetry"):
+            setattr(metrics, name, getattr(measures, name))
+        metrics.worst_frames.update(measures.worst_frames)
 
     metrics.worst_frames.update(
         {

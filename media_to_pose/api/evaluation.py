@@ -68,6 +68,7 @@ def evaluate(
     frame_range: tuple[int, int] | None = None,
     result=None,
     ground_height: float = 0.0,
+    face_output: str | None = None,
     scene=None,
     out=None,
 ) -> metrics_module.Metrics:
@@ -80,6 +81,8 @@ def evaluate(
     - ``result``: a capture result (object, dict or JSON path); its retained
       detections give ``landmark_fit_error_deg``.
     - ``ground_height``: world Z of the floor for ground penetration.
+    - ``face_output``: measure the face metrics for this face output; by
+      default the one the ``result`` used, if it captured the face.
     - ``out``: also write the metrics as JSON there.
     """
     target = resolve_armature(armature)
@@ -89,6 +92,8 @@ def evaluate(
         first, last = data["timeline_frame_range"]
         frame_range = (int(round(first)), int(round(last)))
     detections = list(_detections(data).values()) if data else None
+    if face_output is None and data:
+        face_output = data.get("face_output") or None
     animation_data = target.animation_data_create()
     original = animation_data.action
     if action is not None:
@@ -103,6 +108,7 @@ def evaluate(
             frame_range=frame_range,
             ground_height=float(ground_height),
             detections=detections or None,
+            face_output=face_output,
         )
     finally:
         if action is not None:
@@ -127,12 +133,16 @@ def render_comparison(
     count: int = 6,
     size: int = 384,
     render_meshes: bool = True,
+    face: bool = False,
     scene=None,
 ) -> dict[str, Any]:
     """Write a PNG contact sheet comparing source, detections and the rig.
 
     ``frames`` are timeline frames from the capture; by default ``count``
-    frames are spread evenly over it. Returns the path and the frames used.
+    frames are spread evenly over it. ``face=True`` renders face close-ups
+    with a chart of the strongest expressions, detected and on the rig; it
+    needs a result that captured the face. Returns the path and the frames
+    used.
     """
     target = resolve_armature(armature)
     context = scene_context(scene)
@@ -158,6 +168,10 @@ def render_comparison(
         raise InvalidRequest(
             f"Frames {missing} were not keyed by this capture", parameter="frames"
         )
+    if face and not data.get("face_output"):
+        raise InvalidRequest(
+            "face=True needs a result that captured the face", parameter="face"
+        )
     detections = _detections(data)
     rows = [
         (
@@ -181,6 +195,7 @@ def render_comparison(
         mirror=bool(media.get("mirror", False)),
         size=int(size),
         render_still=_render_still if render_meshes else None,
+        face=bool(face),
     )
     return {"path": str(written), "frames": list(frames)}
 

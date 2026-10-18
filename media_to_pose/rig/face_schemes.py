@@ -6,7 +6,7 @@ import re
 
 import bpy
 
-from ..core.constants import FACE_BLENDSHAPES
+from ..core.constants import FACE_BLENDSHAPES, SHAPE_SCHEMES
 from .names import normalize_name
 
 _ARKIT_NORMALIZED = {
@@ -24,11 +24,36 @@ _FACS_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Shape-key name prefixes, as rig exporters write them. A corrective
+# (``cbs``) is combined automatically by the rig and is never driven
+# directly; a control (``ctrl``) is a fallback when no base shape exists.
+_PREFIX_RE = re.compile(
+    r"^(?:blendshape[._-])?(?P<scheme>facs|arkit|ar)?[_-]?(?P<kind>bs|cbs|ctrl)?[_-]",
+    re.IGNORECASE,
+)
+
+
+def shape_kind(name: str) -> str:
+    """``CORRECTIVE``, ``CONTROL`` or ``BASE`` from the name's prefix."""
+    match = _PREFIX_RE.match(name)
+    kind = (match.group("kind") or "").casefold() if match else ""
+    return {"cbs": "CORRECTIVE", "ctrl": "CONTROL"}.get(kind, "BASE")
+
+
+def shape_priority(name: str) -> int:
+    """Lower is preferred when several keys share a normalised name."""
+    lowered = name.casefold()
+    if lowered.startswith(("arkit_", "arkit-", "ar_")):
+        return 0
+    return {"BASE": 1, "CONTROL": 2, "CORRECTIVE": 3}[shape_kind(name)]
+
 
 SIGNED_FACE_CONTROLS = {
     "FACE_JAW_SIDE",
     "FACE_BROW_OUTER_L",
     "FACE_BROW_OUTER_R",
+    "FACE_LID_L",
+    "FACE_LID_R",
     "FACE_MOUTH_CORNER_L",
     "FACE_MOUTH_CORNER_R",
 }
@@ -97,27 +122,44 @@ def matching_shape_blocks(armature: bpy.types.Object, entry):
         if not keys:
             continue
         normalized = normalize_name(target_name, shape=True)
-        for block in keys.key_blocks:
-            if (
-                entry.shape_scheme in {"ARKIT", "FACS"}
+        candidates = [
+            block
+            for block in keys.key_blocks
+            if normalize_name(block.name, shape=True) == normalized
+            and not (
+                entry.shape_scheme in SHAPE_SCHEMES
                 and shape_scheme(block.name) != entry.shape_scheme
-            ):
-                continue
-            if normalize_name(block.name, shape=True) == normalized:
-                yield obj, block
+            )
+        ]
+        if not candidates:
+            continue
+        # One key per mesh: driving both ``arkit_EyeBlinkLeft`` and
+        # ``facs_bs_EyeBlinkLeft`` would apply the expression twice.
+        exact = [block for block in candidates if block.name == target_name]
+        yield (
+            obj,
+            (exact or sorted(candidates, key=lambda b: shape_priority(b.name)))[0],
+        )
 
 
 def shape_scheme(name: str) -> str:
-    lowered = name.casefold()
-    if lowered.startswith(("arkit_", "arkit-", "ar_")):
-        return "ARKIT"
-    if lowered.startswith(("facs_", "facs-")):
-        return "FACS"
+    """``ARKIT``, ``FACS``, ``VRM`` or ``NONE`` from what the name says.
+
+    ``facs_bs_EyeBlinkLeft`` is the ARKit coefficient ``eyeBlinkLeft``
+    behind an exporter prefix; correctives are never driven directly;
+    VRoid expression keys start with ``Fcl_``.
+    """
+    if shape_kind(name) == "CORRECTIVE":
+        return "NONE"
+    if name.casefold().startswith(("fcl_", "vrm_")):
+        return "VRM"
     normalized = normalize_name(name, shape=True)
     if normalized in _ARKIT_NORMALIZED:
         return "ARKIT"
     if _FACS_NAME_RE.match(normalized):
         return "FACS"
+    if name.casefold().startswith(("arkit_", "arkit-", "ar_")):
+        return "ARKIT"
     return "NONE"
 
 

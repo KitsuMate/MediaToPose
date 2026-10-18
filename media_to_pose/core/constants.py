@@ -15,7 +15,7 @@ def extension_version() -> str:
         return str(tomllib.load(stream)["version"])
 
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 CAPTURE_CONFIDENCE = 0.35
 PROFILE_AUTO = "AUTO"
 PROFILE_ARP = "AUTO_RIG_PRO"
@@ -182,14 +182,54 @@ FACS_ACTION_UNITS = (
     )
 )
 
-SHAPE_ROLES = [
-    (f"ARKIT_{name}", f"ARKit - {name}", False)
-    for name in FACE_BLENDSHAPES
-    if name != "_neutral"
-] + [
-    (f"FACS_{action_unit}", f"FACS - {label}", False)
-    for action_unit, label in FACS_ACTION_UNITS
-]
+# VRM / VRoid face expressions driven from ARKit coefficients:
+# (role suffix, label, shape-key names to look for, most specific first).
+# Component keys (brows, eyes, mouth) are used instead of VRoid's whole-face
+# presets so that expressions combine.
+VRM_EXPRESSIONS = (
+    ("blinkLeft", "Blink Left", ("Fcl_EYE_Close_L",)),
+    ("blinkRight", "Blink Right", ("Fcl_EYE_Close_R",)),
+    ("aa", "Mouth A", ("Fcl_MTH_A",)),
+    ("ih", "Mouth I", ("Fcl_MTH_I",)),
+    ("ou", "Mouth U", ("Fcl_MTH_U",)),
+    ("ee", "Mouth E", ("Fcl_MTH_E",)),
+    ("oh", "Mouth O", ("Fcl_MTH_O",)),
+    ("mouthJoy", "Mouth Joy", ("Fcl_MTH_Joy",)),
+    ("mouthSorrow", "Mouth Sorrow", ("Fcl_MTH_Sorrow",)),
+    ("mouthAngry", "Mouth Angry", ("Fcl_MTH_Angry",)),
+    ("browSurprised", "Brows Surprised", ("Fcl_BRW_Surprised",)),
+    ("browAngry", "Brows Angry", ("Fcl_BRW_Angry",)),
+    ("browSorrow", "Brows Sorrow", ("Fcl_BRW_Sorrow",)),
+    ("eyeSurprised", "Eyes Wide", ("Fcl_EYE_Surprised",)),
+    ("eyeJoyLeft", "Smiling Eye Left", ("Fcl_EYE_Joy_L",)),
+    ("eyeJoyRight", "Smiling Eye Right", ("Fcl_EYE_Joy_R",)),
+)
+
+# Face outputs that drive shape keys, in role-prefix form.
+SHAPE_SCHEMES = ("ARKIT", "FACS", "VRM")
+# Face output -> (rig config completeness field, short label, what it drives).
+FACE_OUTPUTS = {
+    "ARKIT": ("arkit_complete", "ARKit", "ARKit morphs"),
+    "FACS": ("facs_complete", "FACS", "FACS morphs"),
+    "VRM": ("vrm_complete", "VRM", "VRM expressions"),
+    "BONES": ("face_complete", "Face", "facial bones"),
+}
+
+SHAPE_ROLES = (
+    [
+        (f"ARKIT_{name}", f"ARKit - {name}", False)
+        for name in FACE_BLENDSHAPES
+        if name != "_neutral"
+    ]
+    + [
+        (f"FACS_{action_unit}", f"FACS - {label}", False)
+        for action_unit, label in FACS_ACTION_UNITS
+    ]
+    + [
+        (f"VRM_{name}", f"VRM - {label}", False)
+        for name, label, _keys in VRM_EXPRESSIONS
+    ]
+)
 
 FACE_CONTROL_ROLES = [
     ("FACE_JAW_OPEN", "Jaw Open", False),

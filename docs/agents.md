@@ -126,14 +126,85 @@ current action, so versions sit side by side. Keep the best one with
 
 ```python
 rig = api.describe_rig("Face")
-print(rig["completeness"]["arkit"], rig["shape_keys"], rig["face_bones"])
+print(rig["completeness"]["arkit"], rig["sections"]["SHAPES"]["unmapped"])
 result = api.capture("face.mp4", "Face", parts={"face"}, face_output="ARKIT")
 print(result.face_output_warning)
+metrics = api.evaluate("Face", result=result)
+print(metrics.expression_fit, metrics.blink_recall, metrics.face_jitter)
+api.render_comparison("face.png", "Face", result=result, face=True)
 ```
 
-Use `face_output="ARKIT"` or `"FACS"` when the meshes have matching shape
-keys (`completeness.arkit` / `completeness.facs` close to 1.0), `"BONES"`
-for a bone-driven face rig. `face_output_warning` says what is missing.
+Pick the face output by rig type (`describe_rig` shows each mesh's
+shape-key `schemes` and the mapped `face_bones`):
+
+| Rig | `face_output` | Check first |
+| --- | --- | --- |
+| ARKit / Apple blendshapes (52 keys, any prefix such as `arkit_` or `facs_bs_`) | `"ARKIT"` | `completeness.arkit` close to 1.0 |
+| FACS action-unit keys (`AU12_L`, ...) | `"FACS"` | `completeness.facs` |
+| VRoid and other VRM characters (`Fcl_*` keys) | `"VRM"` | `completeness.vrm` |
+| Bone-driven face (Auto-Rig Pro face, Rigify face controls) | `"BONES"` | `completeness.face`, `sections.FACE_RIG.unmapped` |
+
+`"VRM"` drives the `Fcl_*` expression keys (per-eye blinks, the A/I/U/E/O
+mouth shapes, smiling, sad and angry mouth and brows, wide and smiling eyes)
+from the same ARKit coefficients. Eye bones are driven by gaze for every
+face output; with look-at rigs (an eye bone aiming at a target) the target
+moves. Bone output moves face controls in face space by a share of the eye
+distance, and the upper lids follow the gaze up and down.
+
+`render_comparison(..., face=True)` shows each frame as the detected face
+next to the rig's face, with the camera following the head.
+
+Every face mapping (shape key, face bone control, custom property, eye
+gaze) has an input and an output range, editable in Rig Setup and through
+`set_config` (`mappings[].input_zero`, `input_full`, `output_zero`,
+`output_full`, `output_negative`):
+
+- the detection between `input_zero` (rest) and `input_full` is the
+  strength, clamped to 0..1 (-1..1 for signed controls: brows, mouth
+  corners, jaw side, lids, gaze);
+- the target goes from `output_zero` to `output_full` (`output_negative` on
+  the negative side), times `influence`, in its own units: shape key value,
+  metres along a bone control's face-space axis, degrees about it, the
+  custom property's value, or degrees of gaze for the eyes.
+
+Defaults: shape keys 0 to 1 in and out; gaze 18 degrees; face bones a share
+of the eye distance for moving controls or 25 degrees for rotating ones.
+The Auto-Rig Pro shares were fitted to the ARKit keys of the project's
+FaceFX test rig (`ci/fit_face_travel_blender.py`). Bone lids treat a
+detected blink of 0.75 as fully closed (`input_full` 0.75): with shape
+keys, squint and look-down keys close the eye further than the blink
+alone, and a bone lid has only the one control. `get_config` lists every
+mapping's ranges. Mappings and presets from 0.2.0 (gain, offset, clamp,
+invert) are converted.
+
+For video, **Smooth Motion** (`TEMPORAL_CORRECTION`) cleans the face before
+retargeting: it removes each expression's resting level
+(`neutral_calibration`), smooths without lag at `smoothing_strength` while
+keeping blinks (`preserve_blinks`), zeroes values under 0.05, and holds a
+lost face for half a second before fading it to neutral.
+
+VRM output targets VRoid-style `Fcl_*` shape keys; VRM preset metadata and
+arbitrary preset-named keys are not resolved. Face confidence reports
+detection presence, not a calibrated occlusion or head-turn score.
+
+| Symptom | Look at | Change |
+| --- | --- | --- |
+| Eyes do not close | `blink_recall` | Keep `preserve_blinks` on, lower `smoothing_strength`; lower the blink mapping's `input_full` (e.g. 0.8: the detector rarely reports a full blink); for bones (`FACE_LID_*`, closed from 0.75 by default) lower `input_full` further or raise `output_full` |
+| Mouth or brows too weak | `expression_fit`, the face sheet | Lower that mapping's `input_full` or raise its `output_full` (above 1 needs the shape key's `slider_max`) |
+| Face twitches | `face_jitter` | Enable `TEMPORAL_CORRECTION` or raise `smoothing_strength` |
+| Relaxed face looks surprised (raised brows) | the sheet's neutral frames | Video: keep `neutral_calibration` on; stills: raise the brow mappings' `input_zero` (e.g. 0.4) |
+| Sides swapped | `asymmetry`, the sheet | Check `mirror`: mirroring flips the whole performance, so a left wink becomes a right one |
+| An expression never moves | `sections.SHAPES.unmapped` in `describe_rig` | Map it in Rig Setup, or accept that the rig has no such key |
+
+Known limits: MediaPipe reports a resting brow raise of about 0.5 on many
+relaxed faces, which only video captures can calibrate away; a wink comes
+through as a one-sided squint rather than a one-sided blink; extreme
+close-ups where the face fills the frame can be misfitted. Sparse bone
+controls can produce a weaker broad smile than ARKit keys even when
+`expression_fit` is low; prefer ARKit on rigs with suitable keys when
+likeness matters. VRoid's authored joy key can open the mouth even for a
+closed-mouth smile; combining it with visemes can exaggerate that opening.
+`expression_fit` measures mapped values, not visual likeness to the source.
 
 ### Run from the Blender MCP server
 
@@ -163,6 +234,7 @@ path; `api.load_result(result)` returns the dict.
 | `cleanup_steps` | Each enabled clean-up module: `parameters` used and `statistics` (for example `rejected_observations`, `repaired_samples`, `contact_frames`, `root_drift_removed_mean`) |
 | `mapping_issues` | Rig mapping entries with warnings or errors |
 | `face_output_warning` | Why face output may be incomplete |
+| `face_output` | The face output keyed (`ARKIT`, `FACS`, `VRM` or `BONES`), empty when the face was not captured; `evaluate` and `render_comparison(face=True)` use it |
 | `warnings` | `{code, message}`; branch on `code` |
 
 Warning codes: `DETECTIONS_REJECTED`, `GAPS_FILLED`, `MANUAL_MASK`,
@@ -189,6 +261,17 @@ the comparison render before acting on a borderline value.
 | `root_speed_spikes`: frames whose root speed is over four times the median and over half a body height per second | 0 | > 0 | `DETECTION_FILTER.reject_unusable_frames`; mask the frames; `CAMERA_MOTION_CORRECTION` for camera pans |
 | `landmark_fit_error_deg`: mean difference between detected and rig elbow and knee bends | < 10 | > 20 | Lower `smoothing_strength` if over-smoothed; fix `mapping_issues`; check `mirror` |
 
+Face metrics are measured when the capture used face output (or with
+`face_output=`); they are in expression units (0 to 1) and `None` otherwise.
+All but `face_jitter` need the result's retained detections.
+
+| Metric | Good | Investigate | What to change |
+| --- | --- | --- | --- |
+| `expression_fit`: mean difference between each mapped expression's strength (detection through the input range) and the strength the rig shows (its value through the output range) | < 0.05 | > 0.15 | High for video with Smooth Motion is expected (it calibrates and smooths the face); otherwise check that `output_full` fits the shape key's slider range, and `sections.SHAPES.unmapped` in `describe_rig` |
+| `blink_recall`: share of detected blinks that close the rig's eye to at least 0.8 | 1.0 | < 0.8 | Keep `TEMPORAL_CORRECTION.preserve_blinks` on; lower `smoothing_strength`; lower the blink mapping's `input_full` |
+| `face_jitter`: RMS distance of face values from the midpoint of their neighbours in time | < 0.03 | > 0.08 | Enable `TEMPORAL_CORRECTION` (`smooth_motion`) or raise `smoothing_strength` |
+| `asymmetry`: mean left/right difference on the rig where the detection was symmetric | < 0.05 | > 0.1 | Check the left/right mapping and `mirror`; a rig whose left and right keys differ in strength needs per-side `output_full` |
+
 `foot_contact_ratio`, `penetration_frames` and `max_root_speed_m_per_s` add
 context. `worst_frames` holds up to five timeline frames per problem.
 
@@ -212,7 +295,8 @@ context. `worst_frames` holds up to five timeline frames per problem.
 `{"MODULE_ID": {"setting": value}}`.
 
 Other introspection: `api.describe_rig(armature)` (mapping coverage per
-section, unmapped targets, detected profile, shape keys, face bones),
+section, unmapped targets, detected profile, shape keys per mesh and scheme,
+and face bones),
 `api.auto_map(armature)`, `api.list_providers()` and `api.model_status()`
 (optional model install state and download sizes).
 
@@ -227,12 +311,12 @@ the JSON document and `--save` to save the .blend afterwards.
 | `retarget` (same options, without `--no-cache`) | `api.retarget_cached` |
 | `describe-rig --armature A` | `api.describe_rig` |
 | `auto-map --armature A [--force-profile]` | `api.auto_map` |
-| `evaluate --armature A [--action] [--frame-range FIRST:LAST] [--result FILE] [--ground-height Z]` | `api.evaluate` |
+| `evaluate --armature A [--action] [--frame-range FIRST:LAST] [--result FILE] [--ground-height Z] [--face-output]` | `api.evaluate` |
 | `config get --armature A [--out FILE]` / `config set FILE --armature A` | `api.get_config` / `api.set_config` |
 | `postprocessors [--armature A]` | `api.list_postprocessors` |
 | `providers`, `models` | `api.list_providers`, `api.model_status` |
 | `export-detections PATH`, `import-detections PATH` | `api.export_detections`, `api.import_detections` |
-| `render --armature A --result FILE --out PNG [--frames 10,20] [--count N] [--size PX] [--no-meshes]` | `api.render_comparison` |
+| `render --armature A --result FILE --out PNG [--frames 10,20] [--count N] [--size PX] [--no-meshes] [--face]` | `api.render_comparison` |
 
 ## Errors and exit codes
 

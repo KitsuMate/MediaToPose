@@ -439,6 +439,24 @@ PARAMETERS: dict[str, Parameter] = {
                 "Motion is active"
             ),
         ),
+        # Smooth Motion: face options (video face capture).
+        Parameter(
+            "neutral_calibration",
+            "bool",
+            "Calibrate Neutral Face",
+            True,
+            description=(
+                "Subtract each face expression's resting level, measured over the "
+                "clip, so a relaxed face drives a relaxed rig"
+            ),
+        ),
+        Parameter(
+            "preserve_blinks",
+            "bool",
+            "Preserve Blinks",
+            True,
+            description="Keep each detected blink's depth and timing when smoothing",
+        ),
     )
 }
 
@@ -560,6 +578,7 @@ MODULES: tuple[Module, ...] = (
             Row(("smooth_motion",)),
             Row(("ground_contacts",)),
             Row(("smoothing_strength",), enabled_by="smooth_motion"),
+            Row(("neutral_calibration", "preserve_blinks")),
             Row(("stabilize_hands",)),
             Row(
                 (

@@ -5,7 +5,9 @@ from __future__ import annotations
 import bpy
 from bpy.types import Panel, UIList
 
+from ....core.constants import FACE_OUTPUTS, SHAPE_SCHEMES
 from ....core.coordinator import COORDINATOR
+from ....rig.face_defaults import EYES, is_signed
 from ....rig.profiles.common import PROFILE_LABELS, detect_profile, profile_label
 from ...operators.mapping import active_entry, active_mapping_section
 from ..widgets import (
@@ -58,7 +60,7 @@ class MTP_UL_mappings(UIList):
         selected_output = settings.face_output if settings else "ARKIT"
         effective_section = (
             "SHAPES"
-            if section == "FACE_RIG" and selected_output in {"ARKIT", "FACS"}
+            if section == "FACE_RIG" and selected_output in SHAPE_SCHEMES
             else section
         )
         text = data.filter_text.casefold().strip()
@@ -263,6 +265,29 @@ def _draw_fk_switches(layout, armature):
             )
 
 
+def _face_units(entry) -> str:
+    if entry.channel_mode == "LOCATION":
+        return "metres along the axis"
+    if entry.channel_mode == "CUSTOM_PROPERTY":
+        return "property value"
+    return "degrees about the axis"
+
+
+def _draw_face_ranges(layout, entry, units: str) -> None:
+    """Input range (detected values) and output range (target units)."""
+    column = layout.column(align=True)
+    column.label(text="Detected")
+    row = column.row(align=True)
+    row.prop(entry, "input_zero", text="Rest")
+    row.prop(entry, "input_full", text="Full")
+    column.label(text=f"Output ({units})")
+    row = column.row(align=True)
+    row.prop(entry, "output_zero", text="Rest")
+    row.prop(entry, "output_full", text="Full")
+    if is_signed(entry.semantic_id):
+        column.prop(entry, "output_negative", text="Negative Full")
+
+
 def _draw_compact_mapping_editor(layout, armature, entry):
     box = layout.box()
     header = box.row(align=True)
@@ -289,9 +314,7 @@ def _draw_compact_mapping_editor(layout, armature, entry):
         row = box.row(align=True)
         row.operator("mtp.use_active_shape_key", icon="EYEDROPPER")
         row.operator("mtp.select_mapping_target", icon="RESTRICT_SELECT_OFF")
-        row = box.row(align=True)
-        row.prop(entry, "gain")
-        row.prop(entry, "offset")
+        _draw_face_ranges(box, entry, "key value")
         _draw_shape_overrides(box, entry)
     else:
         if entry.section == "FACE_RIG":
@@ -306,6 +329,9 @@ def _draw_compact_mapping_editor(layout, armature, entry):
             row.prop(entry, "axis")
             if entry.channel_mode == "CUSTOM_PROPERTY":
                 box.prop(entry, "property_name")
+            _draw_face_ranges(box, entry, _face_units(entry))
+        elif entry.semantic_id in EYES:
+            _draw_face_ranges(box, entry, "degrees of gaze")
         box.prop(entry, "influence")
     box.prop(entry, "correction_euler")
     details = box.row(align=True)
@@ -352,12 +378,9 @@ class MTP_PT_rig_setup(Panel):
         completeness = header.row(align=True)
         completeness.label(text=f"Body {config.body_complete:.0%}")
         completeness.label(text=f"Hands {config.hands_complete:.0%}")
-        if settings.face_output == "ARKIT":
-            completeness.label(text=f"ARKit {config.arkit_complete:.0%}")
-        elif settings.face_output == "FACS":
-            completeness.label(text=f"FACS {config.facs_complete:.0%}")
-        else:
-            completeness.label(text=f"Face {config.face_complete:.0%}")
+        if settings.use_face:
+            field, short_label, _label = FACE_OUTPUTS[settings.face_output]
+            completeness.label(text=f"{short_label} {getattr(config, field):.0%}")
         if required:
             header.label(text=f"{required} required mapping issue(s)", icon="CANCEL")
         elif warnings:

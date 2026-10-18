@@ -82,9 +82,23 @@ before use and stores the model outside the extension folder.
 
 ## Face output
 
-MediaPipe face capture is experimental. You can select ARKit morphs, FACS
-morphs, or facial bones. The selected character must have matching shape keys,
-bones, or custom properties in **Rig Setup**.
+MediaPipe face capture drives one of four outputs:
+
+- **ARKit** shape keys (the 52 Apple blendshapes, with or without a prefix
+  such as `arkit_`),
+- **FACS** action-unit shape keys,
+- **VRM** expressions for VRoid and other VRM characters (`Fcl_*` keys),
+- **face bones**, such as an Auto-Rig Pro face; controls move in face space
+  and the lids follow the gaze.
+
+Eye bones follow the gaze for every output. For video, **Smooth Motion**
+also calibrates each expression's resting level, smooths the face without
+losing blinks, and holds it briefly when it is lost. Rig Setup shows how
+much of the chosen output the character has.
+
+Face capture is still marked experimental: Rigify face controls are not yet
+verified, a wink reads as a one-sided squint, and relaxed faces in single
+images can show slightly raised brows (video calibrates this away).
 
 ## Scripting and command line
 
@@ -100,8 +114,9 @@ blender -b scene.blend -c media_to_pose evaluate --armature Rig \
 ```
 
 Each capture returns a JSON result (frames, confidence, rejected and filled
-frames, clean-up statistics, warnings with codes). `evaluate` measures foot
-sliding, jitter, twist and root speed spikes. Clean-up settings can be
+frames, clean-up statistics, warnings with codes). `evaluate`
+measures foot sliding, jitter, twist, root speed spikes and, for faces,
+expression fit, blink recall and face jitter. Clean-up settings can be
 changed and the capture re-applied from its retained detections in seconds.
 See [docs/agents.md](docs/agents.md) for the Python API, recipes and what
 each metric means.

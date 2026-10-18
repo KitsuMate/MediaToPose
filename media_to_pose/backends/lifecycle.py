@@ -15,6 +15,7 @@ import logging
 import os
 import queue
 import re
+import sys
 import threading
 import time
 import traceback
@@ -226,6 +227,8 @@ def download_file(
 def _pid_running(pid: int) -> bool:
     if pid <= 0:
         return False
+    if sys.platform == "win32":
+        return _windows_pid_running(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -235,6 +238,31 @@ def _pid_running(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def _windows_pid_running(pid: int) -> bool:
+    """Query a process without signalling it (os.kill(pid, 0) kills on Windows)."""
+    # Lets type checkers on other platforms skip the Windows-only ctypes API.
+    assert sys.platform == "win32"
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE only
+    if not handle:
+        # Invalid PID is definitely gone; denied access or other errors must
+        # not let another installer steal a possibly live lease.
+        return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER
+    try:
+        return kernel.WaitForSingleObject(handle, 0) != 0  # WAIT_OBJECT_0
+    finally:
+        kernel.CloseHandle(handle)
 
 
 class InstallationLock:

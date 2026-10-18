@@ -9,6 +9,7 @@ from mathutils import Quaternion, Vector
 
 from ...core.constants import PROFILE_ARP, PROFILE_RIGIFY
 from ...core.types import CanonicalFrame, Landmark
+from ...rig.face_space import mapped_bone as _mapped_bone
 from ...rig.profiles.common import profile_identifier
 
 _PROFILE_OUTPUT_BONES = {
@@ -229,13 +230,6 @@ def _canonical_vector(position: Sequence[float]) -> Vector:
     # image-right/camera-away/up. The detected hip frame then removes source
     # viewpoint yaw and yields anatomical right/forward/up.
     return Vector((float(position[0]), float(position[2]), -float(position[1])))
-
-
-def _mapped_bone(armature, entries, semantic_id: str):
-    entry = entries.get(semantic_id)
-    if not entry or not entry.enabled or not entry.target_name:
-        return None
-    return armature.pose.bones.get(entry.target_name)
 
 
 def _profile_id(config) -> str:

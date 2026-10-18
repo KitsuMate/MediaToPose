@@ -1,0 +1,86 @@
+{
+ "bones": {
+  "c_eye_target.l": {
+   "location": [
+    -0.00154,
+    0.009543,
+    0.010898
+   ],
+   "rotation": [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "c_eye_target.r": {
+   "location": [
+    0.00154,
+    0.009543,
+    0.010898
+   ],
+   "rotation": [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "case": "still_face_facs",
+ "schema_version": 1,
+ "shapes": {
+  "FaceFX/AU01": 0.592,
+  "FaceFX/AU01_L": 0.592,
+  "FaceFX/AU01_R": 0.592,
+  "FaceFX/AU02": 0.384,
+  "FaceFX/AU02_L": 0.088,
+  "FaceFX/AU02_R": 0.384,
+  "FaceFX/AU04": 0.296,
+  "FaceFX/AU04_R": 0.296,
+  "FaceFX/AU05": 0.616,
+  "FaceFX/AU05_L": 0.32,
+  "FaceFX/AU05_R": 0.616,
+  "FaceFX/AU06": 0.472,
+  "FaceFX/AU06_L": 0.176,
+  "FaceFX/AU06_R": 0.472,
+  "FaceFX/AU07": 0.528,
+  "FaceFX/AU07_L": 0.528,
+  "FaceFX/AU07_R": 0.024,
+  "FaceFX/AU09": 0.4,
+  "FaceFX/AU09_L": 0.104,
+  "FaceFX/AU09_R": 0.4,
+  "FaceFX/AU10": 0.608,
+  "FaceFX/AU10_L": 0.312,
+  "FaceFX/AU10_R": 0.608,
+  "FaceFX/AU12": 0.728,
+  "FaceFX/AU12_L": 0.728,
+  "FaceFX/AU12_R": 0.224,
+  "FaceFX/AU14": 0.792,
+  "FaceFX/AU14_L": 0.792,
+  "FaceFX/AU14_R": 0.288,
+  "FaceFX/AU15": 0.584,
+  "FaceFX/AU15_L": 0.584,
+  "FaceFX/AU15_R": 0.08,
+  "FaceFX/AU16": 0.464,
+  "FaceFX/AU16_L": 0.168,
+  "FaceFX/AU16_R": 0.464,
+  "FaceFX/AU17": 0.136,
+  "FaceFX/AU18": 0.552,
+  "FaceFX/AU20": 0.52,
+  "FaceFX/AU20_L": 0.52,
+  "FaceFX/AU20_R": 0.016,
+  "FaceFX/AU22": 0.376,
+  "FaceFX/AU23": 0.76,
+  "FaceFX/AU23_L": 0.76,
+  "FaceFX/AU23_R": 0.256,
+  "FaceFX/AU24": 0.76,
+  "FaceFX/AU25": 0.704,
+  "FaceFX/AU26": 0.704,
+  "FaceFX/AU27": 0.26,
+  "FaceFX/AU28": 0.64,
+  "FaceFX/AU45": 0.768,
+  "FaceFX/AU45_L": 0.768,
+  "FaceFX/AU45_R": 0.264
+ }
+}

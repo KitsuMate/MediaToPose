@@ -1,0 +1,83 @@
+{
+ "bones": {
+  "c_eye_target.l": {
+   "location": [
+    -0.00154,
+    0.009543,
+    0.010898
+   ],
+   "rotation": [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  },
+  "c_eye_target.r": {
+   "location": [
+    0.00154,
+    0.009543,
+    0.010898
+   ],
+   "rotation": [
+    1.0,
+    0.0,
+    0.0,
+    0.0
+   ]
+  }
+ },
+ "case": "still_face_arkit",
+ "schema_version": 1,
+ "shapes": {
+  "FaceFX/arkit_BrowDownRight": 0.296,
+  "FaceFX/arkit_BrowInnerUp": 0.592,
+  "FaceFX/arkit_BrowOuterUpLeft": 0.088,
+  "FaceFX/arkit_BrowOuterUpRight": 0.384,
+  "FaceFX/arkit_CheekPuff": 0.68,
+  "FaceFX/arkit_CheekSquintLeft": 0.176,
+  "FaceFX/arkit_CheekSquintRight": 0.472,
+  "FaceFX/arkit_EyeBlinkLeft": 0.768,
+  "FaceFX/arkit_EyeBlinkRight": 0.264,
+  "FaceFX/arkit_EyeLookDownLeft": 0.56,
+  "FaceFX/arkit_EyeLookDownRight": 0.056,
+  "FaceFX/arkit_EyeLookInLeft": 0.352,
+  "FaceFX/arkit_EyeLookInRight": 0.648,
+  "FaceFX/arkit_EyeLookOutLeft": 0.144,
+  "FaceFX/arkit_EyeLookOutRight": 0.44,
+  "FaceFX/arkit_EyeLookUpLeft": 0.736,
+  "FaceFX/arkit_EyeLookUpRight": 0.232,
+  "FaceFX/arkit_EyeSquintLeft": 0.528,
+  "FaceFX/arkit_EyeSquintRight": 0.024,
+  "FaceFX/arkit_EyeWideLeft": 0.32,
+  "FaceFX/arkit_EyeWideRight": 0.616,
+  "FaceFX/arkit_JawForward": 0.112,
+  "FaceFX/arkit_JawLeft": 0.408,
+  "FaceFX/arkit_JawOpen": 0.704,
+  "FaceFX/arkit_JawRight": 0.2,
+  "FaceFX/arkit_MouthClose": 0.496,
+  "FaceFX/arkit_MouthDimpleLeft": 0.792,
+  "FaceFX/arkit_MouthDimpleRight": 0.288,
+  "FaceFX/arkit_MouthFrownLeft": 0.584,
+  "FaceFX/arkit_MouthFrownRight": 0.08,
+  "FaceFX/arkit_MouthFunnel": 0.376,
+  "FaceFX/arkit_MouthLeft": 0.672,
+  "FaceFX/arkit_MouthLowerDownLeft": 0.168,
+  "FaceFX/arkit_MouthLowerDownRight": 0.464,
+  "FaceFX/arkit_MouthPressLeft": 0.76,
+  "FaceFX/arkit_MouthPressRight": 0.256,
+  "FaceFX/arkit_MouthPucker": 0.552,
+  "FaceFX/arkit_MouthRight": 0.048,
+  "FaceFX/arkit_MouthRollLower": 0.344,
+  "FaceFX/arkit_MouthRollUpper": 0.64,
+  "FaceFX/arkit_MouthShrugUpper": 0.432,
+  "FaceFX/arkit_MouthSmileLeft": 0.728,
+  "FaceFX/arkit_MouthSmileRight": 0.224,
+  "FaceFX/arkit_MouthStretchLeft": 0.52,
+  "FaceFX/arkit_MouthStretchRight": 0.016,
+  "FaceFX/arkit_MouthUpperUpLeft": 0.312,
+  "FaceFX/arkit_MouthUpperUpRight": 0.608,
+  "FaceFX/arkit_NoseSneerLeft": 0.104,
+  "FaceFX/arkit_NoseSneerRight": 0.4
+ }
+}

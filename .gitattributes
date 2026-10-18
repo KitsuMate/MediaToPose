@@ -4,3 +4,6 @@
 /docs/media/*.png filter=lfs diff=lfs merge=lfs -text
 /docs/media/*.mp4 filter=lfs diff=lfs merge=lfs -text
 /tests/fixtures/**/*.blend filter=lfs diff=lfs merge=lfs -text
+/media_to_pose/**/*.py text eol=lf
+/tests/**/*.py text eol=lf
+/ci/**/*.py text eol=lf

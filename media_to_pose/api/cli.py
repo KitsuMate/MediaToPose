@@ -88,7 +88,7 @@ def _capture_options(parser: argparse.ArgumentParser, *, cached: bool) -> None:
     )
     parser.add_argument("--start-frame", type=float, help="timeline frame of frame 0")
     parser.add_argument("--root-motion", help="AUTOMATIC, IN_PLACE or OFF")
-    parser.add_argument("--face-output", help="ARKIT, FACS or BONES")
+    parser.add_argument("--face-output", help="ARKIT, FACS, VRM or BONES")
     parser.add_argument(
         "--mirror", action=argparse.BooleanOptionalAction, help="mirror the media"
     )
@@ -144,6 +144,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--frame-range", type=_frame_range, help="timeline FIRST:LAST")
     sub.add_argument("--result", help="capture result JSON for landmark fit")
     sub.add_argument("--ground-height", type=float, default=0.0)
+    sub.add_argument(
+        "--face-output",
+        help="Measure face metrics for ARKIT, FACS, VRM or BONES (default: the result's)",
+    )
     sub.add_argument("--out")
     _common(sub)
 
@@ -180,6 +184,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--count", type=int, default=6)
     sub.add_argument("--size", type=int, default=384)
     sub.add_argument("--no-meshes", action="store_true", help="skip mesh rendering")
+    sub.add_argument(
+        "--face", action="store_true", help="face close-ups of source and rig"
+    )
     _common(sub)
     return parser
 
@@ -229,6 +236,7 @@ def run(args) -> Any:
             frame_range=args.frame_range,
             result=args.result,
             ground_height=args.ground_height,
+            face_output=args.face_output,
         ).to_dict()
     elif command == "config":
         if args.action == "set":
@@ -256,10 +264,12 @@ def run(args) -> Any:
             count=args.count,
             size=args.size,
             render_meshes=not args.no_meshes,
+            face=args.face,
         )
     else:  # argparse rejects unknown commands first
         raise InvalidRequest(f"Unknown command {command}")
-    _write(getattr(args, "out", None), payload)
+    if command != "render":  # render's --out is the sheet itself
+        _write(getattr(args, "out", None), payload)
     return payload
 
 

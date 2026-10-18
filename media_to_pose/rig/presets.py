@@ -15,6 +15,7 @@ from ..core.constants import (
 )
 from ..core.errors import InvalidRequest
 from ..core.fs import atomic_json
+from .face_defaults import RANGE_FIELDS, RANGES_VERSION, has_ranges, migrate_ranges
 from .locks import suppress_manual_locks
 from .mapping import ensure_mapping_entries, mapping_by_id, validate_mapping
 from .profiles.fk_switches import FK_SWITCH_FIELDS
@@ -50,11 +51,11 @@ def serialize_config(armature: bpy.types.Object) -> dict:
                     "property_name",
                     "channel_mode",
                     "axis",
-                    "gain",
-                    "offset",
-                    "clamp_min",
-                    "clamp_max",
-                    "invert",
+                    "input_zero",
+                    "input_full",
+                    "output_zero",
+                    "output_full",
+                    "output_negative",
                     "influence",
                     "confidence",
                     "source",
@@ -77,9 +78,29 @@ def serialize_config(armature: bpy.types.Object) -> dict:
     }
 
 
+# Mapping presets before 0.2.1 stored gain / offset / clamp / invert.
+LEGACY_SCHEMA_VERSION = 18
+LEGACY_RANGE_KEYS = ("gain", "offset", "clamp_min", "clamp_max", "invert")
+
+
+def _legacy_item(armature, entries, entry, item: dict) -> dict:
+    """A schema 18 mapping item with its calibration turned into ranges."""
+    item = dict(item)
+    legacy = {key: item.pop(key) for key in LEGACY_RANGE_KEYS if key in item}
+    if not has_ranges(entry):
+        return item
+    # The control's channel decides its output units.
+    for key in ("channel_mode", "axis", "target_name"):
+        if key in item:
+            setattr(entry, key, item[key])
+    migrate_ranges(armature, entries, entry, legacy)
+    item.update({name: getattr(entry, name) for name in RANGE_FIELDS})
+    return item
+
+
 def load_config(armature: bpy.types.Object, payload: dict, *, settings=None) -> None:
     schema_version = int(payload.get("schema_version", 0))
-    if schema_version != SCHEMA_VERSION:
+    if schema_version not in {LEGACY_SCHEMA_VERSION, SCHEMA_VERSION}:
         raise InvalidRequest(
             f"Unsupported mapping schema {schema_version}; expected {SCHEMA_VERSION}"
         )
@@ -114,10 +135,14 @@ def load_config(armature: bpy.types.Object, payload: dict, *, settings=None) -> 
             entry = entries.get(item.get("semantic_id", ""))
             if not entry:
                 continue
+            if schema_version == LEGACY_SCHEMA_VERSION:
+                item = _legacy_item(armature, entries, entry, item)
             for key, value in item.items():
                 if key in {"semantic_id", "shape_overrides"} or not hasattr(entry, key):
                     continue
                 setattr(entry, key, value)
+            if has_ranges(entry):
+                entry.ranges_version = RANGES_VERSION
             if "shape_overrides" in item:
                 entry.shape_overrides.clear()
                 for override_data in item.get("shape_overrides", []):
@@ -171,15 +196,16 @@ def copy_section(
                 "property_name",
                 "channel_mode",
                 "axis",
-                "gain",
-                "offset",
-                "clamp_min",
-                "clamp_max",
-                "invert",
+                "input_zero",
+                "input_full",
+                "output_zero",
+                "output_full",
+                "output_negative",
                 "influence",
                 "correction_euler",
             ):
                 setattr(target_entry, key, getattr(source_entry, key))
+            target_entry.ranges_version = source_entry.ranges_version
             target_entry.shape_overrides.clear()
             for source_override in source_entry.shape_overrides:
                 target_override = target_entry.shape_overrides.add()

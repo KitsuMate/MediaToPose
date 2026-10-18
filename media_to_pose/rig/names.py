@@ -13,7 +13,7 @@ PREFIX_RE = re.compile(
 
 
 SHAPE_PREFIX_RE = re.compile(
-    r"^(?:(?:facs|arkit|ar)[_-])?(?:(?:bs|cbs|ctrl)[_-])?",
+    r"^(?:blendshape[._-])?(?:(?:facs|arkit|ar)[_-])?(?:(?:bs|cbs|ctrl)[_-])?",
     re.IGNORECASE,
 )
 

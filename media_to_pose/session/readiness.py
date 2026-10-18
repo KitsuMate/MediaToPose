@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..core.constants import FACE_OUTPUTS
+
 
 def _descriptor(provider: str):
     # Provider descriptors pull in the inference backends; import on use so
@@ -75,11 +77,7 @@ def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
     provider = _descriptor(settings.provider)
     face_enabled = settings.use_face and "FACE" in provider.capabilities
     if face_enabled:
-        completeness = {
-            "ARKIT": config.arkit_complete,
-            "FACS": config.facs_complete,
-            "BONES": config.face_complete,
-        }[settings.face_output]
+        completeness = _output_completeness(config, settings.face_output)
         if completeness == 0.0 and not (settings.use_body or settings.use_hands):
             issues.append(
                 f"The selected {settings.face_output} face output is fully missing"
@@ -87,21 +85,18 @@ def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
     return tuple(issues)
 
 
+def _output_completeness(config, face_output: str) -> float:
+    """How completely the rig maps the selected face output (0 to 1)."""
+    return float(getattr(config, FACE_OUTPUTS[face_output][0]))
+
+
 def face_output_warning(armature, settings) -> str:
     provider = _descriptor(settings.provider)
     if not settings.use_face or "FACE" not in provider.capabilities:
         return ""
     config = armature.mtp_rig_config
-    completeness = {
-        "ARKIT": config.arkit_complete,
-        "FACS": config.facs_complete,
-        "BONES": config.face_complete,
-    }[settings.face_output]
-    label = {
-        "ARKIT": "ARKit morphs",
-        "FACS": "FACS morphs",
-        "BONES": "facial bones",
-    }[settings.face_output]
+    completeness = _output_completeness(config, settings.face_output)
+    label = FACE_OUTPUTS[settings.face_output][2]
     if completeness == 0.0:
         return f"{label} are fully missing; face output will be skipped"
     if completeness < 1.0:

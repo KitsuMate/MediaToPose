@@ -202,13 +202,24 @@ def _project_temporal_finger_hinges(
     return corrected
 
 
+def _is_face_channel(semantic_id: str) -> bool:
+    return semantic_id.startswith(("FACE_", "EYE_"))
+
+
 def _iter_temporal_channels(
     armature,
     samples: list[_BakedFrameSample],
     settings,
     *,
     scene_context: SceneContext,
+    face_cleaned: bool = False,
 ) -> Iterator[SequenceApplyProgress]:
+    """Smooth and stabilise baked channels.
+
+    With ``face_cleaned``, Face Expression Cleanup already smoothed the face
+    (keeping blinks), so face shape keys and face and eye bones are left as
+    they are.
+    """
     timestamps = _sequence_timestamps(samples)
     smooth_motion = bool(settings.smooth_motion)
     strength = float(settings.smoothing_strength)
@@ -217,8 +228,15 @@ def _iter_temporal_channels(
     wrist_maximum_speed = float(settings.wrist_max_angular_speed)
     hand_reacquire_delay = float(settings.hand_reacquire_delay)
     _fill_short_bone_gaps(samples, timestamps)
-    names = {name for sample in samples for name in sample.bones}
-    shape_keys = {key for sample in samples for key in sample.shapes}
+    names = {
+        name
+        for sample in samples
+        for name, channel in sample.bones.items()
+        if not (face_cleaned and _is_face_channel(channel.semantic_id or ""))
+    }
+    shape_keys = (
+        set() if face_cleaned else {key for sample in samples for key in sample.shapes}
+    )
     properties = {
         (name, property_name)
         for sample in samples
@@ -426,6 +444,7 @@ def _iter_temporal_correction(
     target_up: Vector,
     *,
     scene_context: SceneContext,
+    face_cleaned: bool = False,
 ) -> Iterator[SequenceApplyProgress]:
     if settings.stabilize_hands:
         for sample in samples:
@@ -443,7 +462,11 @@ def _iter_temporal_correction(
                     channel.bone.rotation_mode = "QUATERNION"
     if settings.smooth_motion or settings.stabilize_hands:
         yield from _iter_temporal_channels(
-            armature, samples, settings, scene_context=scene_context
+            armature,
+            samples,
+            settings,
+            scene_context=scene_context,
+            face_cleaned=face_cleaned,
         )
     if settings.ground_contacts and _has_groundable_body_channels(samples):
         yield from _iter_ground_contacts(

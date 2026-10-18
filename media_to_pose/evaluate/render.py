@@ -4,6 +4,8 @@
 frame: on the left the source frame with the detected skeleton drawn in
 green, on the right the rig from a camera framed on it, rendered with
 Workbench when the rig has meshes, with its mapped bones drawn in orange.
+With ``face=True`` each row is a face close-up instead: the source cropped
+to the detected face and the rig's face (see ``face_render``).
 The scene's render settings, camera and frame are restored afterwards.
 """
 
@@ -24,6 +26,7 @@ from ..core.media_io import decode_image, decode_video_frame_index_with_timestam
 from ..core.scene import SceneContext
 from ..core.types import CanonicalFrame
 from ..rig import mapping
+from .face_render import face_camera, face_crop, face_shot
 
 RIG_CONNECTIONS = (
     ("PELVIS", "SPINE_01"),
@@ -164,17 +167,20 @@ def render_comparison(
     mirror: bool = False,
     size: int = 384,
     render_still: Callable | None = None,
+    face: bool = False,
 ) -> Path:
     """Write the contact sheet; ``rows`` are ``(timeline, source, frame)``.
 
     ``render_still(scene)`` renders the scene's camera to its output path;
-    without it the rig column shows only the projected bones.
+    without it the rig column shows only the projected bones. ``face``
+    makes the face close-up sheet.
     """
     if not rows:
         raise InvalidRequest("No frames to render", parameter="frames")
     cv2, _mp, np = import_runtime_dependencies()
     scene = scene_context.scene
-    bones = _rig_bones(armature)
+    shot = face_shot(armature) if face else None
+    bones = [] if shot is not None else _rig_bones(armature)
     render = scene.render
     saved = {
         "engine": render.engine,
@@ -185,25 +191,38 @@ def render_comparison(
         "film_transparent": render.film_transparent,
     }
     saved_format = render.image_settings.file_format
+    shading = scene.display.shading
+    saved_color_type = shading.color_type
     saved_camera = scene.camera
     saved_frame = (scene.frame_current, scene.frame_subframe)
     camera = None
     sheet_rows = []
     try:
-        camera = _frame_camera(scene, armature, bones, [row[0] for row in rows])
+        camera = (
+            face_camera(scene, armature, shot=shot)
+            if shot is not None
+            else _frame_camera(scene, armature, bones, [row[0] for row in rows])
+        )
         scene.camera = camera
         render.engine = "BLENDER_WORKBENCH"
         render.resolution_x = render.resolution_y = int(size)
         render.resolution_percentage = 100
         render.film_transparent = False
         render.image_settings.file_format = "PNG"
+        # Textures show eyes, irises and mouth interiors.
+        shading.color_type = "TEXTURE"
         with tempfile.TemporaryDirectory(prefix="mtp-compare-") as temporary:
             for timeline_frame, source_frame, detected in rows:
                 source = _source_image(
                     media_path, media_kind, source_frame, mirror, cv2, np
                 )
-                _draw_detection(source, detected, cv2)
+                if shot is not None:
+                    source = face_crop(source, detected, cv2)
+                else:
+                    _draw_detection(source, detected, cv2)
                 scene.frame_set(int(timeline_frame))
+                if shot is not None:
+                    face_camera(scene, armature, camera, shot)
                 rig = _render_rig(
                     scene,
                     size,
@@ -230,6 +249,7 @@ def render_comparison(
         for name, value in saved.items():
             setattr(render, name, value)
         render.image_settings.file_format = saved_format
+        shading.color_type = saved_color_type
         scene.camera = saved_camera
         if camera is not None:
             data = camera.data

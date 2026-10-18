@@ -89,6 +89,8 @@ class CaptureResult:
     cleanup_steps: list[dict[str, Any]] = field(default_factory=list)
     mapping_issues: list[dict[str, Any]] = field(default_factory=list)
     face_output_warning: str = ""
+    # The face output keyed, or empty when the face was not captured.
+    face_output: str = ""
     warnings: list[dict[str, str]] = field(default_factory=list)
     schema_version: int = RESULT_SCHEMA_VERSION
 
@@ -103,6 +105,10 @@ class CaptureResult:
         destination = Path(path)
         atomic_json(destination, self.to_dict(), indent=2, sort_keys=False)
         return destination
+
+
+def _face_captured(request) -> bool:
+    return bool(request.use_face and request.provider_id == "MEDIAPIPE")
 
 
 def _ranges(frames) -> list[list[int]]:
@@ -221,6 +227,7 @@ def build_capture_result(session, *, armature=None) -> CaptureResult:
         face_output_warning=next(
             (message for kind, message in session.notices if kind == "WARNING"), ""
         ),
+        face_output=str(request.face_output) if _face_captured(request) else "",
         warnings=[
             {"code": warning_code(message), "message": message}
             for message in outcome.warnings

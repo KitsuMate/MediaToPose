@@ -39,11 +39,11 @@ class MappingEntrySnapshot:
     property_name: str
     channel_mode: str
     axis: str
-    gain: float
-    offset: float
-    clamp_min: float
-    clamp_max: float
-    invert: bool
+    input_zero: float
+    input_full: float
+    output_zero: float
+    output_full: float
+    output_negative: float
     influence: float
     correction_euler: tuple[float, float, float]
     shape_overrides: tuple[ShapeOverrideSnapshot, ...]
@@ -90,11 +90,11 @@ def snapshot_mapping_entries(
             property_name=str(getattr(entry, "property_name", "")),
             channel_mode=str(getattr(entry, "channel_mode", "AUTO")),
             axis=str(getattr(entry, "axis", "X")),
-            gain=float(getattr(entry, "gain", 1.0)),
-            offset=float(getattr(entry, "offset", 0.0)),
-            clamp_min=float(getattr(entry, "clamp_min", 0.0)),
-            clamp_max=float(getattr(entry, "clamp_max", 1.0)),
-            invert=bool(getattr(entry, "invert", False)),
+            input_zero=float(getattr(entry, "input_zero", 0.0)),
+            input_full=float(getattr(entry, "input_full", 1.0)),
+            output_zero=float(getattr(entry, "output_zero", 0.0)),
+            output_full=float(getattr(entry, "output_full", 1.0)),
+            output_negative=float(getattr(entry, "output_negative", -1.0)),
             influence=float(getattr(entry, "influence", 1.0)),
             correction_euler=tuple(
                 float(value)
@@ -124,9 +124,11 @@ def _mapping_signature(entries: Mapping[str, object]) -> tuple:
             str(entry.property_name),
             str(entry.channel_mode),
             str(entry.axis),
-            round(float(entry.gain), 8),
-            round(float(entry.offset), 8),
-            bool(entry.invert),
+            round(float(entry.input_zero), 8),
+            round(float(entry.input_full), 8),
+            round(float(entry.output_zero), 8),
+            round(float(entry.output_full), 8),
+            round(float(entry.output_negative), 8),
             round(float(entry.influence), 8),
             tuple(round(float(value), 8) for value in entry.correction_euler),
         )

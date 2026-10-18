@@ -4,6 +4,7 @@ schema_version = 1
 summary = "Redistribution granted for the Media to Pose test fixture bundle."
 attribution = "@Gartix"
 attribution_url = "https://x.com/Gartsx_"
+per_fixture = "A fixture's own license, creator and source_url fields override this summary."
 
 [[fixture]]
 id = "sam_ref_pose_stylized"
@@ -61,3 +62,221 @@ media_type = "application/json"
 source_fixture = "sam_ref_pose_stylized"
 schema_version = 1
 sha256 = "de01aa707fd0bd3c4cc5f5f5f4ec2378e88759d8554daa33d2ec432c197471fb"
+
+[[fixture]]
+id = "facefx_face_rig"
+path = "rigs/facefx_face.blend"
+purpose = "Face, eyes, brows, lashes, teeth and tongue with prefixed ARKit shape keys on an Auto-Rig Pro face rig"
+media_type = "application/x-blender"
+blender_version = "5.2.0"
+sha256 = "98c712dfa0e280a93f8af0b19005375f368fd82b84b5545abdf7beda94bc6f87"
+armature_object = "FaceFX.Rig"
+mesh_object = "FaceFX"
+mesh_count = 7
+bone_count = 454
+shape_key_count = 639
+source = "Nyx.FaceFX from the maintainer's character scene, rebuilt by rigs/build_facefx_fixture.py"
+
+[[fixture]]
+id = "face_neutral"
+path = "media/face/face_neutral.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Relaxed face, mouth closed, eyes open"
+media_type = "image/jpeg"
+width = 739
+height = 864
+sha256 = "bbeeb49114d7b6c2c1f3557a1fbfe4650a706d35306839055bd88c87fbdc19eb"
+license = "CC0-1.0"
+creator = "Matt Moloney"
+source_url = "https://stocksnap.io/photo/woman-portrait-J2PTEFNZTE"
+source_site = "StockSnap"
+crop = [0.15, 0.02, 0.92, 0.62]
+
+[[fixture]]
+id = "face_smirk_brows_down"
+path = "media/face/face_smirk_brows_down.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Closed-mouth smile with lowered brows"
+media_type = "image/jpeg"
+width = 672
+height = 768
+sha256 = "1f920252e09b1e9495cf132306749de259fe0bfb9565d959427fa3f3ed0e3641"
+license = "CC0-1.0"
+creator = "Foto Sushi (via Unsplash)"
+source_url = "https://commons.wikimedia.org/wiki/File:Gray-haired_man_portrait_(Unsplash).jpg"
+source_site = "Wikimedia Commons"
+crop = [0.36, 0.2, 0.71, 0.8]
+
+[[fixture]]
+id = "face_smile_open"
+path = "media/face/face_smile_open.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Broad open smile showing teeth"
+media_type = "image/jpeg"
+width = 777
+height = 900
+sha256 = "50ef372394c0f6834d8f08463a9930f98ba9e7537b5405e3dec8315c7ca2c75a"
+license = "CC0-1.0"
+creator = "Michael Dam (via Unsplash)"
+source_url = "https://commons.wikimedia.org/wiki/File:Happy_daughter_(Unsplash).jpg"
+source_site = "Wikimedia Commons"
+crop = [0.15, 0.08, 0.85, 0.62]
+
+[[fixture]]
+id = "face_laugh_jaw_open"
+path = "media/face/face_laugh_jaw_open.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Laughing with the jaw dropped"
+media_type = "image/jpeg"
+width = 766
+height = 900
+sha256 = "024c2ec9b6eb472102adc2d1dacc10dbbc098e81ad56dbf24f421990db33e417"
+license = "CC0-1.0"
+creator = "michael (via Unsplash)"
+source_url = "https://commons.wikimedia.org/wiki/File:Always_smile_(Unsplash).jpg"
+source_site = "Wikimedia Commons"
+crop = [0.3, 0.08, 0.7, 0.55]
+
+[[fixture]]
+id = "face_eyes_closed"
+path = "media/face/face_eyes_closed.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Both eyes closed, head tilted back slightly, mouth closed"
+media_type = "image/jpeg"
+width = 816
+height = 900
+sha256 = "d74f14b505eed020a11e47080c5654da8e19d5150eaa46719f3790b0d63b6c39"
+license = "CC0-1.0"
+creator = "Toa Heftiba (via Unsplash)"
+source_url = "https://commons.wikimedia.org/wiki/File:Closed_Eyes_(Unsplash).jpg"
+source_site = "Wikimedia Commons"
+crop = [0.18, 0.05, 0.74, 0.45]
+
+[[fixture]]
+id = "face_surprise"
+path = "media/face/face_surprise.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Delighted surprise: jaw open, brows raised, looking down at a gift"
+media_type = "image/jpeg"
+width = 269
+height = 294
+sha256 = "3062125c697210b3de818258c7651b4eb46b891f1c07f8437f9573572d2c766d"
+license = "CC0-1.0"
+creator = "PS Imaging"
+source_url = "https://stocksnap.io/photo/christmas-person-9L1W62CZUR"
+source_site = "StockSnap"
+crop = [0.22, 0.2, 0.5, 0.66]
+
+[[fixture]]
+id = "face_grin_wide_eyes"
+path = "media/face/face_grin_wide_eyes.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Closed-lip grin with wide eyes and raised brows"
+media_type = "image/jpeg"
+width = 461
+height = 475
+sha256 = "83a69be45a73a70510cb7a4894e873d35bd98ddd23a71f1e2b90ab0412430ed0"
+license = "CC0-1.0"
+creator = "Ryan McGuire"
+source_url = "https://stocksnap.io/photo/man-guy-EA5F0D7860"
+source_site = "StockSnap"
+crop = [0.02, 0.15, 0.5, 1.0]
+
+[[fixture]]
+id = "face_frown"
+path = "media/face/face_frown.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Mouth corners pulled down in a frown"
+media_type = "image/jpeg"
+width = 461
+height = 475
+sha256 = "b7133914d0414dd2cfe7ff2c962067b3ae90487d3fad65a3c7e323f769491633"
+license = "CC0-1.0"
+creator = "Ryan McGuire"
+source_url = "https://stocksnap.io/photo/man-guy-EA5F0D7860"
+source_site = "StockSnap"
+crop = [0.5, 0.15, 0.98, 1.0]
+
+[[fixture]]
+id = "face_wink_left"
+path = "media/face/face_wink_left.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Winking the left eye with a smile"
+media_type = "image/jpeg"
+width = 288
+height = 333
+sha256 = "f8901af0037babb77f8ac975ba6519a97e91efe965b0cdba2113703990668250"
+license = "CC0-1.0"
+creator = "YesManPro"
+source_url = "https://stocksnap.io/photo/man-thumbsup-JEANSWX3A6"
+source_site = "StockSnap"
+crop = [0.36, 0.1, 0.66, 0.62]
+
+[[fixture]]
+id = "face_gaze_side"
+path = "media/face/face_gaze_side.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Head turned, eyes turned towards the subject's right"
+media_type = "image/jpeg"
+width = 432
+height = 544
+sha256 = "cb7909db2b35922f18b86f2abaa91f6530a089e2a2e21ffdab382a31aa35d295"
+license = "CC0-1.0"
+creator = "Candace McDaniel"
+source_url = "https://stocksnap.io/photo/woman-portrait-HV6O4C5CZA"
+source_site = "StockSnap"
+crop = [0.0, 0.0, 0.45, 0.85]
+
+[[fixture]]
+id = "face_gaze_up"
+path = "media/face/face_gaze_up.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Looking up from under the brows with a pout"
+media_type = "image/jpeg"
+width = 701
+height = 720
+sha256 = "7043cc2091e5e20dba08974963cc7e45eda22f71307d1125ae67e22b0636e255"
+license = "CC0-1.0"
+creator = "Candace McDaniel"
+source_url = "https://stocksnap.io/photo/sad-woman-JVIKZKSVCW"
+source_site = "StockSnap"
+crop = [0.12, 0.05, 0.85, 0.55]
+
+[[fixture]]
+id = "face_head_turned"
+path = "media/face/face_head_turned.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Head turned about 30 degrees with a slight smile; detection must still find the face"
+media_type = "image/jpeg"
+width = 842
+height = 900
+sha256 = "cf4d69dc186400017bb858ccd2d19a8a718c23cd3ed6ff60d881ef87c8ac2a69"
+license = "CC0-1.0"
+creator = "Aleks Dahlberg (via Unsplash)"
+source_url = "https://commons.wikimedia.org/wiki/File:The_Girl_(Unsplash).jpg"
+source_site = "Wikimedia Commons"
+crop = [0.08, 0.1, 0.55, 0.85]
+
+[[fixture]]
+id = "face_closeup_scream"
+path = "media/face/face_closeup_scream.jpg"
+provider = "MEDIAPIPE"
+purpose = "Face expression: Child shouting with the jaw wide open, eyes nearly shut, novelty glasses"
+media_type = "image/jpeg"
+width = 900
+height = 599
+sha256 = "945da1c29173ce5f34b2868cbe63a649861bd8851b70d15e64a26c6815c6eefd"
+license = "CC0-1.0"
+creator = "frank mckenna (via Unsplash)"
+source_url = "https://commons.wikimedia.org/wiki/File:San_diego_(Unsplash).jpg"
+source_site = "Wikimedia Commons"
+crop = [0.0, 0.0, 1.0, 1.0]
+
+[[fixture]]
+id = "face_expressions_expected"
+path = "expected/face_expressions.json"
+provider = "MEDIAPIPE"
+purpose = "Visible expression of each face still as blendshape checks"
+media_type = "application/json"
+schema_version = 1
+sha256 = "3ba04e0f7f11b7035be808c6b773e9ee30c75279b93decf5649b69f28031478d"

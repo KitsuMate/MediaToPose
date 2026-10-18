@@ -11,19 +11,32 @@ import bpy
 from ..core.constants import (
     ALL_ROLES,
     FACE_BLENDSHAPES,
+    FACE_OUTPUTS,
     FACS_ACTION_UNITS,
     MAPPING_TABS,
     PROFILE_ARP,
     PROFILE_AUTO,
     PROFILE_GENERIC,
     PROFILE_RIGIFY,
+    SHAPE_SCHEMES,
+    VRM_EXPRESSIONS,
+)
+from .face_defaults import (
+    EYES,
+    GAZE_DEGREES,
+    RANGES_LEGACY,
+    RANGES_PENDING,
+    RANGES_VERSION,
+    apply_default_ranges,
+    has_ranges,
+    migrate_ranges,
 )
 from .face_schemes import (
-    SIGNED_FACE_CONTROLS,
     _facs_aliases,
     associated_meshes,
     find_shape_targets,
     matching_shape_blocks,
+    shape_priority,
     shape_scheme,
 )
 from .locks import suppress_manual_locks
@@ -64,8 +77,14 @@ def _add_entry(config, section: str, role: Sequence) -> None:
         entry.target_kind = "SHAPE_KEY" if section == "SHAPES" else "BONE"
         if section == "SHAPES":
             entry.shape_scheme = semantic_id.split("_", 1)[0]
-        elif section == "FACE_RIG" and semantic_id in SIGNED_FACE_CONTROLS:
-            entry.clamp_min = -1.0
+        # Shape keys and gaze have fixed defaults; face bone ranges depend on
+        # the channel and the face size, so they are filled in once the
+        # entry has a target (see ensure_face_ranges).
+        if semantic_id in EYES:
+            entry.output_full, entry.output_negative = GAZE_DEGREES, -GAZE_DEGREES
+        entry.ranges_version = (
+            RANGES_PENDING if section == "FACE_RIG" else RANGES_VERSION
+        )
         entry.channel_mode = "VALUE" if section == "SHAPES" else "AUTO"
         entry.status = "MISSING" if required else "OPTIONAL"
         entry.source = "NONE"
@@ -106,9 +125,24 @@ def ensure_mapping_entries(armature: bpy.types.Object) -> None:
             entry.section = section
             entry.side = side_from_role(entry.semantic_id)
             entry.required = required
+    ensure_face_ranges(armature)
     from ..postprocess import ensure_module_configs
 
     ensure_module_configs(config)
+
+
+def ensure_face_ranges(armature: bpy.types.Object) -> None:
+    """Migrate 0.2.0 face mappings and fill in pending face bone ranges."""
+    config = armature.mtp_rig_config
+    entries = mapping_by_id(config)
+    with suppress_manual_locks():
+        for entry in config.mappings:
+            if not has_ranges(entry) or entry.ranges_version == RANGES_VERSION:
+                continue
+            if entry.ranges_version == RANGES_LEGACY:
+                migrate_ranges(armature, entries, entry)
+            elif entry.target_name:
+                apply_default_ranges(armature, entries, entry)
 
 
 def mapping_by_id(config) -> dict[str, object]:
@@ -181,6 +215,49 @@ def _set_mapping(
     return True
 
 
+def _range_inputs(config) -> dict[str, tuple]:
+    """What face mappings' default ranges depend on: each target, channel
+    and axis, and the head and eyes that size the face."""
+    return {
+        entry.semantic_id: (
+            entry.target_name,
+            entry.channel_mode,
+            entry.axis,
+            entry.enabled,
+        )
+        for entry in config.mappings
+        if has_ranges(entry) or entry.semantic_id == "HEAD"
+    }
+
+
+def _refresh_face_ranges(armature, before: dict[str, tuple], *, force: bool) -> None:
+    """Default ranges for mapped face controls and eyes that auto-mapping
+    changed (or all when the face frame changed or ``force``); ranges the
+    user edited or fitted to the rig stay."""
+    config = armature.mtp_rig_config
+    after = _range_inputs(config)
+    face_moved = any(
+        after.get(name) != before.get(name) for name in ("HEAD", "EYE_L", "EYE_R")
+    )
+    entries = mapping_by_id(config)
+    with suppress_manual_locks():
+        for entry in config.mappings:
+            if (
+                has_ranges(entry)
+                and entry.section != "SHAPES"
+                and entry.target_name
+                and entry.source in {"PROFILE", "HEURISTIC"}
+                and not entry.manual_lock
+                and (
+                    force
+                    or face_moved
+                    or entry.ranges_version != RANGES_VERSION
+                    or after[entry.semantic_id] != before.get(entry.semantic_id)
+                )
+            ):
+                apply_default_ranges(armature, entries, entry)
+
+
 def auto_map(
     armature: bpy.types.Object,
     *,
@@ -195,6 +272,7 @@ def auto_map(
     config.armature_signature = armature_signature(armature)
     configure_fk_switches(armature, profile, force=force_profile)
     entries = mapping_by_id(config)
+    ranges_before = _range_inputs(config)
     bones = set(armature.pose.bones.keys())
     vrm_map = vrm_humanoid_mapping(armature) if profile == PROFILE_GENERIC else {}
 
@@ -318,40 +396,27 @@ def auto_map(
             )
 
     shape_targets = find_shape_targets(armature)
-    for blendshape in FACE_BLENDSHAPES:
-        if blendshape == "_neutral":
-            continue
-        entry = entries.get(f"ARKIT_{blendshape}")
-        if not entry or (entry.manual_lock and not force_profile):
-            continue
-        hits = [
-            hit
-            for hit in shape_targets.get(normalize_name(blendshape, shape=True), [])
-            if shape_scheme(hit[1]) == "ARKIT"
+    shape_roles = (
+        [("ARKIT", name, (name,)) for name in FACE_BLENDSHAPES if name != "_neutral"]
+        + [("VRM", name, keys) for name, _label, keys in VRM_EXPRESSIONS]
+        + [
+            ("FACS", unit, tuple(_facs_aliases(unit)))
+            for unit, _label in FACS_ACTION_UNITS
         ]
-        if hits:
-            _set_mapping(
-                entry,
-                hits[0][1],
-                target_kind="SHAPE_KEY",
-                target_object="*",
-                channel="VALUE",
-                source="PROFILE",
-                confidence=1.0,
-                force=force_profile,
-            )
-
-    for action_unit, _label in FACS_ACTION_UNITS:
-        entry = entries.get(f"FACS_{action_unit}")
+    )
+    for scheme, role, aliases in shape_roles:
+        entry = entries.get(f"{scheme}_{role}")
         if not entry or (entry.manual_lock and not force_profile):
             continue
-        hits = []
-        for alias in _facs_aliases(action_unit):
-            hits.extend(
+        hits = sorted(
+            (
                 hit
+                for alias in aliases
                 for hit in shape_targets.get(normalize_name(alias, shape=True), [])
-                if shape_scheme(hit[1]) == "FACS"
-            )
+                if shape_scheme(hit[1]) == scheme
+            ),
+            key=lambda hit: shape_priority(hit[1]),
+        )
         if hits:
             _set_mapping(
                 entry,
@@ -410,6 +475,7 @@ def auto_map(
                 force=force_profile,
             )
 
+    _refresh_face_ranges(armature, ranges_before, force=force_profile)
     validate_mapping(armature, settings=settings)
     from ..postprocess import validate_modules
 
@@ -484,7 +550,7 @@ def validate_mapping(
     section_counts = {
         section: [0, 0] for section in ("BODY", "HANDS", "SHAPES", "FACE_RIG")
     }
-    scheme_counts = {"ARKIT": [0, 0], "FACS": [0, 0]}
+    scheme_counts = {scheme: [0, 0] for scheme in SHAPE_SCHEMES}
     for entry in config.mappings:
         if entry.section in {"SHAPES", "FACE_RIG"} and not face_enabled:
             entry.status = "OPTIONAL"
@@ -610,6 +676,12 @@ def validate_mapping(
                     "Shape-key datablock is linked or read-only: "
                     + ", ".join(read_only[:3])
                 )
+        if (
+            not control_warning
+            and has_ranges(entry)
+            and abs(entry.output_full - entry.output_zero) < 1.0e-9
+        ):
+            control_warning = "Output range is empty; the target will not move"
         if not entry.target_name:
             entry.status = "MISSING" if entry.required else "OPTIONAL"
             entry.message = (
@@ -702,23 +774,17 @@ def validate_mapping(
                 )
                 warnings += 1
 
+    # A section with nothing in scope (face capture off) is not complete:
+    # it reports 0 and readers treat it as not requested.
     def completeness(section: str) -> float:
         mapped, total = section_counts[section]
-        return mapped / total if total else 1.0
+        return mapped / total if total else 0.0
 
     config.body_complete = completeness("BODY")
     config.hands_complete = completeness("HANDS")
     config.shapes_complete = completeness("SHAPES")
-    config.arkit_complete = (
-        scheme_counts["ARKIT"][0] / scheme_counts["ARKIT"][1]
-        if scheme_counts["ARKIT"][1]
-        else 1.0
-    )
-    config.facs_complete = (
-        scheme_counts["FACS"][0] / scheme_counts["FACS"][1]
-        if scheme_counts["FACS"][1]
-        else 1.0
-    )
+    for scheme, (mapped, total) in scheme_counts.items():
+        setattr(config, FACE_OUTPUTS[scheme][0], mapped / total if total else 0.0)
     config.face_complete = completeness("FACE_RIG")
     config.validation_summary = (
         f"{valid} valid ({information} auto-detected), "
