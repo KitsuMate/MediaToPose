@@ -5,15 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.constants import SECTIONS
-from ..core.coordinator import COORDINATOR, OperationKind
-from ..core.errors import InvalidRequest
 from ..retarget.solve.face_values import describe_face_rig
 from ..rig import mapping
-from ..rig.face_fit import FIT_SHAPES
-from ..rig.face_fit import fit_face_controls as _fit_face_controls
 from ..rig.face_schemes import associated_meshes, shape_scheme
 from ..rig.profiles.common import PROFILE_LABELS, detect_profile
-from .common import resolve_armature, resolve_scene, scene_context
+from .common import resolve_armature, resolve_scene
 
 
 def prepare_rig(armature, settings) -> None:
@@ -126,40 +122,4 @@ def describe_rig(armature, *, scene=None) -> dict[str, Any]:
     }
 
 
-def fit_face_controls(
-    armature, *, controls=None, apply: bool = True, scene=None
-) -> dict[str, Any]:
-    """Fit face bone ranges to the rig's own ARKit shape keys.
-
-    For a rig with both ARKit keys and face bone controls: each control's
-    ``output_full`` (and ``output_negative`` for signed controls) becomes
-    the output that moves the meshes closest to the matching key, unless
-    the bone explains less than a quarter of the key's motion. Returns per
-    control, for ``full`` and ``negative``: ``output``, ``default_output``,
-    vertex ``rms_rest`` / ``rms_default`` / ``rms_fit`` (metres),
-    ``explained`` and ``accepted``. ``apply=False`` only reports.
-    """
-    selected = None if controls is None else set(controls)
-    if selected is not None and selected - FIT_SHAPES.keys():
-        raise InvalidRequest("Unknown face controls", parameter="controls")
-    target = resolve_armature(armature)
-    token = COORDINATOR.require(OperationKind.FACE_FIT, "api.fit_face_controls")
-    try:
-        settings = getattr(resolve_scene(scene), "mtp_settings", None)
-        prepare_rig(target, settings)
-        entries = mapping.mapping_by_id(target.mtp_rig_config)
-        report = _fit_face_controls(
-            target,
-            entries,
-            scene_context(scene).view_layer,
-            controls=selected,
-            apply=apply,
-        )
-        if apply:
-            mapping.validate_mapping(target, settings=settings)
-    finally:
-        COORDINATOR.release(token)
-    return {"armature": target.name, "applied": bool(apply), "controls": report}
-
-
-__all__ = ["auto_map", "describe_rig", "fit_face_controls", "prepare_rig"]
+__all__ = ["auto_map", "describe_rig", "prepare_rig"]

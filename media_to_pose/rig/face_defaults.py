@@ -17,8 +17,8 @@ from .face_space import face_frame
 # Travel of a location-driven face control at full strength, as a fraction
 # of the distance between the eyes: (full, negative full). Fitted on the
 # Auto-Rig Pro FaceFX fixture so each bone control moves the face mesh as
-# close as possible to the matching ARKit key (rig/face_fit.py, least
-# squares over every vertex). The lips keep a small hand-set value: ARP's
+# close as possible to the matching ARKit key (ci/fit_face_travel_blender.py,
+# least squares over every vertex). The lips keep a small hand-set value: ARP's
 # lip centre moves differently from ARKit's lip-side keys, so no fit holds.
 FACE_CONTROL_TRAVEL = {
     "FACE_JAW_OPEN": (0.93, -0.93),

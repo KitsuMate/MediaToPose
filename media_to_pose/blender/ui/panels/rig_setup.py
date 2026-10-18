@@ -286,15 +286,6 @@ def _draw_face_ranges(layout, entry, units: str) -> None:
     row.prop(entry, "output_full", text="Full")
     if is_signed(entry.semantic_id):
         column.prop(entry, "output_negative", text="Negative Full")
-    row = column.row(align=True)
-    if entry.semantic_id not in EYES:
-        row.operator("mtp.set_face_range_from_pose", icon="POSE_HLT").side = "FULL"
-        if is_signed(entry.semantic_id):
-            negative = row.operator(
-                "mtp.set_face_range_from_pose", text="Negative from Pose"
-            )
-            negative.side = "NEGATIVE"
-    row.operator("mtp.reset_face_ranges", icon="LOOP_BACK")
 
 
 def _draw_compact_mapping_editor(layout, armature, entry):

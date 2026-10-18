@@ -19,7 +19,6 @@ from ..rig.planning import clear_rig_solve_plans
 from . import host, properties, ui
 from . import preview as cache_preview
 from .operators import capture as operators_capture
-from .operators import face_ranges as operators_face_ranges
 from .operators import mapping as operators_mapping
 from .operators import models as model_operators
 
@@ -40,7 +39,6 @@ __all__ = [
 MODULES = (
     properties,
     operators_mapping,
-    operators_face_ranges,
     model_operators,
     operators_capture,
     ui,
