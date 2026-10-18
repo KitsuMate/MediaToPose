@@ -185,7 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--size", type=int, default=384)
     sub.add_argument("--no-meshes", action="store_true", help="skip mesh rendering")
     sub.add_argument(
-        "--face", action="store_true", help="face close-ups with an expression chart"
+        "--face", action="store_true", help="face close-ups of source and rig"
     )
     _common(sub)
     return parser
@@ -268,7 +268,8 @@ def run(args) -> Any:
         )
     else:  # argparse rejects unknown commands first
         raise InvalidRequest(f"Unknown command {command}")
-    _write(getattr(args, "out", None), payload)
+    if command != "render":  # render's --out is the sheet itself
+        _write(getattr(args, "out", None), payload)
     return payload
 
 
