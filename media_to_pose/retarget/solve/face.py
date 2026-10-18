@@ -11,6 +11,7 @@ from ...core.face_ranges import map_value
 from ...rig.face_defaults import is_signed
 from ...rig.face_schemes import matching_shape_blocks
 from ...rig.face_space import (
+    bone_axis,
     face_axis,
     face_frame,
     gaze_pivot_distance,
@@ -170,24 +171,6 @@ def _apply_shapes(armature, entries, frame, scheme: str, target_pose: TargetPose
     return changed
 
 
-def _axis(axis_name: str) -> Vector:
-    sign = -1.0 if axis_name.startswith("-") else 1.0
-    return {
-        "X": Vector((sign, 0.0, 0.0)),
-        "Y": Vector((0.0, sign, 0.0)),
-        "Z": Vector((0.0, 0.0, sign)),
-    }[axis_name[-1]]
-
-
-def _secondary_axis(primary: Vector, preferred: Vector) -> Vector:
-    """Return a stable perpendicular control axis for two-axis gaze."""
-    secondary = preferred - primary * preferred.dot(primary)
-    if secondary.length < 1.0e-8:
-        fallback = Vector((1.0, 0.0, 0.0))
-        secondary = fallback - primary * fallback.dot(primary)
-    return secondary.normalized()
-
-
 # Upper lids follow the eyes: they drop a little when looking down and lift
 # when looking up. Lid shape keys already do this; bone lids need the help.
 LID_FOLLOW_GAZE = 0.3
@@ -314,7 +297,7 @@ def _apply_face_controls(
         rotation = Quaternion()
         correction = Vector((0.0, 0.0, 0.0))
         for entry, value in controls:
-            rotation @= Quaternion(_axis(entry.axis), math.radians(value))
+            rotation @= Quaternion(bone_axis(entry.axis), math.radians(value))
             correction += Vector(entry.correction_euler)
         target_pose.set_basis_rotation(
             controls[0][0].semantic_id,

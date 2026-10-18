@@ -18,11 +18,11 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Matrix, Quaternion
 
 from .face_defaults import apply_default_ranges, default_ranges, is_signed
 from .face_schemes import associated_meshes, matching_shape_blocks
-from .face_space import face_axis, face_frame, to_bone
+from .face_space import bone_axis, face_axis, face_frame, to_bone
 from .locks import suppress_manual_locks
 
 # Control -> (ARKit keys of the positive side, keys of the negative side).
@@ -117,9 +117,7 @@ def _pose(bone, entry, space, value: float) -> None:
             to_bone(bone, face_axis(space, entry.axis) * value)
         )
     else:
-        axis = {"X": (1, 0, 0), "Y": (0, 1, 0), "Z": (0, 0, 1)}[entry.axis[-1]]
-        sign = -1.0 if entry.axis.startswith("-") else 1.0
-        rotation = Quaternion(Vector(axis) * sign, math.radians(value))
+        rotation = Quaternion(bone_axis(entry.axis), math.radians(value))
         bone.matrix_basis = rotation.to_matrix().to_4x4()
 
 

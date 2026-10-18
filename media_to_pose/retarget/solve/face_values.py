@@ -21,10 +21,9 @@ from ...core.face_ranges import share_of_output, strength
 from ...core.requests import FaceOutput
 from ...rig.face_defaults import RANGE_FIELDS, is_signed
 from ...rig.face_schemes import matching_shape_blocks
-from ...rig.face_space import face_axis, face_frame, gaze_tracker
+from ...rig.face_space import bone_axis, face_axis, face_frame, gaze_tracker
 from .common import _mapped_bone
 from .face import (
-    _axis,
     _face_control_values,
     _finite_float,
     facs_values,
@@ -119,7 +118,7 @@ def bone_output(bone, entry, space) -> float:
         return offset.dot(face_axis(space, entry.axis))
     rotation = bone.matrix_basis.to_quaternion()
     axis, angle = rotation.to_axis_angle()
-    return math.degrees(angle * Vector(axis).dot(_axis(entry.axis)))
+    return math.degrees(angle * Vector(axis).dot(bone_axis(entry.axis)))
 
 
 class FaceValueReader:

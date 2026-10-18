@@ -70,6 +70,16 @@ def face_axis(frame: FaceFrame, axis_name: str) -> Vector:
     return {"X": frame.lateral, "Y": frame.forward, "Z": frame.up}[axis_name[-1]] * sign
 
 
+def bone_axis(axis_name: str) -> Vector:
+    """A bone-local axis such as ``X`` or ``-Z`` as a unit vector."""
+    sign = -1.0 if axis_name.startswith("-") else 1.0
+    return {
+        "X": Vector((sign, 0.0, 0.0)),
+        "Y": Vector((0.0, sign, 0.0)),
+        "Z": Vector((0.0, 0.0, sign)),
+    }[axis_name[-1]]
+
+
 def to_bone(bone, vector: Vector) -> Vector:
     """An armature-space direction in the bone's rest (pose channel) space."""
     return bone.bone.matrix_local.to_3x3().inverted() @ vector
@@ -98,6 +108,7 @@ def gaze_pivot_distance(armature, target, frame: FaceFrame) -> float:
 
 __all__ = [
     "FaceFrame",
+    "bone_axis",
     "eye_position",
     "face_axis",
     "face_frame",
