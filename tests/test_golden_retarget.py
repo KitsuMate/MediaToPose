@@ -12,31 +12,24 @@ from __future__ import annotations
 import copy
 import json
 import math
-import os
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
 import bpy
-from mathutils import Matrix, Quaternion
+from mathutils import Matrix
 
 from tests.blender_test_support import (
-    FIXTURES,
+    assert_pose_close,
     fixture_path,
+    golden_snapshot,
     register_addon,
     scene_context,
 )
 
-GOLDEN = FIXTURES / "golden"
-SCHEMA_VERSION = 1
-ROTATION_TOLERANCE_DEGREES = 0.1
 LOCATION_TOLERANCE = 1.0e-3
 KEY_VALUE_TOLERANCE = 2.0e-3
 FRAME_TOLERANCE = 1.0e-4
-
-
-def _update_requested() -> bool:
-    return os.environ.get("MTP_UPDATE_GOLDEN") == "1"
 
 
 def _round(values, digits: int = 6) -> list[float]:
@@ -131,43 +124,19 @@ class GoldenRetargetTests(unittest.TestCase):
         }
 
     def _check(self, name: str, actual: dict) -> None:
-        path = GOLDEN / f"{name}.json"
-        payload = {"schema_version": SCHEMA_VERSION, "case": name, **actual}
-        if _update_requested():
-            GOLDEN.mkdir(parents=True, exist_ok=True)
-            path.write_text(
-                json.dumps(payload, indent=1, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+        expected = golden_snapshot(self, name, actual)
+        if expected is None:
             return
-        if not path.is_file():
-            self.fail(f"Missing golden snapshot {path}; run with --update-golden")
-        expected = json.loads(path.read_text(encoding="utf-8"))
-        self.assertEqual(expected["schema_version"], SCHEMA_VERSION)
         if "bones" in expected:
-            self._compare_pose(name, expected["bones"], actual["bones"])
+            assert_pose_close(
+                self,
+                name,
+                expected["bones"],
+                actual["bones"],
+                location_tolerance=LOCATION_TOLERANCE,
+            )
         else:
             self._compare_action(name, expected, actual)
-
-    def _compare_pose(self, name, expected, actual) -> None:
-        self.assertEqual(set(expected), set(actual), name)
-        for bone, values in expected.items():
-            want = Quaternion(values["rotation"])
-            have = Quaternion(actual[bone]["rotation"])
-            angle = math.degrees(want.rotation_difference(have).angle)
-            angle = min(angle, 360.0 - angle)
-            self.assertLess(
-                angle, ROTATION_TOLERANCE_DEGREES, f"{name}: {bone} rotation"
-            )
-            for want_axis, have_axis in zip(
-                values["location"], actual[bone]["location"], strict=True
-            ):
-                self.assertAlmostEqual(
-                    want_axis,
-                    have_axis,
-                    delta=LOCATION_TOLERANCE,
-                    msg=f"{name}: {bone} location",
-                )
 
     def _compare_action(self, name, expected, actual) -> None:
         for field in ("frames", "bone_samples", "shape_samples", "warnings"):

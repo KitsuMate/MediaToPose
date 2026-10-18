@@ -30,6 +30,8 @@ TEST_MODULES = (
     "tests.test_api",
     "tests.test_face_detection",
     "tests.test_face_transfer",
+    "tests.test_face_video",
+    "tests.test_face_capture",
     "tests.test_golden_face",
     "tests.test_registration",
     "tests.test_settings_schema",

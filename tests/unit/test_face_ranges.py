@@ -20,12 +20,9 @@ def _entry(**changes) -> SimpleNamespace:
     return SimpleNamespace(**values)
 
 
-def _old_value(detected, *, gain, offset, clamp_min, clamp_max, invert, scale):
+def _old_value(detected, *, gain, offset, clamp_min, clamp_max, scale):
     """The 0.2.0 face value: clamp((detected - offset) * gain) * travel."""
-    value = (detected - offset) * gain
-    if invert:
-        value = clamp_max - value
-    return min(max(value, clamp_min), clamp_max) * scale
+    return min(max((detected - offset) * gain, clamp_min), clamp_max) * scale
 
 
 class FaceRangeTests(unittest.TestCase):
@@ -83,7 +80,6 @@ class FaceRangeTests(unittest.TestCase):
                     offset=offset,
                     clamp_min=clamp_min,
                     clamp_max=clamp_max,
-                    invert=False,
                     scale=scale,
                 )
                 new = face_ranges.map_value(entry, detected, signed=signed)

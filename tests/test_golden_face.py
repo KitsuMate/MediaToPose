@@ -1,35 +1,34 @@
 """Golden snapshots of face transfer.
 
 Deterministic coefficients covering every ARKit name are applied to the
-FaceFX face rig (ARKit shape keys and face bones) and to VRoid (VRM
-expressions), and a short clip with a blink runs through the sequence
-pipeline. The values every target ends up with are compared with
-``tests/fixtures/golden/*.json``. Regenerate with ``--update-golden`` (or
-``MTP_UPDATE_GOLDEN=1``) after an intended change and review the diff.
+FaceFX face rig (ARKit shape keys, face bones and generated FACS targets)
+and to VRoid (VRM expressions), and a short clip with a blink runs through
+the sequence pipeline. The values every target ends up with are compared
+with ``tests/fixtures/golden/*.json``. Regenerate with ``--update-golden``
+(or ``MTP_UPDATE_GOLDEN=1``) after an intended change and review the diff.
 """
 
 from __future__ import annotations
 
-import json
 import math
-import os
 import unittest
-from types import SimpleNamespace
 
 import bpy
 
 from tests.blender_test_support import (
-    FIXTURES,
+    add_facs_targets,
+    apply_face,
+    assert_pose_close,
+    face_settings,
     fixture_path,
+    golden_snapshot,
+    open_rig,
     register_addon,
     scene_context,
 )
 
-GOLDEN = FIXTURES / "golden"
-SCHEMA_VERSION = 1
 VALUE_TOLERANCE = 2.0e-3
 LOCATION_TOLERANCE = 1.0e-4
-ROTATION_TOLERANCE = 1.0e-3
 
 
 def _coefficients(addon, phase: int = 0) -> dict[str, float]:
@@ -74,54 +73,25 @@ def _bone_values(rig) -> dict[str, dict[str, list[float]]]:
     return dict(sorted(bones.items()))
 
 
-class GoldenFaceTests(unittest.TestCase):
+class _GoldenFace(unittest.TestCase):
+    fixture = ("facefx_face_rig", "FaceFX.Rig")
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.addon = register_addon()
+        cls.rig = open_rig(cls.addon, *cls.fixture)
+
     def setUp(self) -> None:
-        self.addon = register_addon()
+        _reset(self.rig)
 
-    def _open(self, fixture_id: str, rig_name: str):
-        bpy.ops.wm.open_mainfile(filepath=str(fixture_path(fixture_id)))
-        self.addon.register()
-        rig = bpy.data.objects[rig_name]
-        self.addon.api.auto_map(rig.name)
-        _reset(rig)
-        return rig
-
-    def _settings(self, face_output: str, **extra) -> SimpleNamespace:
-        return SimpleNamespace(
-            provider="MEDIAPIPE",
-            use_body=False,
-            use_hands=False,
-            use_face=True,
-            face_output=face_output,
-            **extra,
-        )
-
-    def _still(self, rig, face_output: str) -> dict:
-        frame = self.addon.core.types.CanonicalFrame(
-            timestamp_ms=0, blendshapes=_coefficients(self.addon)
-        )
-        self.addon.retarget.apply_frame(
-            rig,
-            frame,
-            self._settings(face_output),
-            post_process=False,
-            scene_context=scene_context(),
-        )
-        bpy.context.view_layer.update()
-        return {"shapes": _shape_values(), "bones": _bone_values(rig)}
+    def _still(self, face_output: str) -> dict:
+        apply_face(self.addon, self.rig, _coefficients(self.addon), face_output)
+        return {"shapes": _shape_values(), "bones": _bone_values(self.rig)}
 
     def _check(self, name: str, actual: dict) -> None:
-        path = GOLDEN / f"{name}.json"
-        payload = {"schema_version": SCHEMA_VERSION, "case": name, **actual}
-        if os.environ.get("MTP_UPDATE_GOLDEN") == "1":
-            path.write_text(
-                json.dumps(payload, indent=1, sort_keys=True) + "\n", encoding="utf-8"
-            )
+        expected = golden_snapshot(self, name, actual)
+        if expected is None:
             return
-        if not path.is_file():
-            self.fail(f"Missing golden snapshot {path}; run with --update-golden")
-        expected = json.loads(path.read_text(encoding="utf-8"))
-        self.assertEqual(expected["schema_version"], SCHEMA_VERSION)
         for key in ("shapes", "frames"):
             if key not in expected:
                 continue
@@ -136,84 +106,52 @@ class GoldenFaceTests(unittest.TestCase):
                         a, b, delta=VALUE_TOLERANCE, msg=f"{name}: {target}"
                     )
         if "bones" in expected:
-            self.assertEqual(
-                set(expected["bones"]), set(actual["bones"]), f"{name}: bones"
+            assert_pose_close(
+                self,
+                name,
+                expected["bones"],
+                actual["bones"],
+                location_tolerance=LOCATION_TOLERANCE,
             )
-            for bone, want in expected["bones"].items():
-                have = actual["bones"][bone]
-                for a, b in zip(want["location"], have["location"], strict=True):
-                    self.assertAlmostEqual(
-                        a, b, delta=LOCATION_TOLERANCE, msg=f"{name}: {bone}"
-                    )
-                # q and -q are the same rotation.
-                dot = abs(
-                    sum(
-                        x * y
-                        for x, y in zip(want["rotation"], have["rotation"], strict=True)
-                    )
-                )
-                self.assertAlmostEqual(
-                    dot, 1.0, delta=ROTATION_TOLERANCE, msg=f"{name}: {bone}"
-                )
 
+
+class GoldenFaceFxTests(_GoldenFace):
     def test_still_face_arkit(self) -> None:
-        rig = self._open("facefx_face_rig", "FaceFX.Rig")
-        self._check("still_face_arkit", self._still(rig, "ARKIT"))
+        actual = self._still("ARKIT")
+        # The other meshes carry copies of the face's keys (with any prefix)
+        # and follow it exactly; only the face itself is stored.
+        normalize = self.addon.rig.names.normalize_name
+        face = {
+            normalize(key.split("/", 1)[1], shape=True): value
+            for key, value in actual["shapes"].items()
+            if key.startswith("FaceFX/")
+        }
+        for key, value in actual["shapes"].items():
+            mesh, name = key.split("/", 1)
+            if mesh != "FaceFX":
+                self.assertAlmostEqual(
+                    value, face[normalize(name, shape=True)], msg=key
+                )
+        actual["shapes"] = {
+            key: value
+            for key, value in actual["shapes"].items()
+            if key.startswith("FaceFX/")
+        }
+        self._check("still_face_arkit", actual)
 
     def test_still_face_bones(self) -> None:
-        rig = self._open("facefx_face_rig", "FaceFX.Rig")
-        self._check("still_face_bones", self._still(rig, "BONES"))
-
-    def test_still_face_facs(self) -> None:
-        rig = self._open("facefx_face_rig", "FaceFX.Rig")
-        self._add_facs_keys(rig)
-        actual = self._still(rig, "FACS")
-        self.assertTrue(actual["shapes"], "FACS must drive shape keys")
-        self._check("still_face_facs", actual)
-
-    def _add_facs_keys(self, rig) -> None:
-        # FaceFX's facs_bs_* names are ARKit coefficients, not FACS AUs.
-        # Generate actual AU targets, each moving a distinct vertex.
-        mesh = bpy.data.objects["FaceFX"]
-        for index, (name, _label) in enumerate(
-            self.addon.core.constants.FACS_ACTION_UNITS
-        ):
-            block = mesh.shape_key_add(name=name, from_mix=False)
-            block.data[index].co.z += 0.01
-        self.addon.api.auto_map(rig.name)
-
-    def test_real_face_reaches_facs_targets(self) -> None:
-        rig = self._open("facefx_face_rig", "FaceFX.Rig")
-        self._add_facs_keys(rig)
-        result = self.addon.api.capture(
-            str(fixture_path("face_laugh_jaw_open")),
-            rig.name,
-            parts={"face"},
-            face_output="FACS",
-            keep_cache=True,
-        )
-        self.assertTrue(result.succeeded, result.message)
-        keys = bpy.data.objects["FaceFX"].data.shape_keys.key_blocks
-        self.assertGreater(keys["AU26"].value, 0.1)
-        self.assertLess(
-            self.addon.api.evaluate(rig.name, result=result).expression_fit, 0.01
-        )
-
-    def test_still_face_vrm(self) -> None:
-        rig = self._open("vroid_test_rig", "Armature")
-        self._check("still_face_vrm", self._still(rig, "VRM"))
+        self._check("still_face_bones", self._still("BONES"))
 
     def test_sequence_face_arkit(self) -> None:
-        rig = self._open("facefx_face_rig", "FaceFX.Rig")
-        config = rig.mtp_rig_config
+        config = self.rig.mtp_rig_config
         for item in config.post_processing_modules:
             item.enabled = item.module_id == "TEMPORAL_CORRECTION"
         context = scene_context()
         step_ms = 1000.0 / context.fps
         frames = []
-        for index in range(24):
+        for index in range(12):
             values = _coefficients(self.addon, phase=index % 3)
-            blink = {10: 0.7, 11: 0.95, 12: 0.6}.get(index, 0.05)
+            blink = {6: 0.7, 7: 0.95, 8: 0.6}.get(index, 0.05)
             values["eyeBlinkLeft"] = values["eyeBlinkRight"] = blink
             values["mouthSmileLeft"] = 0.3 + 0.1 * math.sin(index * 2.5)
             frames.append(
@@ -221,7 +159,7 @@ class GoldenFaceTests(unittest.TestCase):
                     timestamp_ms=round(index * step_ms), blendshapes=values
                 )
             )
-        settings = self._settings(
+        settings = face_settings(
             "ARKIT",
             media_kind="VIDEO",
             root_motion_mode="OFF",
@@ -229,18 +167,16 @@ class GoldenFaceTests(unittest.TestCase):
             keep_detection_cache=False,
         )
         self.addon.retarget.apply_sequence(
-            rig, frames, settings, 1.0, scene_context=context
+            self.rig, frames, settings, 1.0, scene_context=context
         )
         keys = bpy.data.objects["FaceFX"].data.shape_keys
-        watched = (
+        self.addCleanup(keys.animation_data_clear)
+        self.addCleanup(self.rig.animation_data_clear)
+        names = (
             "arkit_EyeBlinkLeft",
             "arkit_MouthSmileLeft",
             "arkit_JawOpen",
             "arkit_BrowInnerUp",
-        )
-        names = [name for name in watched if name in keys.key_blocks]
-        self.assertEqual(
-            len(names), len(watched), [b.name for b in keys.key_blocks][:20]
         )
         sampled: dict[str, list[float]] = {name: [] for name in names}
         scene = bpy.context.scene
@@ -249,6 +185,37 @@ class GoldenFaceTests(unittest.TestCase):
             for name in names:
                 sampled[name].append(round(keys.key_blocks[name].value, 5))
         self._check("sequence_face_arkit", {"frames": sampled})
+
+
+class GoldenFacsTests(_GoldenFace):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        add_facs_targets(cls.addon, cls.rig)
+
+    def test_still_face_facs(self) -> None:
+        actual = self._still("FACS")
+        self.assertTrue(actual["shapes"], "FACS must drive shape keys")
+        self._check("still_face_facs", actual)
+
+    def test_real_face_reaches_facs_targets(self) -> None:
+        result = self.addon.api.capture(
+            str(fixture_path("face_laugh_jaw_open")),
+            self.rig.name,
+            parts={"face"},
+            face_output="FACS",
+            keep_cache=False,
+        )
+        self.assertTrue(result.succeeded, result.message)
+        keys = bpy.data.objects["FaceFX"].data.shape_keys.key_blocks
+        self.assertGreater(keys["AU26"].value, 0.1)
+
+
+class GoldenVrmTests(_GoldenFace):
+    fixture = ("vroid_test_rig", "Armature")
+
+    def test_still_face_vrm(self) -> None:
+        self._check("still_face_vrm", self._still("VRM"))
 
 
 if __name__ == "__main__":

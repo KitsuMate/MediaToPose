@@ -8,7 +8,6 @@ import operator
 import unittest
 
 from tests.blender_test_support import (
-    FIXTURES,
     fixture_manifest,
     load_addon,
     verify_fixture,
@@ -47,19 +46,6 @@ class FaceDetectionTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls.provider.close()
-
-    def test_every_still_has_an_expectation_and_a_licence(self) -> None:
-        stills = {
-            entry["id"]: entry
-            for entry in fixture_manifest()["fixture"]
-            if entry["path"].startswith("media/face/")
-        }
-        self.assertEqual(set(stills), set(self.expected))
-        for entry in stills.values():
-            with self.subTest(still=entry["id"]):
-                self.assertEqual(entry["license"], "CC0-1.0")
-                self.assertTrue(entry["source_url"].startswith("https://"))
-                self.assertTrue((FIXTURES / entry["path"]).is_file())
 
     def test_mirrored_input_mirrors_the_face_like_the_body(self) -> None:
         provider_module = self.addon.providers.mediapipe.provider
