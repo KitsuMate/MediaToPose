@@ -15,6 +15,7 @@ import logging
 import os
 import queue
 import re
+import sys
 import threading
 import time
 import traceback
@@ -226,7 +227,7 @@ def download_file(
 def _pid_running(pid: int) -> bool:
     if pid <= 0:
         return False
-    if os.name == "nt":
+    if sys.platform == "win32":
         return _windows_pid_running(pid)
     try:
         os.kill(pid, 0)
@@ -241,6 +242,8 @@ def _pid_running(pid: int) -> bool:
 
 def _windows_pid_running(pid: int) -> bool:
     """Query a process without signalling it (os.kill(pid, 0) kills on Windows)."""
+    # Lets type checkers on other platforms skip the Windows-only ctypes API.
+    assert sys.platform == "win32"
     import ctypes
     from ctypes import wintypes
 
