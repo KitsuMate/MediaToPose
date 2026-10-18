@@ -25,6 +25,10 @@ BLINKS = ("eyeBlinkLeft", "eyeBlinkRight")
 # Expression groups smooth with different strengths: eyes and lids move
 # fastest, the jaw slowest.
 GROUP_STRENGTH = {"eye": 0.5, "brow": 1.0, "mouth": 0.8, "jaw": 1.0, "other": 0.8}
+# Neutral calibration needs this many detected frames to trust a resting
+# level, and ignores resting levels too small to matter.
+CALIBRATION_MIN_FRAMES = 10
+CALIBRATION_MIN_REST = 0.02
 
 
 def coefficient_group(name: str) -> str:
@@ -171,12 +175,12 @@ def filter_face_track(
         name: [float(values.get(name, 0.0)) for values in frames] for name in names
     }
 
-    if settings.neutral_calibration and len(detected) >= 10:
+    if settings.neutral_calibration and len(detected) >= CALIBRATION_MIN_FRAMES:
         for name in names:
             rest = _percentile(
                 [columns[name][index] for index in detected], settings.rest_percentile
             )
-            if rest <= 0.02:
+            if rest <= CALIBRATION_MIN_REST:
                 continue
             stats.calibrated[name] = round(rest, 4)
             scale = 1.0 / max(1.0 - rest, 1.0e-3)

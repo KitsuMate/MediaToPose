@@ -21,20 +21,10 @@ Pure Python, so it works on Blender mapping entries and plain snapshots.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
-class FaceRanges:
-    input_zero: float = 0.0
-    input_full: float = 1.0
-    output_zero: float = 0.0
-    output_full: float = 1.0
-    output_negative: float = -1.0
-    influence: float = 1.0
-
-
-def _finite(value, default: float = 0.0) -> float:
+def finite(value, default: float = 0.0) -> float:
+    """``value`` as a float, or ``default`` when it is not a finite number."""
     try:
         result = float(value)
     except (TypeError, ValueError):
@@ -44,21 +34,21 @@ def _finite(value, default: float = 0.0) -> float:
 
 def strength(entry, detected: float, *, signed: bool = False) -> float:
     """The detection as a share of the input range, clamped."""
-    span = _finite(entry.input_full, 1.0) - _finite(entry.input_zero)
+    span = finite(entry.input_full, 1.0) - finite(entry.input_zero)
     if abs(span) < 1.0e-9:
         return 0.0
-    share = (_finite(detected) - _finite(entry.input_zero)) / span
+    share = (finite(detected) - finite(entry.input_zero)) / span
     return min(max(share, -1.0 if signed else 0.0), 1.0)
 
 
 def output_value(entry, share: float) -> float:
     """The target value at ``share`` of the range, times the influence."""
-    zero = _finite(entry.output_zero)
+    zero = finite(entry.output_zero)
     if share >= 0.0:
-        value = zero + share * (_finite(entry.output_full, 1.0) - zero)
+        value = zero + share * (finite(entry.output_full, 1.0) - zero)
     else:
-        value = zero + (-share) * (_finite(entry.output_negative, -1.0) - zero)
-    return value * _finite(entry.influence, 1.0)
+        value = zero + (-share) * (finite(entry.output_negative, -1.0) - zero)
+    return value * finite(entry.influence, 1.0)
 
 
 def map_value(entry, detected: float, *, signed: bool = False) -> float:
@@ -71,13 +61,13 @@ def share_of_output(entry, value: float) -> float:
     Used to read a rig back in the same 0..1 (or -1..1) units as
     ``strength``, whatever the target's units are.
     """
-    influence = _finite(entry.influence, 1.0)
+    influence = finite(entry.influence, 1.0)
     if abs(influence) < 1.0e-9:
         return 0.0
-    value = _finite(value) / influence
-    zero = _finite(entry.output_zero)
-    full = _finite(entry.output_full, 1.0) - zero
-    negative = _finite(entry.output_negative, -1.0) - zero
+    value = finite(value) / influence
+    zero = finite(entry.output_zero)
+    full = finite(entry.output_full, 1.0) - zero
+    negative = finite(entry.output_negative, -1.0) - zero
     offset = value - zero
     if abs(full) > 1.0e-12 and offset * full >= 0.0:
         return offset / full
@@ -100,22 +90,22 @@ def legacy_ranges(
     minus it when inverted) times ``scale`` (the control's travel); the
     detection reached ``clamp_max`` at ``offset + clamp_max / gain``.
     """
-    gain = _finite(gain, 1.0)
-    top = _finite(clamp_max, 1.0) or 1.0
+    gain = finite(gain, 1.0)
+    top = finite(clamp_max, 1.0) or 1.0
     if abs(gain) < 1.0e-9:
         # A gain of 0 held the target at rest (at ``clamp_max`` inverted):
         # an empty output range keeps it there.
         held = top * scale if invert else 0.0
         return {
-            "input_zero": _finite(offset),
-            "input_full": _finite(offset) + top,
+            "input_zero": finite(offset),
+            "input_full": finite(offset) + top,
             "output_zero": held,
             "output_full": held,
             "output_negative": held,
         }
     ranges = {
-        "input_zero": _finite(offset),
-        "input_full": _finite(offset) + top / gain,
+        "input_zero": finite(offset),
+        "input_full": finite(offset) + top / gain,
         "output_zero": 0.0,
         "output_full": top * scale,
         # Signed controls had clamp_min = -clamp_max: the same slope below
@@ -128,7 +118,7 @@ def legacy_ranges(
 
 
 __all__ = [
-    "FaceRanges",
+    "finite",
     "legacy_ranges",
     "map_value",
     "output_value",

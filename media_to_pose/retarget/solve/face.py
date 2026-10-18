@@ -1,4 +1,4 @@
-"""Face output: ARKit/FACS shape keys, eye gaze and facial bones."""
+"""Face output: ARKit, FACS and VRM shape keys, eye gaze and facial bones."""
 
 from __future__ import annotations
 
@@ -7,7 +7,8 @@ import math
 import bpy
 from mathutils import Quaternion, Vector
 
-from ...core.face_ranges import map_value
+from ...core.face_ranges import finite, map_value
+from ...core.requests import FaceOutput
 from ...rig.face_defaults import is_signed
 from ...rig.face_schemes import matching_shape_blocks
 from ...rig.face_space import (
@@ -21,12 +22,8 @@ from ..target_pose import TargetPose
 from .common import _mapped_bone
 
 
-def _finite_float(value, default: float = 0.0) -> float:
-    try:
-        result = float(value)
-    except (TypeError, ValueError):
-        return float(default)
-    return result if math.isfinite(result) else float(default)
+def _unit(value: float) -> float:
+    return min(max(value, 0.0), 1.0)
 
 
 def _expression_value(entry, raw_value: float) -> float:
@@ -48,10 +45,7 @@ def facs_values(blendshapes: dict[str, float]) -> dict[str, float]:
     """
 
     def get(name: str) -> float:
-        return min(
-            max(_finite_float(blendshapes.get(name, 0.0)), 0.0),
-            1.0,
-        )
+        return _unit(finite(blendshapes.get(name, 0.0)))
 
     bilateral_sources = {
         "AU01": ("browInnerUp", "browInnerUp"),
@@ -95,7 +89,7 @@ def facs_values(blendshapes: dict[str, float]) -> dict[str, float]:
                 (get("mouthLowerDownLeft") + get("mouthLowerDownRight")) / 2.0,
             ),
             "AU26": jaw_open,
-            "AU27": min(max((jaw_open - 0.6) / 0.4, 0.0), 1.0),
+            "AU27": _unit((jaw_open - 0.6) / 0.4),
             "AU28": max(get("mouthRollUpper"), get("mouthRollLower")),
         }
     )
@@ -112,13 +106,10 @@ def vrm_values(blendshapes: dict[str, float]) -> dict[str, float]:
     """
 
     def get(name: str) -> float:
-        return min(max(_finite_float(blendshapes.get(name, 0.0)), 0.0), 1.0)
+        return _unit(finite(blendshapes.get(name, 0.0)))
 
     def both(left: str, right: str) -> float:
         return (get(left) + get(right)) / 2.0
-
-    def clamp(value: float) -> float:
-        return min(max(value, 0.0), 1.0)
 
     jaw = get("jawOpen")
     funnel = get("mouthFunnel")
@@ -129,42 +120,48 @@ def vrm_values(blendshapes: dict[str, float]) -> dict[str, float]:
     return {
         "blinkLeft": get("eyeBlinkLeft"),
         "blinkRight": get("eyeBlinkRight"),
-        "aa": clamp(jaw - 0.5 * max(funnel, pucker)),
-        "oh": clamp(min(funnel, jaw + 0.3)),
+        # Visemes: an open jaw is "aa" unless the lips round ("oh", "ou");
+        # stretched lips are "ee", a closed smile a little "ih".
+        "aa": _unit(jaw - 0.5 * max(funnel, pucker)),
+        "oh": _unit(min(funnel, jaw + 0.3)),
         "ou": pucker,
-        "ee": clamp(stretch * (1.0 - jaw)),
-        "ih": clamp(smile * 0.4 * (1.0 - jaw)),
+        "ee": _unit(stretch * (1.0 - jaw)),
+        "ih": _unit(smile * 0.4 * (1.0 - jaw)),
         "mouthJoy": smile,
         "mouthSorrow": both("mouthFrownLeft", "mouthFrownRight"),
         "mouthAngry": both("mouthPressLeft", "mouthPressRight"),
         "browSurprised": max(get("browInnerUp"), outer_up),
         "browAngry": both("browDownLeft", "browDownRight"),
-        "browSorrow": clamp(get("browInnerUp") - outer_up),
+        "browSorrow": _unit(get("browInnerUp") - outer_up),
         "eyeSurprised": both("eyeWideLeft", "eyeWideRight"),
         "eyeJoyLeft": get("cheekSquintLeft"),
         "eyeJoyRight": get("cheekSquintRight"),
     }
 
 
-def _matching_shape_blocks(armature, entry):
-    yield from matching_shape_blocks(armature, entry)
+def expression_values(
+    blendshapes: dict[str, float], face_output: FaceOutput
+) -> dict[str, float]:
+    """The values ``face_output`` drives, before the mapping's ranges."""
+    if face_output == FaceOutput.FACS:
+        return facs_values(blendshapes)
+    if face_output == FaceOutput.VRM:
+        return vrm_values(blendshapes)
+    if face_output == FaceOutput.BONES:
+        return face_control_values(blendshapes)
+    return {name: finite(value) for name, value in blendshapes.items()}
 
 
-def _apply_shapes(armature, entries, frame, scheme: str, target_pose: TargetPose):
+def _apply_shapes(
+    armature, entries, frame, face_output: FaceOutput, target_pose: TargetPose
+):
     changed = []
-    expression_values = (
-        facs_values(frame.blendshapes)
-        if scheme == "FACS"
-        else vrm_values(frame.blendshapes)
-        if scheme == "VRM"
-        else frame.blendshapes
-    )
-    for name, raw_value in expression_values.items():
-        entry = entries.get(f"{scheme}_{name}")
+    for name, raw_value in expression_values(frame.blendshapes, face_output).items():
+        entry = entries.get(f"{face_output}_{name}")
         if not entry or not entry.enabled or not entry.target_name:
             continue
         value = _expression_value(entry, raw_value)
-        for obj, block in _matching_shape_blocks(armature, entry):
+        for obj, block in matching_shape_blocks(armature, entry):
             value_clamped = min(max(value, block.slider_min), block.slider_max)
             target_pose.set_shape(obj, block, value_clamped)
             changed.append((obj, block))
@@ -176,9 +173,9 @@ def _apply_shapes(armature, entries, frame, scheme: str, target_pose: TargetPose
 LID_FOLLOW_GAZE = 0.3
 
 
-def _face_control_values(blendshapes: dict[str, float]) -> dict[str, float]:
+def face_control_values(blendshapes: dict[str, float]) -> dict[str, float]:
     def get(name: str) -> float:
-        return _finite_float(blendshapes.get(name, 0.0))
+        return finite(blendshapes.get(name, 0.0))
 
     def lid(side: str) -> float:
         blink = get(f"eyeBlink{side}")
@@ -210,7 +207,7 @@ def _face_control_values(blendshapes: dict[str, float]) -> dict[str, float]:
 
 def _eye_gaze(blendshapes: dict[str, float], side: str) -> tuple[float, float]:
     def get(name: str) -> float:
-        return _finite_float(blendshapes.get(name, 0.0))
+        return finite(blendshapes.get(name, 0.0))
 
     if side == "L":
         horizontal = get("eyeLookOutLeft") - get("eyeLookInLeft")
@@ -271,7 +268,7 @@ def _apply_face_controls(
     target_pose: TargetPose,
 ) -> set[bpy.types.PoseBone]:
     changed = set()
-    values = _face_control_values(frame.blendshapes)
+    values = face_control_values(frame.blendshapes)
     rotation_groups = {}
     location_groups = {}
     for semantic_id, value in values.items():

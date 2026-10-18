@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..core.constants import FACE_OUTPUTS
+
 
 def _descriptor(provider: str):
     # Provider descriptors pull in the inference backends; import on use so
@@ -85,13 +87,7 @@ def mapping_scope_issues(armature, settings) -> tuple[str, ...]:
 
 def _output_completeness(config, face_output: str) -> float:
     """How completely the rig maps the selected face output (0 to 1)."""
-    field = {
-        "ARKIT": "arkit_complete",
-        "FACS": "facs_complete",
-        "VRM": "vrm_complete",
-        "BONES": "face_complete",
-    }[face_output]
-    return float(getattr(config, field))
+    return float(getattr(config, FACE_OUTPUTS[face_output][0]))
 
 
 def face_output_warning(armature, settings) -> str:
@@ -100,12 +96,7 @@ def face_output_warning(armature, settings) -> str:
         return ""
     config = armature.mtp_rig_config
     completeness = _output_completeness(config, settings.face_output)
-    label = {
-        "ARKIT": "ARKit morphs",
-        "FACS": "FACS morphs",
-        "VRM": "VRM expressions",
-        "BONES": "facial bones",
-    }[settings.face_output]
+    label = FACE_OUTPUTS[settings.face_output][2]
     if completeness == 0.0:
         return f"{label} are fully missing; face output will be skipped"
     if completeness < 1.0:

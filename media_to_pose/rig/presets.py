@@ -93,12 +93,7 @@ def _legacy_item(armature, entries, entry, item: dict) -> dict:
     for key in ("channel_mode", "axis", "target_name"):
         if key in item:
             setattr(entry, key, item[key])
-    for key, value in legacy.items():
-        entry[key] = value
-    migrate_ranges(armature, entries, entry)
-    for key in LEGACY_RANGE_KEYS:
-        if key in entry:
-            del entry[key]
+    migrate_ranges(armature, entries, entry, legacy)
     item.update({name: getattr(entry, name) for name in RANGE_FIELDS})
     return item
 

@@ -13,10 +13,9 @@ import bpy
 from mathutils import Matrix, Vector
 
 from ..core.types import CanonicalFrame
-from ..retarget.solve.common import _mapped_bone
 from ..rig import mapping
 from ..rig.face_schemes import associated_meshes
-from ..rig.face_space import FaceFrame, eye_position, face_frame
+from ..rig.face_space import FaceFrame, eye_position, face_frame, mapped_bone
 
 # Space around the detected face box, as a share of its size.
 FACE_PADDING = 0.35
@@ -89,9 +88,9 @@ def face_shot(armature) -> FaceShot:
     """
     entries = mapping.mapping_by_id(armature.mtp_rig_config)
     space = face_frame(armature, entries)
-    eye_left = _mapped_bone(armature, entries, "EYE_L")
-    eye_right = _mapped_bone(armature, entries, "EYE_R")
-    head = _mapped_bone(armature, entries, "HEAD")
+    eye_left = mapped_bone(armature, entries, "EYE_L")
+    eye_right = mapped_bone(armature, entries, "EYE_R")
+    head = mapped_bone(armature, entries, "HEAD")
     head_length = head.bone.length if head is not None else 0.0
     head_name = head.name if head is not None else ""
     if eye_left is not None and eye_right is not None:

@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from mathutils import Vector
 
 
-def _mapped(armature, entries, semantic_id: str):
+def mapped_bone(armature, entries, semantic_id: str):
+    """The pose bone mapped to ``semantic_id``, if it is enabled and set."""
     entry = entries.get(semantic_id)
     if not entry or not entry.enabled or not entry.target_name:
         return None
@@ -40,9 +41,9 @@ def eye_position(armature, bone) -> Vector:
 
 
 def face_frame(armature, entries) -> FaceFrame:
-    head = _mapped(armature, entries, "HEAD")
-    eye_left = _mapped(armature, entries, "EYE_L")
-    eye_right = _mapped(armature, entries, "EYE_R")
+    head = mapped_bone(armature, entries, "HEAD")
+    eye_left = mapped_bone(armature, entries, "EYE_L")
+    eye_right = mapped_bone(armature, entries, "EYE_R")
     up = (
         Vector(head.bone.matrix_local.col[1][:3]).normalized()
         if head is not None
@@ -60,6 +61,7 @@ def face_frame(armature, entries) -> FaceFrame:
         lateral = Vector((1.0, 0.0, 0.0))
     lateral.normalize()
     if scale < 1.0e-6:
+        # No eyes: about a third of the head bone, or a typical adult 6 cm.
         scale = max(head.bone.length * 0.35, 0.01) if head is not None else 0.06
     return FaceFrame(lateral, up, lateral.cross(up).normalized(), scale)
 
@@ -102,6 +104,7 @@ def gaze_pivot_distance(armature, target, frame: FaceFrame) -> float:
     """Distance from the eye to a look-at target bone."""
     tracker = gaze_tracker(armature, target)
     if tracker is None:
+        # No bone tracks it: assume the target sits two eye distances ahead.
         return frame.scale * 2.0
     return (target.bone.head_local - tracker.bone.head_local).length
 
@@ -114,5 +117,6 @@ __all__ = [
     "face_frame",
     "gaze_pivot_distance",
     "gaze_tracker",
+    "mapped_bone",
     "to_bone",
 ]

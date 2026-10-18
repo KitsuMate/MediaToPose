@@ -207,6 +207,13 @@ VRM_EXPRESSIONS = (
 
 # Face outputs that drive shape keys, in role-prefix form.
 SHAPE_SCHEMES = ("ARKIT", "FACS", "VRM")
+# Face output -> (rig config completeness field, short label, what it drives).
+FACE_OUTPUTS = {
+    "ARKIT": ("arkit_complete", "ARKit", "ARKit morphs"),
+    "FACS": ("facs_complete", "FACS", "FACS morphs"),
+    "VRM": ("vrm_complete", "VRM", "VRM expressions"),
+    "BONES": ("face_complete", "Face", "facial bones"),
+}
 
 SHAPE_ROLES = (
     [

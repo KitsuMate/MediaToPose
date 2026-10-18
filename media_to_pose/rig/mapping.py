@@ -11,6 +11,7 @@ import bpy
 from ..core.constants import (
     ALL_ROLES,
     FACE_BLENDSHAPES,
+    FACE_OUTPUTS,
     FACS_ACTION_UNITS,
     MAPPING_TABS,
     PROFILE_ARP,
@@ -21,7 +22,10 @@ from ..core.constants import (
     VRM_EXPRESSIONS,
 )
 from .face_defaults import (
+    EYES,
     GAZE_DEGREES,
+    RANGES_LEGACY,
+    RANGES_PENDING,
     RANGES_VERSION,
     apply_default_ranges,
     has_ranges,
@@ -76,9 +80,11 @@ def _add_entry(config, section: str, role: Sequence) -> None:
         # Shape keys and gaze have fixed defaults; face bone ranges depend on
         # the channel and the face size, so they are filled in once the
         # entry has a target (see ensure_face_ranges).
-        if semantic_id in {"EYE_L", "EYE_R"}:
+        if semantic_id in EYES:
             entry.output_full, entry.output_negative = GAZE_DEGREES, -GAZE_DEGREES
-        entry.ranges_version = -1 if section == "FACE_RIG" else RANGES_VERSION
+        entry.ranges_version = (
+            RANGES_PENDING if section == "FACE_RIG" else RANGES_VERSION
+        )
         entry.channel_mode = "VALUE" if section == "SHAPES" else "AUTO"
         entry.status = "MISSING" if required else "OPTIONAL"
         entry.source = "NONE"
@@ -133,7 +139,7 @@ def ensure_face_ranges(armature: bpy.types.Object) -> None:
         for entry in config.mappings:
             if not has_ranges(entry) or entry.ranges_version == RANGES_VERSION:
                 continue
-            if entry.ranges_version == 0:
+            if entry.ranges_version == RANGES_LEGACY:
                 migrate_ranges(armature, entries, entry)
             elif entry.target_name:
                 apply_default_ranges(armature, entries, entry)
@@ -209,17 +215,47 @@ def _set_mapping(
     return True
 
 
-def _range_signature(entry) -> tuple[str, str, str, bool]:
-    """What a face mapping's default ranges depend on, besides the face."""
-    return (entry.target_name, entry.channel_mode, entry.axis, entry.enabled)
+def _range_inputs(config) -> dict[str, tuple]:
+    """What face mappings' default ranges depend on: each target, channel
+    and axis, and the head and eyes that size the face."""
+    return {
+        entry.semantic_id: (
+            entry.target_name,
+            entry.channel_mode,
+            entry.axis,
+            entry.enabled,
+        )
+        for entry in config.mappings
+        if has_ranges(entry) or entry.semantic_id == "HEAD"
+    }
 
 
-def _face_signature(entries) -> tuple[str, ...]:
-    """The bones the face frame (directions and size) is measured from."""
-    return tuple(
-        entries[semantic_id].target_name if semantic_id in entries else ""
-        for semantic_id in ("HEAD", "EYE_L", "EYE_R")
+def _refresh_face_ranges(armature, before: dict[str, tuple], *, force: bool) -> None:
+    """Default ranges for mapped face controls and eyes that auto-mapping
+    changed (or all when the face frame changed or ``force``); ranges the
+    user edited or fitted to the rig stay."""
+    config = armature.mtp_rig_config
+    after = _range_inputs(config)
+    face_moved = any(
+        after.get(name) != before.get(name) for name in ("HEAD", "EYE_L", "EYE_R")
     )
+    entries = mapping_by_id(config)
+    with suppress_manual_locks():
+        for entry in config.mappings:
+            if (
+                has_ranges(entry)
+                and entry.section != "SHAPES"
+                and entry.target_name
+                and entry.source in {"PROFILE", "HEURISTIC"}
+                and not entry.manual_lock
+                and (
+                    force
+                    or face_moved
+                    or entry.ranges_version != RANGES_VERSION
+                    or after[entry.semantic_id] != before.get(entry.semantic_id)
+                )
+            ):
+                apply_default_ranges(armature, entries, entry)
 
 
 def auto_map(
@@ -236,12 +272,7 @@ def auto_map(
     config.armature_signature = armature_signature(armature)
     configure_fk_switches(armature, profile, force=force_profile)
     entries = mapping_by_id(config)
-    ranges_before = {
-        entry.semantic_id: _range_signature(entry)
-        for entry in config.mappings
-        if has_ranges(entry)
-    }
-    face_before = _face_signature(entries)
+    ranges_before = _range_inputs(config)
     bones = set(armature.pose.bones.keys())
     vrm_map = vrm_humanoid_mapping(armature) if profile == PROFILE_GENERIC else {}
 
@@ -365,66 +396,27 @@ def auto_map(
             )
 
     shape_targets = find_shape_targets(armature)
-    for blendshape in FACE_BLENDSHAPES:
-        if blendshape == "_neutral":
-            continue
-        entry = entries.get(f"ARKIT_{blendshape}")
+    shape_roles = (
+        [("ARKIT", name, (name,)) for name in FACE_BLENDSHAPES if name != "_neutral"]
+        + [("VRM", name, keys) for name, _label, keys in VRM_EXPRESSIONS]
+        + [
+            ("FACS", unit, tuple(_facs_aliases(unit)))
+            for unit, _label in FACS_ACTION_UNITS
+        ]
+    )
+    for scheme, role, aliases in shape_roles:
+        entry = entries.get(f"{scheme}_{role}")
         if not entry or (entry.manual_lock and not force_profile):
             continue
         hits = sorted(
             (
                 hit
-                for hit in shape_targets.get(normalize_name(blendshape, shape=True), [])
-                if shape_scheme(hit[1]) == "ARKIT"
+                for alias in aliases
+                for hit in shape_targets.get(normalize_name(alias, shape=True), [])
+                if shape_scheme(hit[1]) == scheme
             ),
             key=lambda hit: shape_priority(hit[1]),
         )
-        if hits:
-            _set_mapping(
-                entry,
-                hits[0][1],
-                target_kind="SHAPE_KEY",
-                target_object="*",
-                channel="VALUE",
-                source="PROFILE",
-                confidence=1.0,
-                force=force_profile,
-            )
-
-    for name, _label, keys in VRM_EXPRESSIONS:
-        entry = entries.get(f"VRM_{name}")
-        if not entry or (entry.manual_lock and not force_profile):
-            continue
-        hits = [
-            hit
-            for key in keys
-            for hit in shape_targets.get(normalize_name(key, shape=True), [])
-            if shape_scheme(hit[1]) == "VRM"
-        ]
-        if hits:
-            _set_mapping(
-                entry,
-                hits[0][1],
-                target_kind="SHAPE_KEY",
-                target_object="*",
-                channel="VALUE",
-                source="PROFILE",
-                confidence=1.0,
-                force=force_profile,
-            )
-
-    for action_unit, _label in FACS_ACTION_UNITS:
-        entry = entries.get(f"FACS_{action_unit}")
-        if not entry or (entry.manual_lock and not force_profile):
-            continue
-        hits = []
-        for alias in _facs_aliases(action_unit):
-            hits.extend(
-                hit
-                for hit in shape_targets.get(normalize_name(alias, shape=True), [])
-                if shape_scheme(hit[1]) == "FACS"
-            )
-        hits.sort(key=lambda hit: shape_priority(hit[1]))
         if hits:
             _set_mapping(
                 entry,
@@ -483,27 +475,7 @@ def auto_map(
                 force=force_profile,
             )
 
-    # Mapped face controls and eyes get ranges for their channel and the
-    # face's size when this run changed what they drive (or the face frame);
-    # mappings the user edited and ranges fitted to the rig keep theirs.
-    entries = mapping_by_id(config)
-    face_moved = _face_signature(entries) != face_before
-    with suppress_manual_locks():
-        for entry in config.mappings:
-            if (
-                has_ranges(entry)
-                and entry.section != "SHAPES"
-                and entry.target_name
-                and entry.source in {"PROFILE", "HEURISTIC"}
-                and not entry.manual_lock
-                and (
-                    force_profile
-                    or face_moved
-                    or entry.ranges_version != RANGES_VERSION
-                    or _range_signature(entry) != ranges_before.get(entry.semantic_id)
-                )
-            ):
-                apply_default_ranges(armature, entries, entry)
+    _refresh_face_ranges(armature, ranges_before, force=force_profile)
     validate_mapping(armature, settings=settings)
     from ..postprocess import validate_modules
 
@@ -811,21 +783,8 @@ def validate_mapping(
     config.body_complete = completeness("BODY")
     config.hands_complete = completeness("HANDS")
     config.shapes_complete = completeness("SHAPES")
-    config.arkit_complete = (
-        scheme_counts["ARKIT"][0] / scheme_counts["ARKIT"][1]
-        if scheme_counts["ARKIT"][1]
-        else 0.0
-    )
-    config.facs_complete = (
-        scheme_counts["FACS"][0] / scheme_counts["FACS"][1]
-        if scheme_counts["FACS"][1]
-        else 0.0
-    )
-    config.vrm_complete = (
-        scheme_counts["VRM"][0] / scheme_counts["VRM"][1]
-        if scheme_counts["VRM"][1]
-        else 0.0
-    )
+    for scheme, (mapped, total) in scheme_counts.items():
+        setattr(config, FACE_OUTPUTS[scheme][0], mapped / total if total else 0.0)
     config.face_complete = completeness("FACE_RIG")
     config.validation_summary = (
         f"{valid} valid ({information} auto-detected), "

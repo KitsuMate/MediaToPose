@@ -382,10 +382,8 @@ def evaluate(
             else None
         )
         measures = face.finish(detected_faces, fps)
-        metrics.expression_fit = measures.expression_fit
-        metrics.blink_recall = measures.blink_recall
-        metrics.face_jitter = measures.face_jitter
-        metrics.asymmetry = measures.asymmetry
+        for name in ("expression_fit", "blink_recall", "face_jitter", "asymmetry"):
+            setattr(metrics, name, getattr(measures, name))
         metrics.worst_frames.update(measures.worst_frames)
 
     metrics.worst_frames.update(

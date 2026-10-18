@@ -52,9 +52,13 @@ RANGE_FIELDS = (
     "output_full",
     "output_negative",
 )
-# Bumped when the meaning of the stored ranges changes; 0 marks mappings
-# saved by 0.2.0, which still carry gain / offset / clamp / invert.
+# ``ranges_version`` of a mapping: bumped when the meaning of the stored
+# ranges changes. Mappings saved by 0.2.0 read as RANGES_LEGACY (they still
+# carry gain / offset / clamp / invert); face bone rows wait as
+# RANGES_PENDING until they have a target to size their defaults from.
 RANGES_VERSION = 1
+RANGES_LEGACY = 0
+RANGES_PENDING = -1
 
 
 def is_signed(semantic_id: str) -> bool:
@@ -102,12 +106,13 @@ def apply_default_ranges(armature, entries, entry) -> None:
     entry.ranges_version = RANGES_VERSION
 
 
-def migrate_ranges(armature, entries, entry) -> None:
+def migrate_ranges(armature, entries, entry, legacy=None) -> None:
     """Convert a 0.2.0 mapping's gain / offset / clamp / invert to ranges.
 
-    Those properties are gone from the mapping but stay stored in the .blend
-    as ID properties, which is where they are read from.
+    ``legacy`` holds those values (from a schema 18 preset); by default they
+    are read from the entry's ID properties, where a 0.2.0 .blend keeps them.
     """
+    legacy = entry if legacy is None else legacy
     negative = None
     if entry.semantic_id in EYES:
         # Gaze used the gain only for its sign.
@@ -119,15 +124,15 @@ def migrate_ranges(armature, entries, entry) -> None:
     else:
         scale = 1.0
     ranges = legacy_ranges(
-        gain=float(entry.get("gain", 1.0)),
-        offset=float(entry.get("offset", 0.0)),
-        clamp_max=float(entry.get("clamp_max", 1.0)),
-        invert=bool(entry.get("invert", False)),
+        gain=float(legacy.get("gain", 1.0)),
+        offset=float(legacy.get("offset", 0.0)),
+        clamp_max=float(legacy.get("clamp_max", 1.0)),
+        invert=bool(legacy.get("invert", False)),
         scale=scale,
     )
     held = ranges["output_full"] == ranges["output_zero"]
-    if negative is not None and not entry.get("invert", False) and not held:
-        ranges["output_negative"] = negative * float(entry.get("clamp_max", 1.0))
+    if negative is not None and not legacy.get("invert", False) and not held:
+        ranges["output_negative"] = negative * float(legacy.get("clamp_max", 1.0))
     for name, value in ranges.items():
         setattr(entry, name, value)
     entry.ranges_version = RANGES_VERSION
@@ -139,6 +144,8 @@ __all__ = [
     "FACE_CONTROL_TRAVEL",
     "FACE_ROTATION_DEGREES",
     "GAZE_DEGREES",
+    "RANGES_LEGACY",
+    "RANGES_PENDING",
     "RANGES_VERSION",
     "RANGE_FIELDS",
     "apply_default_ranges",

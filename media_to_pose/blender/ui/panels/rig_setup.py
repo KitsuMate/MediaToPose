@@ -5,7 +5,7 @@ from __future__ import annotations
 import bpy
 from bpy.types import Panel, UIList
 
-from ....core.constants import SHAPE_SCHEMES
+from ....core.constants import FACE_OUTPUTS, SHAPE_SCHEMES
 from ....core.coordinator import COORDINATOR
 from ....rig.face_defaults import EYES, is_signed
 from ....rig.profiles.common import PROFILE_LABELS, detect_profile, profile_label
@@ -378,16 +378,9 @@ class MTP_PT_rig_setup(Panel):
         completeness = header.row(align=True)
         completeness.label(text=f"Body {config.body_complete:.0%}")
         completeness.label(text=f"Hands {config.hands_complete:.0%}")
-        if not settings.use_face:
-            pass
-        elif settings.face_output == "ARKIT":
-            completeness.label(text=f"ARKit {config.arkit_complete:.0%}")
-        elif settings.face_output == "FACS":
-            completeness.label(text=f"FACS {config.facs_complete:.0%}")
-        elif settings.face_output == "VRM":
-            completeness.label(text=f"VRM {config.vrm_complete:.0%}")
-        else:
-            completeness.label(text=f"Face {config.face_complete:.0%}")
+        if settings.use_face:
+            field, short_label, _label = FACE_OUTPUTS[settings.face_output]
+            completeness.label(text=f"{short_label} {getattr(config, field):.0%}")
         if required:
             header.label(text=f"{required} required mapping issue(s)", icon="CANCEL")
         elif warnings:
