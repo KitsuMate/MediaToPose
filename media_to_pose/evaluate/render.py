@@ -5,8 +5,7 @@ frame: on the left the source frame with the detected skeleton drawn in
 green, on the right the rig from a camera framed on it, rendered with
 Workbench when the rig has meshes, with its mapped bones drawn in orange.
 With ``face=True`` each row is a face close-up instead: the source cropped
-to the detected face, the rig's face, and a chart of the strongest
-expressions as detected and as the rig shows them (see ``face_render``).
+to the detected face and the rig's face (see ``face_render``).
 The scene's render settings, camera and frame are restored afterwards.
 """
 
@@ -27,7 +26,7 @@ from ..core.media_io import decode_image, decode_video_frame_index_with_timestam
 from ..core.scene import SceneContext
 from ..core.types import CanonicalFrame
 from ..rig import mapping
-from .face_render import ExpressionBars, face_camera, face_crop, face_shot
+from .face_render import face_camera, face_crop, face_shot
 
 RIG_CONNECTIONS = (
     ("PELVIS", "SPINE_01"),
@@ -168,20 +167,20 @@ def render_comparison(
     mirror: bool = False,
     size: int = 384,
     render_still: Callable | None = None,
-    face_output: str | None = None,
+    face: bool = False,
 ) -> Path:
     """Write the contact sheet; ``rows`` are ``(timeline, source, frame)``.
 
     ``render_still(scene)`` renders the scene's camera to its output path;
-    without it the rig column shows only the projected bones. A
-    ``face_output`` makes the face close-up sheet for that face output.
+    without it the rig column shows only the projected bones. ``face``
+    makes the face close-up sheet.
     """
     if not rows:
         raise InvalidRequest("No frames to render", parameter="frames")
     cv2, _mp, np = import_runtime_dependencies()
     scene = scene_context.scene
-    bars = ExpressionBars(armature, face_output) if face_output else None
-    bones = [] if bars is not None else _rig_bones(armature)
+    shot = face_shot(armature) if face else None
+    bones = [] if shot is not None else _rig_bones(armature)
     render = scene.render
     saved = {
         "engine": render.engine,
@@ -199,10 +198,9 @@ def render_comparison(
     camera = None
     sheet_rows = []
     try:
-        shot = face_shot(armature) if bars is not None else None
         camera = (
             face_camera(scene, armature, shot=shot)
-            if bars is not None
+            if shot is not None
             else _frame_camera(scene, armature, bones, [row[0] for row in rows])
         )
         scene.camera = camera
@@ -218,12 +216,12 @@ def render_comparison(
                 source = _source_image(
                     media_path, media_kind, source_frame, mirror, cv2, np
                 )
-                if bars is not None:
+                if shot is not None:
                     source = face_crop(source, detected, cv2)
                 else:
                     _draw_detection(source, detected, cv2)
                 scene.frame_set(int(timeline_frame))
-                if bars is not None:
+                if shot is not None:
                     face_camera(scene, armature, camera, shot)
                 rig = _render_rig(
                     scene,
@@ -235,10 +233,7 @@ def render_comparison(
                 )
                 rig = _fit(rig, size, cv2, np)
                 _draw_rig(rig, scene, camera, armature, bones, cv2)
-                columns = [_fit(source, size, cv2, np), rig]
-                if bars is not None:
-                    columns.append(bars.draw(size, detected, cv2, np))
-                row = np.concatenate(columns, axis=1)
+                row = np.concatenate([_fit(source, size, cv2, np), rig], axis=1)
                 cv2.putText(
                     row,
                     f"frame {timeline_frame}  source {source_frame}",

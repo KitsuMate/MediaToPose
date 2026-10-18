@@ -1,9 +1,7 @@
 """Face close-ups for ``render_comparison(face=True)``.
 
-The source is cropped to the detected face, the camera looks the rig's face
-in the eye, and a bar chart compares the strongest expressions as detected
-(through the mapping's input range) with what the rig shows (through its
-output range), both as shares of the mapped range.
+The source is cropped to the detected face and the camera looks the rig's
+face in the eye, following the posed head.
 """
 
 from __future__ import annotations
@@ -14,19 +12,15 @@ from dataclasses import dataclass
 import bpy
 from mathutils import Matrix, Vector
 
-from ..core.requests import FaceOutput
 from ..core.types import CanonicalFrame
 from ..retarget.solve.common import _mapped_bone
-from ..retarget.solve.face_values import FaceValueReader, mapped_expressions
 from ..rig import mapping
 from ..rig.face_schemes import associated_meshes
 from ..rig.face_space import FaceFrame, eye_position, face_frame
 
-BAR_COUNT = 10
 # Space around the detected face box, as a share of its size.
 FACE_PADDING = 0.35
 DETECTED_COLOR = (80, 240, 80)
-RIG_COLOR = (40, 140, 255)
 
 
 def face_crop(image, frame: CanonicalFrame | None, cv2):
@@ -79,6 +73,8 @@ class FaceShot:
     """The rest-pose face region a face camera frames, in armature space."""
 
     space: FaceFrame
+    # The head bone the camera follows; empty without one.
+    head: str
     center: Vector
     size: float
     front: float
@@ -97,6 +93,7 @@ def face_shot(armature) -> FaceShot:
     eye_right = _mapped_bone(armature, entries, "EYE_R")
     head = _mapped_bone(armature, entries, "HEAD")
     head_length = head.bone.length if head is not None else 0.0
+    head_name = head.name if head is not None else ""
     if eye_left is not None and eye_right is not None:
         eyes = (
             eye_position(armature, eye_left) + eye_position(armature, eye_right)
@@ -108,9 +105,8 @@ def face_shot(armature) -> FaceShot:
     reach = max(space.scale * 2.0, head_length * 1.3, 0.05)
     points = _face_points(armature, eyes, reach * 1.25)
     if len(points) < 8:
-        return FaceShot(
-            space, eyes - space.up * (space.scale * 0.5), reach * 2.0, space.scale
-        )
+        center = eyes - space.up * (space.scale * 0.5)
+        return FaceShot(space, head_name, center, reach * 2.0, space.scale)
     # Extents along the face's own axes.
     across = [point.dot(space.lateral) for point in points]
     along = [point.dot(space.up) for point in points]
@@ -122,7 +118,7 @@ def face_shot(armature) -> FaceShot:
         + space.forward * min(depth)
     )
     size = max(max(across) - min(across), max(along) - min(along)) * 1.15
-    return FaceShot(space, middle, size, max(depth) - min(depth))
+    return FaceShot(space, head_name, middle, size, max(depth) - min(depth))
 
 
 def face_camera(scene, armature, camera=None, shot: FaceShot | None = None):
@@ -135,8 +131,7 @@ def face_camera(scene, armature, camera=None, shot: FaceShot | None = None):
     shot = shot or face_shot(armature)
     space = shot.space
     world = armature.matrix_world
-    entries = mapping.mapping_by_id(armature.mtp_rig_config)
-    head = _mapped_bone(armature, entries, "HEAD")
+    head = armature.pose.bones.get(shot.head) if shot.head else None
     if head is not None and armature.data.pose_position == "POSE":
         world = world @ head.matrix @ head.bone.matrix_local.inverted()
     if camera is None:
@@ -161,84 +156,4 @@ def face_camera(scene, armature, camera=None, shot: FaceShot | None = None):
     return camera
 
 
-class ExpressionBars:
-    """Draw detected and rig values of the strongest expressions."""
-
-    def __init__(self, armature, face_output: FaceOutput):
-        self.entries = mapping.mapping_by_id(armature.mtp_rig_config)
-        self.face_output = FaceOutput(face_output)
-        self.reader = FaceValueReader(armature, self.entries, self.face_output)
-
-    def draw(self, size: int, frame: CanonicalFrame | None, cv2, np):
-        panel = np.full((size, size, 3), 24, np.uint8)
-        detected = (
-            mapped_expressions(self.entries, dict(frame.blendshapes), self.face_output)[
-                0
-            ]
-            if frame is not None and frame.blendshapes
-            else {}
-        )
-        shown = self.reader.read()
-        names = sorted(
-            set(detected) | set(shown),
-            key=lambda name: -max(
-                abs(detected.get(name, 0.0)), abs(shown.get(name, 0.0))
-            ),
-        )[:BAR_COUNT]
-        row = (size - 40) / max(len(names), 1)
-        label_width = int(size * 0.45)
-        bar_width = size - label_width - 44
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        cv2.putText(
-            panel,
-            "detected",
-            (label_width, 18),
-            font,
-            0.45,
-            DETECTED_COLOR,
-            1,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            panel, "rig", (label_width + 80, 18), font, 0.45, RIG_COLOR, 1, cv2.LINE_AA
-        )
-        for index, name in enumerate(names):
-            top = int(30 + index * row)
-            cv2.putText(
-                panel,
-                name.removeprefix("FACE_")[:20],
-                (6, top + int(row * 0.6)),
-                font,
-                0.4,
-                (230, 230, 230),
-                1,
-                cv2.LINE_AA,
-            )
-            for offset, value, color in (
-                (0.15, detected.get(name, 0.0), DETECTED_COLOR),
-                (0.5, shown.get(name, 0.0), RIG_COLOR),
-            ):
-                y = top + int(row * offset)
-                length = int(min(abs(value), 1.0) * bar_width)
-                # Negative values (brows down, mouth corners down) are hollow.
-                cv2.rectangle(
-                    panel,
-                    (label_width, y),
-                    (label_width + max(length, 1), y + max(int(row * 0.3), 2)),
-                    color,
-                    -1 if value >= 0.0 else 1,
-                )
-                cv2.putText(
-                    panel,
-                    f"{value:+.2f}",
-                    (label_width + bar_width + 4, y + max(int(row * 0.3), 2)),
-                    font,
-                    0.33,
-                    color,
-                    1,
-                    cv2.LINE_AA,
-                )
-        return panel
-
-
-__all__ = ["ExpressionBars", "FaceShot", "face_camera", "face_crop", "face_shot"]
+__all__ = ["FaceShot", "face_camera", "face_crop", "face_shot"]

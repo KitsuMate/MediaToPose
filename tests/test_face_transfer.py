@@ -77,22 +77,10 @@ class FaceTransferTests(unittest.TestCase):
         self.assertEqual(described["detected_profile"], "AUTO_RIG_PRO")
         face = described["sections"]["FACE_RIG"]
         self.assertEqual(face["mapped"], face["enabled"])
-
-    def test_describe_rig_face_block(self) -> None:
-        described = self.addon.api.describe_rig(self.rig.name)
-        face = described["face"]
-        # The FaceFX mesh has every ARKit key except a lower lip shrug.
-        self.assertEqual(face["expressions"]["ARKIT"]["unmapped"], ["mouthShrugLower"])
-        self.assertEqual(len(face["expressions"]["ARKIT"]["mapped"]), 50)
-        self.assertEqual(face["controls"]["FACE_LID_L"]["channel"], "LOCATION")
-        self.assertEqual(face["unmapped_controls"], [])
-        eye = face["eyes"]["EYE_L"]
-        self.assertTrue(eye["look_at_target"])
-        self.assertEqual(eye["tracked_by"], "c_eye.l")
-        self.assertAlmostEqual(face["face_scale"], 0.0591, delta=0.002)
-        self.assertGreater(
-            described["shape_keys"]["FaceFX"]["keys_per_scheme"]["ARKIT"], 50
-        )
+        # Correctives and other unclassified keys are not a scheme.
+        schemes = described["shape_keys"]["FaceFX"]["schemes"]
+        self.assertIn("ARKIT", schemes)
+        self.assertNotIn("NONE", schemes)
 
     def test_face_completeness_is_null_when_face_capture_is_off(self) -> None:
         settings = bpy.context.scene.mtp_settings
@@ -618,7 +606,7 @@ class FaceCaptureResultTests(unittest.TestCase):
         cls.rig = bpy.data.objects["FaceFX.Rig"]
         cls.addon.api.auto_map(cls.rig.name)
 
-    def test_smile_result_lists_applied_and_unmapped_expressions(self) -> None:
+    def test_face_capture_records_its_face_output(self) -> None:
         result = self.addon.api.capture(
             str(fixture_path("face_smile_open")),
             self.rig.name,
@@ -627,48 +615,7 @@ class FaceCaptureResultTests(unittest.TestCase):
             keep_cache=False,
         )
         self.assertTrue(result.succeeded, result.message)
-        face = result.face
-        self.assertEqual(face["output"], "ARKIT")
-        self.assertEqual(face["frames_with_face"], 1)
-        smile = face["expressions"]["mouthSmileLeft"]
-        self.assertGreater(smile["peak"], 0.3)
-        self.assertEqual(smile["peak"], smile["mean"])
-        self.assertEqual(face["unmapped_expressions"], [])
-
-    def test_signed_peak_keeps_the_side_reached_furthest(self) -> None:
-        entries = self.addon.rig.mapping.mapping_by_id(self.rig.mtp_rig_config)
-        summary = self.addon.session.results.FaceSummary(entries, "BONES")
-        for blendshapes in (
-            {"mouthSmileLeft": 0.2},
-            {"mouthFrownLeft": 0.8},
-            {"mouthSmileLeft": 0.1},
-        ):
-            summary.observe(
-                self.addon.core.types.CanonicalFrame(
-                    timestamp_ms=0, blendshapes=blendshapes
-                )
-            )
-        corner = summary.to_dict()["expressions"]["FACE_MOUTH_CORNER_L"]
-        self.assertAlmostEqual(corner["peak"], -0.8, places=4)
-        self.assertAlmostEqual(corner["mean"], round(-0.5 / 3.0, 4), places=4)
-
-    def test_disabled_mapping_is_reported_unmapped(self) -> None:
-        entry = next(
-            item
-            for item in self.rig.mtp_rig_config.mappings
-            if item.semantic_id == "ARKIT_mouthSmileRight"
-        )
-        entry.enabled = False
-        self.addCleanup(setattr, entry, "enabled", True)
-        result = self.addon.api.capture(
-            str(fixture_path("face_smile_open")),
-            self.rig.name,
-            parts={"face"},
-            face_output="ARKIT",
-            keep_cache=False,
-        )
-        self.assertIn("mouthSmileRight", result.face["unmapped_expressions"])
-        self.assertNotIn("mouthSmileRight", result.face["expressions"])
+        self.assertEqual(result.face_output, "ARKIT")
 
     def test_command_line_face_capture_metrics_and_render(self) -> None:
         def run(*argv: str) -> tuple[int, str]:
@@ -694,7 +641,7 @@ class FaceCaptureResultTests(unittest.TestCase):
                 "--json",
             )
             self.assertEqual(code, 0, output)
-            self.assertIn("mouthSmileLeft", json.loads(output)["face"]["expressions"])
+            self.assertEqual(json.loads(output)["face_output"], "ARKIT")
             code, output = run(
                 "evaluate",
                 "--armature",
@@ -724,7 +671,7 @@ class FaceCaptureResultTests(unittest.TestCase):
             self.assertEqual(code, 0, output)
             self.assertTrue(Path(sheet).is_file())
 
-    def test_face_comparison_sheet_has_source_rig_and_chart(self) -> None:
+    def test_face_comparison_sheet_has_source_and_rig(self) -> None:
         result = self.addon.api.capture(
             str(fixture_path("face_surprise")),
             self.rig.name,
@@ -742,10 +689,10 @@ class FaceCaptureResultTests(unittest.TestCase):
             )
             image = bpy.data.images.load(written["path"])
             try:
-                self.assertEqual(tuple(image.size), (3 * 128, 128))
+                self.assertEqual(tuple(image.size), (2 * 128, 128))
             finally:
                 bpy.data.images.remove(image)
-        without_face = result.to_dict() | {"face": {}}
+        without_face = result.to_dict() | {"face_output": ""}
         with self.assertRaises(self.addon.core.errors.InvalidRequest):
             self.addon.api.render_comparison(
                 "unused.png", self.rig.name, result=without_face, face=True

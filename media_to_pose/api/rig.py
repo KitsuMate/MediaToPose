@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from ..core.constants import SECTIONS
-from ..retarget.solve.face_values import describe_face_rig
 from ..rig import mapping
 from ..rig.face_schemes import associated_meshes, shape_scheme
 from ..rig.profiles.common import PROFILE_LABELS, detect_profile
@@ -32,7 +31,7 @@ def auto_map(armature, *, force_profile: bool = False, scene=None) -> dict[str, 
 
 
 def describe_rig(armature, *, scene=None) -> dict[str, Any]:
-    """Mapping coverage, unmapped targets, profile, shape keys and the face.
+    """Mapping coverage, unmapped targets, profile, shape keys and face bones.
 
     Validates the mapping first (as the Rig Setup panel does), so statuses
     reflect the scene's current capture settings. The result is JSON-ready.
@@ -73,15 +72,8 @@ def describe_rig(armature, *, scene=None) -> dict[str, Any]:
         keys = getattr(mesh.data, "shape_keys", None)
         names = [block.name for block in keys.key_blocks[1:]] if keys else []
         if names:
-            per_scheme: dict[str, int] = {}
-            for name in names:
-                if scheme := shape_scheme(name):
-                    per_scheme[scheme] = per_scheme.get(scheme, 0) + 1
-            shape_keys[mesh.name] = {
-                "count": len(names),
-                "schemes": sorted(per_scheme),
-                "keys_per_scheme": dict(sorted(per_scheme.items())),
-            }
+            schemes = {shape_scheme(name) for name in names} - {"NONE"}
+            shape_keys[mesh.name] = {"count": len(names), "schemes": sorted(schemes)}
     face_bones = sorted(
         entry.target_name
         for entry in config.mappings
@@ -117,7 +109,6 @@ def describe_rig(armature, *, scene=None) -> dict[str, Any]:
         "sections": sections,
         "shape_keys": shape_keys,
         "face_bones": face_bones,
-        "face": describe_face_rig(target, config, mapping.mapping_by_id(config)),
         "bones": len(target.data.bones),
     }
 

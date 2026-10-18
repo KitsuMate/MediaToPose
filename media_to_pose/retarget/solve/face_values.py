@@ -16,13 +16,11 @@ import math
 
 from mathutils import Vector
 
-from ...core.constants import SHAPE_SCHEMES
 from ...core.face_ranges import share_of_output, strength
 from ...core.requests import FaceOutput
-from ...rig.face_defaults import RANGE_FIELDS, is_signed
+from ...rig.face_defaults import is_signed
 from ...rig.face_schemes import matching_shape_blocks
-from ...rig.face_space import bone_axis, face_axis, face_frame, gaze_tracker
-from .common import _mapped_bone
+from ...rig.face_space import bone_axis, face_axis, face_frame
 from .face import (
     _face_control_values,
     _finite_float,
@@ -165,95 +163,11 @@ class FaceValueReader:
         return values
 
 
-MAPPED_STATUSES = {"VALID", "INFO", "WARNING"}
-
-
-def face_ranges(entry) -> dict[str, float]:
-    """A mapping's input and output ranges, rounded for JSON."""
-    return {name: round(float(getattr(entry, name)), 6) for name in RANGE_FIELDS}
-
-
-def _vector(value) -> list[float]:
-    return [round(float(component), 4) for component in value]
-
-
-def describe_face_rig(armature, config, entries) -> dict:
-    """The face part of ``describe_rig``: expressions, controls and eyes.
-
-    ``expressions`` lists, per shape key scheme, the mapped and unmapped
-    expressions; ``controls`` the bone controls of ``BONES`` output with
-    their channel and face-space axis; ``eyes`` each eye bone with the bone
-    that aims at it (for look-at rigs) and its rest direction in armature
-    space; ``face_scale`` the eye distance that sizes bone travel.
-    """
-    expressions: dict[str, dict[str, list[str]]] = {}
-    for scheme in SHAPE_SCHEMES:
-        prefix = f"{scheme}_"
-        rows = [
-            entry
-            for entry in config.mappings
-            if entry.section == "SHAPES"
-            and entry.enabled
-            and entry.semantic_id.startswith(prefix)
-        ]
-        mapped = [
-            row for row in rows if row.target_name and row.status in MAPPED_STATUSES
-        ]
-        expressions[scheme] = {
-            "mapped": sorted(row.semantic_id.removeprefix(prefix) for row in mapped),
-            "unmapped": sorted(
-                row.semantic_id.removeprefix(prefix)
-                for row in rows
-                if row not in mapped
-            ),
-        }
-    controls = {}
-    unmapped_controls = []
-    for entry in config.mappings:
-        if entry.section != "FACE_RIG" or not entry.enabled:
-            continue
-        if entry.target_name and entry.status in MAPPED_STATUSES:
-            controls[entry.semantic_id] = {
-                "bone": entry.target_name,
-                "channel": entry.channel_mode,
-                "axis": entry.axis,
-                "ranges": face_ranges(entry),
-            }
-        else:
-            unmapped_controls.append(entry.semantic_id)
-    eyes = {}
-    for semantic_id in ("EYE_L", "EYE_R"):
-        bone = _mapped_bone(armature, entries, semantic_id)
-        if bone is None:
-            eyes[semantic_id] = None
-            continue
-        tracker = gaze_tracker(armature, bone)
-        aim = (tracker or bone).bone
-        eyes[semantic_id] = {
-            "bone": bone.name,
-            "look_at_target": tracker is not None,
-            "tracked_by": tracker.name if tracker is not None else "",
-            "rest_direction": _vector(aim.matrix_local.col[1][:3]),
-        }
-    space = face_frame(armature, entries)
-    return {
-        "expressions": expressions,
-        "controls": dict(sorted(controls.items())),
-        "unmapped_controls": sorted(unmapped_controls),
-        "eyes": eyes,
-        "face_scale": round(space.scale, 5),
-        "face_up": _vector(space.up),
-        "face_forward": _vector(space.forward),
-    }
-
-
 __all__ = [
     "BLINK_EXPRESSIONS",
     "UNMAPPED_THRESHOLD",
     "FaceValueReader",
     "bone_output",
-    "describe_face_rig",
-    "face_ranges",
     "expression_values",
     "face_value_names",
     "mapped_expressions",

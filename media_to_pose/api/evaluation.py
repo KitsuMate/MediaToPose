@@ -93,7 +93,7 @@ def evaluate(
         frame_range = (int(round(first)), int(round(last)))
     detections = list(_detections(data).values()) if data else None
     if face_output is None and data:
-        face_output = data.get("face", {}).get("output") or None
+        face_output = data.get("face_output") or None
     animation_data = target.animation_data_create()
     original = animation_data.action
     if action is not None:
@@ -168,13 +168,10 @@ def render_comparison(
         raise InvalidRequest(
             f"Frames {missing} were not keyed by this capture", parameter="frames"
         )
-    face_output = None
-    if face:
-        face_output = data.get("face", {}).get("output")
-        if not face_output:
-            raise InvalidRequest(
-                "face=True needs a result that captured the face", parameter="face"
-            )
+    if face and not data.get("face_output"):
+        raise InvalidRequest(
+            "face=True needs a result that captured the face", parameter="face"
+        )
     detections = _detections(data)
     rows = [
         (
@@ -198,7 +195,7 @@ def render_comparison(
         mirror=bool(media.get("mirror", False)),
         size=int(size),
         render_still=_render_still if render_meshes else None,
-        face_output=face_output,
+        face=bool(face),
     )
     return {"path": str(written), "frames": list(frames)}
 
