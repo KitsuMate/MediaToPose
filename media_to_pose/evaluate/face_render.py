@@ -9,6 +9,7 @@ output range), both as shares of the mapped range.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 import bpy
 from mathutils import Matrix, Vector
@@ -19,7 +20,7 @@ from ..retarget.solve.common import _mapped_bone
 from ..retarget.solve.face_values import FaceValueReader, mapped_expressions
 from ..rig import mapping
 from ..rig.face_schemes import associated_meshes
-from ..rig.face_space import eye_position, face_frame
+from ..rig.face_space import FaceFrame, eye_position, face_frame
 
 BAR_COUNT = 10
 # Space around the detected face box, as a share of its size.
@@ -73,22 +74,28 @@ def _face_points(armature, center: Vector, radius: float) -> list[Vector]:
     return points
 
 
-def face_camera(scene, armature, camera=None):
-    """A temporary camera in front of the rig's face, framing the head.
+@dataclass(frozen=True)
+class FaceShot:
+    """The rest-pose face region a face camera frames, in armature space."""
+
+    space: FaceFrame
+    center: Vector
+    size: float
+    front: float
+
+
+def face_shot(armature) -> FaceShot:
+    """Frame the face at rest.
 
     The shot is sized from the face mesh around the eyes when there is one
     (eye bones can sit deep inside the head, close together), else from the
     eye distance or the head bone.
-    Reuse ``camera`` to follow the posed head after advancing the scene frame.
     """
     entries = mapping.mapping_by_id(armature.mtp_rig_config)
     space = face_frame(armature, entries)
-    world = armature.matrix_world
     eye_left = _mapped_bone(armature, entries, "EYE_L")
     eye_right = _mapped_bone(armature, entries, "EYE_R")
     head = _mapped_bone(armature, entries, "HEAD")
-    if head is not None and armature.data.pose_position == "POSE":
-        world = world @ head.matrix @ head.bone.matrix_local.inverted()
     head_length = head.bone.length if head is not None else 0.0
     if eye_left is not None and eye_right is not None:
         eyes = (
@@ -100,24 +107,38 @@ def face_camera(scene, armature, camera=None):
         eyes = Vector()
     reach = max(space.scale * 2.0, head_length * 1.3, 0.05)
     points = _face_points(armature, eyes, reach * 1.25)
-    if len(points) >= 8:
-        # Extents along the face's own axes.
-        across = [point.dot(space.lateral) for point in points]
-        along = [point.dot(space.up) for point in points]
-        depth = [point.dot(space.forward) for point in points]
-        # The middle of the region's back plane, seen along the face's forward.
-        middle = (
-            space.lateral * (max(across) + min(across)) * 0.5
-            + space.up * (max(along) + min(along)) * 0.5
-            + space.forward * min(depth)
+    if len(points) < 8:
+        return FaceShot(
+            space, eyes - space.up * (space.scale * 0.5), reach * 2.0, space.scale
         )
-        size = max(max(across) - min(across), max(along) - min(along)) * 1.15
-        front = max(depth) - min(depth)
-        center = middle
-    else:
-        center = eyes - space.up * (space.scale * 0.5)
-        size = reach * 2.0
-        front = space.scale
+    # Extents along the face's own axes.
+    across = [point.dot(space.lateral) for point in points]
+    along = [point.dot(space.up) for point in points]
+    depth = [point.dot(space.forward) for point in points]
+    # The middle of the region's back plane, seen along the face's forward.
+    middle = (
+        space.lateral * (max(across) + min(across)) * 0.5
+        + space.up * (max(along) + min(along)) * 0.5
+        + space.forward * min(depth)
+    )
+    size = max(max(across) - min(across), max(along) - min(along)) * 1.15
+    return FaceShot(space, middle, size, max(depth) - min(depth))
+
+
+def face_camera(scene, armature, camera=None, shot: FaceShot | None = None):
+    """A temporary camera in front of the rig's face, framing the head.
+
+    The face is framed at rest (``face_shot``) and the camera follows the
+    posed head. Reuse ``camera`` and ``shot`` to follow the head after
+    advancing the scene frame.
+    """
+    shot = shot or face_shot(armature)
+    space = shot.space
+    world = armature.matrix_world
+    entries = mapping.mapping_by_id(armature.mtp_rig_config)
+    head = _mapped_bone(armature, entries, "HEAD")
+    if head is not None and armature.data.pose_position == "POSE":
+        world = world @ head.matrix @ head.bone.matrix_local.inverted()
     if camera is None:
         data = bpy.data.cameras.new("MediaToPose_FaceComparison")
         camera = bpy.data.objects.new("MediaToPose_FaceComparison", data)
@@ -127,8 +148,8 @@ def face_camera(scene, armature, camera=None):
     half_angle = math.atan(data.sensor_width / (2.0 * data.lens))
     # From the back of the framed region: the face's front sits ``front``
     # closer, so the whole face width fits at the front plane.
-    distance = (size / 2.0) / math.tan(half_angle) + front
-    world_center = world @ center
+    distance = (shot.size / 2.0) / math.tan(half_angle) + shot.front
+    world_center = world @ shot.center
     forward = (world.to_3x3() @ space.forward).normalized()
     camera.location = world_center + forward * distance * world.median_scale
     # The camera looks along its -Z with the face's up as the image's up.
@@ -220,4 +241,4 @@ class ExpressionBars:
         return panel
 
 
-__all__ = ["ExpressionBars", "face_camera", "face_crop"]
+__all__ = ["ExpressionBars", "FaceShot", "face_camera", "face_crop", "face_shot"]

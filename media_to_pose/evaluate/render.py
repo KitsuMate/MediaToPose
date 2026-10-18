@@ -27,7 +27,7 @@ from ..core.media_io import decode_image, decode_video_frame_index_with_timestam
 from ..core.scene import SceneContext
 from ..core.types import CanonicalFrame
 from ..rig import mapping
-from .face_render import ExpressionBars, face_camera, face_crop
+from .face_render import ExpressionBars, face_camera, face_crop, face_shot
 
 RIG_CONNECTIONS = (
     ("PELVIS", "SPINE_01"),
@@ -199,8 +199,9 @@ def render_comparison(
     camera = None
     sheet_rows = []
     try:
+        shot = face_shot(armature) if bars is not None else None
         camera = (
-            face_camera(scene, armature)
+            face_camera(scene, armature, shot=shot)
             if bars is not None
             else _frame_camera(scene, armature, bones, [row[0] for row in rows])
         )
@@ -223,7 +224,7 @@ def render_comparison(
                     _draw_detection(source, detected, cv2)
                 scene.frame_set(int(timeline_frame))
                 if bars is not None:
-                    face_camera(scene, armature, camera)
+                    face_camera(scene, armature, camera, shot)
                 rig = _render_rig(
                     scene,
                     size,
