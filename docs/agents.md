@@ -267,7 +267,7 @@ path; `api.load_result(result)` returns the dict.
 | `cleanup_steps` | Each enabled clean-up module: `parameters` used and `statistics` (for example `rejected_observations`, `repaired_samples`, `contact_frames`, `root_drift_removed_mean`) |
 | `mapping_issues` | Rig mapping entries with warnings or errors |
 | `face_output_warning` | Why face output may be incomplete |
-| `face` | With face capture: `output`, `frames_with_face`, `expressions` (each mapped expression's `peak` and `mean` strength sent to the rig: the detection through the mapping's input range, as a share of its output range) and `unmapped_expressions` (detected at 0.1 or more but with no target). Names are the face output's: ARKit coefficients, FACS units such as `AU12_L`, VRM expressions such as `blinkLeft`, or `FACE_*` controls for `BONES`. For video, Face Expression Cleanup changes the values further before keying; `evaluate` measures what the rig shows |
+| `face` | With face capture: `output`, `frames_with_face`, `expressions` (each mapped expression's `peak` (furthest from rest, keeping the sign of signed controls) and `mean` strength sent to the rig: the detection through the mapping's input range, as a share of its output range) and `unmapped_expressions` (detected at 0.1 or more but with no target). Names are the face output's: ARKit coefficients, FACS units such as `AU12_L`, VRM expressions such as `blinkLeft`, or `FACE_*` controls for `BONES`. For video, Face Expression Cleanup changes the values further before keying; `evaluate` measures what the rig shows |
 | `warnings` | `{code, message}`; branch on `code` |
 
 Warning codes: `DETECTIONS_REJECTED`, `GAPS_FILLED`, `MANUAL_MASK`,

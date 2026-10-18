@@ -93,6 +93,19 @@ class FaceRangeTests(unittest.TestCase):
         entry = _entry(**face_ranges.legacy_ranges(invert=True))
         self.assertAlmostEqual(face_ranges.map_value(entry, 0.25), 0.75)
 
+    def test_legacy_zero_gain_holds_the_target(self) -> None:
+        for invert, held in ((False, 0.0), (True, 0.6)):
+            entry = _entry(
+                **face_ranges.legacy_ranges(
+                    gain=0.0, offset=0.2, clamp_max=1.0, invert=invert, scale=0.6
+                )
+            )
+            for detected in (-1.0, 0.0, 0.5, 1.0):
+                for signed in (False, True):
+                    self.assertAlmostEqual(
+                        face_ranges.map_value(entry, detected, signed=signed), held
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()

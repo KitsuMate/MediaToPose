@@ -209,6 +209,19 @@ def _set_mapping(
     return True
 
 
+def _range_signature(entry) -> tuple[str, str, str, bool]:
+    """What a face mapping's default ranges depend on, besides the face."""
+    return (entry.target_name, entry.channel_mode, entry.axis, entry.enabled)
+
+
+def _face_signature(entries) -> tuple[str, ...]:
+    """The bones the face frame (directions and size) is measured from."""
+    return tuple(
+        entries[semantic_id].target_name if semantic_id in entries else ""
+        for semantic_id in ("HEAD", "EYE_L", "EYE_R")
+    )
+
+
 def auto_map(
     armature: bpy.types.Object,
     *,
@@ -223,6 +236,12 @@ def auto_map(
     config.armature_signature = armature_signature(armature)
     configure_fk_switches(armature, profile, force=force_profile)
     entries = mapping_by_id(config)
+    ranges_before = {
+        entry.semantic_id: _range_signature(entry)
+        for entry in config.mappings
+        if has_ranges(entry)
+    }
+    face_before = _face_signature(entries)
     bones = set(armature.pose.bones.keys())
     vrm_map = vrm_humanoid_mapping(armature) if profile == PROFILE_GENERIC else {}
 
@@ -465,8 +484,10 @@ def auto_map(
             )
 
     # Mapped face controls and eyes get ranges for their channel and the
-    # face's size; mappings the user edited keep theirs.
+    # face's size when this run changed what they drive (or the face frame);
+    # mappings the user edited and ranges fitted to the rig keep theirs.
     entries = mapping_by_id(config)
+    face_moved = _face_signature(entries) != face_before
     with suppress_manual_locks():
         for entry in config.mappings:
             if (
@@ -475,6 +496,12 @@ def auto_map(
                 and entry.target_name
                 and entry.source in {"PROFILE", "HEURISTIC"}
                 and not entry.manual_lock
+                and (
+                    force_profile
+                    or face_moved
+                    or entry.ranges_version != RANGES_VERSION
+                    or _range_signature(entry) != ranges_before.get(entry.semantic_id)
+                )
             ):
                 apply_default_ranges(armature, entries, entry)
     validate_mapping(armature, settings=settings)

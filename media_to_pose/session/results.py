@@ -99,7 +99,9 @@ class FaceSummary:
             self.entries, dict(frame.blendshapes), self.face_output
         )
         for name, value in applied.items():
-            self.peak[name] = max(self.peak.get(name, value), value)
+            # Signed controls peak on whichever side they reach furthest.
+            if abs(value) > abs(self.peak.get(name, 0.0)) or name not in self.peak:
+                self.peak[name] = value
             self.total[name] = self.total.get(name, 0.0) + value
         self.unmapped.update(unmapped)
 

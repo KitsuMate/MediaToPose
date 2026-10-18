@@ -125,7 +125,8 @@ def migrate_ranges(armature, entries, entry) -> None:
         invert=bool(entry.get("invert", False)),
         scale=scale,
     )
-    if negative is not None and not entry.get("invert", False):
+    held = ranges["output_full"] == ranges["output_zero"]
+    if negative is not None and not entry.get("invert", False) and not held:
         ranges["output_negative"] = negative * float(entry.get("clamp_max", 1.0))
     for name, value in ranges.items():
         setattr(entry, name, value)

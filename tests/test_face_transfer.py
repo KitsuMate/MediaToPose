@@ -386,6 +386,19 @@ class FaceTransferTests(unittest.TestCase):
         self.assertFalse(controls["FACE_LIP_TOP"]["full"]["accepted"])
         self.assertTrue(controls["FACE_LID_L"]["full"]["accepted"])
 
+    def test_auto_map_keeps_fitted_ranges_until_forced(self) -> None:
+        self.addon.api.auto_map(self.rig.name, force_profile=True)
+        entry = self._entry("FACE_JAW_SIDE")
+        default = entry.output_full
+        # What fit_face_controls writes: a new output, the source unchanged.
+        with self.addon.rig.locks.suppress_manual_locks():
+            entry.output_full = default * 1.5
+        self.addon.api.auto_map(self.rig.name)
+        self.assertEqual(entry.source, "PROFILE")
+        self.assertAlmostEqual(entry.output_full, default * 1.5)
+        self.addon.api.auto_map(self.rig.name, force_profile=True)
+        self.assertAlmostEqual(entry.output_full, default)
+
     def test_fit_face_command_applies_accepted_fits(self) -> None:
         entry = self._entry("FACE_JAW_SIDE")
         lips = self._entry("FACE_LIP_TOP")
@@ -399,7 +412,7 @@ class FaceTransferTests(unittest.TestCase):
                     "--armature",
                     self.rig.name,
                     "--controls",
-                    "FACE_JAW_SIDE,FACE_LIP_TOP",
+                    "FACE_JAW_SIDE, FACE_LIP_TOP",
                     "--json",
                 ]
             )
@@ -743,6 +756,23 @@ class FaceCaptureResultTests(unittest.TestCase):
         self.assertGreater(smile["peak"], 0.3)
         self.assertEqual(smile["peak"], smile["mean"])
         self.assertEqual(face["unmapped_expressions"], [])
+
+    def test_signed_peak_keeps_the_side_reached_furthest(self) -> None:
+        entries = self.addon.rig.mapping.mapping_by_id(self.rig.mtp_rig_config)
+        summary = self.addon.session.results.FaceSummary(entries, "BONES")
+        for blendshapes in (
+            {"mouthSmileLeft": 0.2},
+            {"mouthFrownLeft": 0.8},
+            {"mouthSmileLeft": 0.1},
+        ):
+            summary.observe(
+                self.addon.core.types.CanonicalFrame(
+                    timestamp_ms=0, blendshapes=blendshapes
+                )
+            )
+        corner = summary.to_dict()["expressions"]["FACE_MOUTH_CORNER_L"]
+        self.assertAlmostEqual(corner["peak"], -0.8, places=4)
+        self.assertAlmostEqual(corner["mean"], round(-0.5 / 3.0, 4), places=4)
 
     def test_disabled_mapping_is_reported_unmapped(self) -> None:
         entry = next(

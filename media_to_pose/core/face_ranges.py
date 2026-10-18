@@ -100,8 +100,19 @@ def legacy_ranges(
     minus it when inverted) times ``scale`` (the control's travel); the
     detection reached ``clamp_max`` at ``offset + clamp_max / gain``.
     """
-    gain = _finite(gain, 1.0) or 1.0
+    gain = _finite(gain, 1.0)
     top = _finite(clamp_max, 1.0) or 1.0
+    if abs(gain) < 1.0e-9:
+        # A gain of 0 held the target at rest (at ``clamp_max`` inverted):
+        # an empty output range keeps it there.
+        held = top * scale if invert else 0.0
+        return {
+            "input_zero": _finite(offset),
+            "input_full": _finite(offset) + top,
+            "output_zero": held,
+            "output_full": held,
+            "output_negative": held,
+        }
     ranges = {
         "input_zero": _finite(offset),
         "input_full": _finite(offset) + top / gain,

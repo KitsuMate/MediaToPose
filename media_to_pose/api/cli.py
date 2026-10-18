@@ -243,7 +243,9 @@ def run(args) -> Any:
     elif command == "fit-face":
         payload = fit_face_controls(
             args.armature,
-            controls=args.controls.split(",") if args.controls else None,
+            controls=[name.strip() for name in args.controls.split(",") if name.strip()]
+            if args.controls
+            else None,
             apply=not args.dry_run,
         )
     elif command == "evaluate":
