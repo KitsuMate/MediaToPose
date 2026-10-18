@@ -115,8 +115,7 @@ class _SequenceRun:
         ) or compile_postprocess_config(config)
         modules = self.postprocess_config
         self.temporal_settings = _module(modules, "TEMPORAL_CORRECTION")
-        self.face_settings = _module(modules, "FACE_CORRECTION")
-        # Cleaned face coefficients per frame, when Face Expression Cleanup ran.
+        # Cleaned face coefficients per frame, when Smooth Motion cleaned them.
         self.face_track: list[dict[str, float]] | None = None
         self.rohm_settings = _module(modules, "ROHM_CORRECTION")
         self.detection_filter_settings = _module(modules, "DETECTION_FILTER")
@@ -329,16 +328,20 @@ class _SequenceRun:
         )
 
     def _face_cleanup_requested(self) -> bool:
-        face = self.face_settings
+        temporal = self.temporal_settings
         return bool(
-            face is not None
-            and face.enabled
+            temporal is not None
+            and temporal.enabled
             and self.is_video
             and getattr(self.settings, "use_face", False)
         )
 
     def prepare_face_track(self) -> Iterator[SequenceApplyProgress]:
-        """Clean the clip's face coefficients before any frame is solved."""
+        """Clean the clip's face coefficients before any frame is solved.
+
+        Smooth Motion smooths the face here, keeping blinks, instead of on
+        the baked face channels (see ``core/motion/face_filter.py``).
+        """
         if not self._face_cleanup_requested():
             return
         if self.frame_spool is None:
@@ -354,29 +357,26 @@ class _SequenceRun:
         for detected in self.frame_spool:
             track.append(dict(detected.blendshapes) or None)
             times.append(int(detected.timestamp_ms) / 1000.0)
-        face = self.face_settings
+        temporal = self.temporal_settings
         self.face_track, stats = filter_face_track(
             track,
             times,
             FaceFilterSettings(
-                smooth=bool(face.smooth_face),
-                strength=float(face.face_smoothing),
-                preserve_blinks=bool(face.preserve_blinks),
-                neutral_calibration=bool(face.neutral_calibration),
-                deadzone=float(face.face_deadzone),
-                hold_seconds=float(face.face_hold),
+                smooth=bool(temporal.smooth_motion),
+                strength=float(temporal.smoothing_strength),
+                preserve_blinks=bool(temporal.preserve_blinks),
+                neutral_calibration=bool(temporal.neutral_calibration),
             ),
         )
         self.frame_iterator = iter(self.frame_spool)
         if self.requested_mode != RootMotionMode.AUTOMATIC:
             self.total_hint = len(track)
         record_step(
-            "FACE_CORRECTION",
-            frames=stats.frames,
+            "TEMPORAL_CORRECTION",
             frames_without_face=stats.frames_without_face,
-            held_frames=stats.held_frames,
+            held_face_frames=stats.held_frames,
             blinks=stats.blinks,
-            calibrated=stats.calibrated,
+            calibrated_expressions=stats.calibrated,
         )
 
     def solve_frames(self) -> Iterator[SequenceApplyProgress]:

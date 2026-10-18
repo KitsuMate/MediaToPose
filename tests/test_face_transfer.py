@@ -452,7 +452,7 @@ def _blink_clip(count: int = 40) -> list[dict[str, float]]:
 
 
 class FaceSequenceTests(unittest.TestCase):
-    """A video sequence through Face Expression Cleanup and temporal cleanup."""
+    """A video sequence through Smooth Motion's face cleanup."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -469,7 +469,12 @@ class FaceSequenceTests(unittest.TestCase):
         cls.mesh = bpy.data.objects["FaceFX"]
 
     def _run(
-        self, face_cleanup: bool, face_output: str = "ARKIT", *, clip=None
+        self,
+        face_cleanup: bool,
+        face_output: str = "ARKIT",
+        *,
+        clip=None,
+        neutral_calibration: bool = True,
     ) -> dict[str, list[float]]:
         config = self.rig.mtp_rig_config
         module_config = self.addon.postprocess.module_config
@@ -479,8 +484,11 @@ class FaceSequenceTests(unittest.TestCase):
         )
         for item in config.post_processing_modules:
             item.enabled = False
-        module_config(config, "TEMPORAL_CORRECTION").enabled = True
-        module_config(config, "FACE_CORRECTION").enabled = face_cleanup
+        # Smooth Motion cleans the face; without it the raw values are keyed.
+        temporal = module_config(config, "TEMPORAL_CORRECTION")
+        temporal.enabled = face_cleanup
+        self.addCleanup(setattr, temporal, "neutral_calibration", True)
+        temporal.neutral_calibration = neutral_calibration
 
         context = scene_context()
         step_ms = 1000.0 / context.fps
@@ -556,10 +564,9 @@ class FaceSequenceTests(unittest.TestCase):
         # Neutral calibration removed the resting smile.
         self.assertLess(sum(smile) / len(smile), 0.25)
 
-    def test_without_face_cleanup_temporal_smoothing_still_runs(self) -> None:
-        values = self._run(face_cleanup=False)
+    def test_without_neutral_calibration_the_resting_smile_stays(self) -> None:
+        values = self._run(face_cleanup=True, neutral_calibration=False)
         smile = values["mouthSmileLeft"]
-        # No calibration: the resting smile stays.
         self.assertGreater(sum(smile) / len(smile), 0.2)
 
     def _metrics(self, face_output: str):

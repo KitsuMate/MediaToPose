@@ -42,7 +42,7 @@ def coefficient_group(name: str) -> str:
 @dataclass(frozen=True)
 class FaceFilterSettings:
     smooth: bool = True
-    strength: float = 0.35
+    strength: float = 0.5
     preserve_blinks: bool = True
     neutral_calibration: bool = True
     deadzone: float = 0.05
@@ -202,9 +202,9 @@ def filter_face_track(
         stats.blinks = max((len(r) for r in blink_ranges.values()), default=0)
 
     if settings.smooth and settings.strength > 0.0:
-        # Strength 1 is a 0.15 s Gaussian; the default 0.35 is 1 to 1.5
-        # frames at 30 fps.
-        base = 0.15 * min(max(settings.strength, 0.0), 1.0)
+        # Strength 1 is a 0.105 s Gaussian; Smooth Motion's default 0.5 is
+        # 1 to 1.5 frames at 30 fps.
+        base = 0.105 * min(max(settings.strength, 0.0), 1.0)
         for name in names:
             original = columns[name]
             sigma = base * GROUP_STRENGTH[coefficient_group(name)]

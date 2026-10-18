@@ -439,66 +439,23 @@ PARAMETERS: dict[str, Parameter] = {
                 "Motion is active"
             ),
         ),
-        # Face Expression Cleanup.
+        # Smooth Motion: face options (video face capture).
         Parameter(
-            "smooth_face",
+            "neutral_calibration",
             "bool",
-            "Smooth Expressions",
+            "Calibrate Neutral Face",
             True,
             description=(
-                "Smooth face coefficients without lag; eyes and lids are smoothed "
-                "least, brows and jaw most"
+                "Subtract each face expression's resting level, measured over the "
+                "clip, so a relaxed face drives a relaxed rig"
             ),
-        ),
-        Parameter(
-            "face_smoothing",
-            "float",
-            "Expression Smoothing",
-            0.35,
-            description="How strongly face expressions are smoothed over time",
-            minimum=0.0,
-            maximum=1.0,
-            subtype="FACTOR",
         ),
         Parameter(
             "preserve_blinks",
             "bool",
             "Preserve Blinks",
             True,
-            description=("Keep each detected blink's depth and timing when smoothing"),
-        ),
-        Parameter(
-            "neutral_calibration",
-            "bool",
-            "Neutral Calibration",
-            True,
-            description=(
-                "Subtract each expression's resting level, measured over the "
-                "clip, so a relaxed face drives a relaxed rig"
-            ),
-        ),
-        Parameter(
-            "face_deadzone",
-            "float",
-            "Expression Deadzone",
-            0.05,
-            description="Expression values below this are treated as zero",
-            minimum=0.0,
-            maximum=0.3,
-            subtype="FACTOR",
-        ),
-        Parameter(
-            "face_hold",
-            "float",
-            "Hold Lost Face",
-            0.5,
-            description=(
-                "When the face is lost, hold the last expression this long, then "
-                "fade it out over the same time"
-            ),
-            minimum=0.0,
-            maximum=2.0,
-            subtype="TIME",
+            description="Keep each detected blink's depth and timing when smoothing",
         ),
     )
 }
@@ -608,25 +565,6 @@ MODULES: tuple[Module, ...] = (
         ),
     ),
     Module(
-        "FACE_CORRECTION",
-        "Face Expression Cleanup (Experimental)",
-        (
-            "Experimental video-only expression cleanup before retargeting: "
-            "neutral calibration, deadzone, lag-free smoothing that keeps "
-            "blinks, and holding the face briefly when it is lost"
-        ),
-        "Calibrates, smooths and keeps blinks in face expressions.",
-        default_enabled=True,
-        sequence_only=True,
-        layout=(
-            Row(("neutral_calibration",)),
-            Row(("smooth_face",)),
-            Row(("face_smoothing",), enabled_by="smooth_face"),
-            Row(("preserve_blinks",), enabled_by="smooth_face"),
-            Row(("face_deadzone", "face_hold")),
-        ),
-    ),
-    Module(
         "TEMPORAL_CORRECTION",
         "Smooth Motion & Foot Contact (Experimental)",
         (
@@ -640,6 +578,7 @@ MODULES: tuple[Module, ...] = (
             Row(("smooth_motion",)),
             Row(("ground_contacts",)),
             Row(("smoothing_strength",), enabled_by="smooth_motion"),
+            Row(("neutral_calibration", "preserve_blinks")),
             Row(("stabilize_hands",)),
             Row(
                 (

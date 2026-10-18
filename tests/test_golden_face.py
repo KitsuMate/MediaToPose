@@ -207,7 +207,7 @@ class GoldenFaceTests(unittest.TestCase):
         rig = self._open("facefx_face_rig", "FaceFX.Rig")
         config = rig.mtp_rig_config
         for item in config.post_processing_modules:
-            item.enabled = item.module_id in {"FACE_CORRECTION", "TEMPORAL_CORRECTION"}
+            item.enabled = item.module_id == "TEMPORAL_CORRECTION"
         context = scene_context()
         step_ms = 1000.0 / context.fps
         frames = []
