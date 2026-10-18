@@ -10,49 +10,33 @@ checked with numbers and face close-ups.
 
 - VRM face output for VRoid and other VRM characters: per-eye blinks,
   A/I/U/E/O mouth shapes and the emotion expressions on the `Fcl_*` keys.
-- Face Expression Cleanup (experimental, video only, on by default):
-  neutral calibration of each expression's resting level, a deadzone,
-  lag-free smoothing that keeps blinks, and holding the face briefly when it
-  is lost. Temporal smoothing no longer smooths face channels after it.
+- Smooth Motion cleans video face expressions before retargeting: neutral
+  calibration of each expression's resting level, lag-free smoothing that
+  keeps blinks, and holding a lost face briefly before it fades to neutral
+  (`neutral_calibration`, `preserve_blinks`).
 - Bone face lids follow the gaze up and down.
 - Input and output ranges for every face mapping, replacing gain, offset,
   clamp and invert: the detected values treated as rest and full, and the
   target's value at rest, full and (for brows, mouth corners, lids, jaw
   side, gaze) negative full, in the target's units (key value, metres,
-  degrees). Rig Setup shows them with Set from Pose and Reset Ranges;
-  0.2.0 mappings and presets are converted.
-- `api.fit_face_controls` / `fit-face`: fit face bone ranges to the rig's
-  own ARKit keys by least squares over the mesh vertices. The Auto-Rig Pro
-  defaults come from this fit (brows and mouth corners move less, the jaw
-  opens further, the negative sides are separate). Bone lids close fully
-  from a detected blink of 0.75, fitted on the face stills so they close as
-  far as the ARKit lids do.
-- Capture results carry a `face` block: the value sent to each mapped
-  expression and the detected expressions with no target.
+  degrees). 0.2.0 mappings and presets are converted. The Auto-Rig Pro
+  defaults are fitted to ARKit keys (`ci/fit_face_travel_blender.py`); bone
+  lids close fully from a detected blink of 0.75.
 - Face metrics in `evaluate`: `expression_fit`, `blink_recall`,
   `face_jitter` and `asymmetry`; `--face-output` on the command line.
-- `render_comparison(face=True)` / `render --face`: the detected face, the
-  rig's face and a chart of the strongest expressions, detected and on the
-  rig.
-- `describe_rig` reports the face: expressions mapped and unmapped per
-  scheme, bone controls, eye bones with their look-at targets, face scale,
-  and shape keys per scheme.
-- Test fixtures: an Auto-Rig Pro face rig with prefixed ARKit keys, generated
-  FACS AU targets, and 13 CC0 face photos with checks against the real
-  detector; golden snapshots of ARKit, FACS, bone and VRM face output and
-  of a face video sequence.
+- `render_comparison(face=True)` / `render --face`: the detected face next
+  to the rig's face. Capture results record their `face_output`.
+- Test fixtures: an Auto-Rig Pro face rig with prefixed ARKit keys and 13
+  CC0 face photos with checks against the real detector; golden snapshots
+  of ARKit, FACS, bone and VRM face output and of a face video sequence.
 
 ### Fixed
 
 - Model-install lock checks no longer signal or terminate Windows processes.
-- Face fitting evaluates bones in pose mode, restores pose mode and values
-  even if initial mesh evaluation fails, and refuses an active capture or
-  model operation. Unknown control names are rejected.
-- Lost faces finish fading with explicit neutral keyframes.
-- ARKit names behind `blendShape.` prefixes are recognised.
-- ARKit keys with prefixes (`arkit_`, `facs_bs_`, `ctrl_`) are recognised,
-  correctives are left alone, and only one key per mesh is driven for each
-  expression.
+- `render --out` keeps the PNG sheet instead of overwriting it with JSON.
+- ARKit keys with prefixes (`arkit_`, `facs_bs_`, `ctrl_`, `blendShape.`)
+  are recognised, correctives are left alone, and only one key per mesh is
+  driven for each expression.
 - Face bone controls move along the face's own axes by face-sized amounts,
   so lids close, brows and mouth corners move up and down, and the
   Auto-Rig Pro jaw opens.
@@ -60,7 +44,8 @@ checked with numbers and face close-ups.
   every face output, not only bones.
 - FACS jaw units: AU25 (lips part), AU26 (jaw drop) and AU27 (mouth stretch)
   are separated.
-- Face mapping completeness is reported only when face capture is on.
+- Face mapping completeness is reported only when face capture is on;
+  `describe_rig` no longer lists unclassified keys as a shape-key scheme.
 
 ## 0.2.0
 
