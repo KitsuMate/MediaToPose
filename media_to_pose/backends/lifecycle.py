@@ -26,7 +26,7 @@ from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePath, PurePosixPath
 from typing import Any
 
 from ..core import paths
@@ -36,7 +36,7 @@ from ..core.coordinator import (
     OperationState,
     OperationToken,
 )
-from ..core.errors import BackendError, Cancelled, OperationBusy
+from ..core.errors import BackendError, Cancelled, MtpError, OperationBusy
 from ..core.fs import atomic_json, read_json, remove_tree, replace_directory
 from ..core.log import get_logger
 from . import resources
@@ -48,6 +48,7 @@ DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 15
 STORAGE_OWNER = "media_to_pose"
 STORAGE_MARKER = ".media_to_pose_storage.json"
+DOWNLOAD_FOLDER = ".download"
 # Kept free beyond a bundle's own size, so a download never fills the disk.
 DOWNLOAD_HEADROOM_BYTES = 512 * 1024 * 1024
 _LOG_LIMIT = 200
@@ -158,6 +159,20 @@ def sha256_file(path: Path) -> str:
 ProgressCallback = Callable[[int, int], None]
 
 
+def resumable_part[P: PurePath](destination: P) -> P:
+    """The fixed ``.part`` sibling a resumable download continues from."""
+    return destination.with_name(f".{destination.name}.part")
+
+
+def _hash_existing(path: Path, digest) -> int:
+    received = 0
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(DOWNLOAD_CHUNK_BYTES), b""):
+            digest.update(chunk)
+            received += len(chunk)
+    return received
+
+
 def download_file(
     url: str,
     destination: Path,
@@ -171,55 +186,89 @@ def download_file(
     user_agent: str = "Media-to-Pose",
     timeout: float = DOWNLOAD_TIMEOUT_SECONDS,
     cancel_message: str = "",
+    resume: bool = False,
 ) -> None:
     """Stream ``url`` to ``destination`` with size and SHA-256 checks.
 
-    The file is written to a unique ``.part`` sibling and moved into place
-    only after every check passes, so a failure or cancellation never leaves
-    a partial file behind.
+    The file is written to a ``.part`` sibling and moved into place only
+    after every check passes. Without ``resume`` the sibling is unique and
+    removed on any failure. With ``resume`` it is ``resumable_part`` and is
+    kept when the transfer stops (network error, cancellation), so the next
+    call asks only for the remaining bytes with an HTTP ``Range`` request; a
+    server that answers with the whole file restarts it. A part that fails
+    a size or SHA-256 check is always removed.
     """
     label = label or Path(destination).name
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    partial = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.part")
-    request = urllib.request.Request(url, headers={"User-Agent": user_agent})
+    partial = (
+        resumable_part(destination)
+        if resume
+        else destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.part")
+    )
     digest = hashlib.sha256()
     received = 0
+    if resume and partial.is_file():
+        received = _hash_existing(partial, digest)
+        if expected_bytes and received > expected_bytes:
+            partial.unlink()
+            digest, received = hashlib.sha256(), 0
+    headers = {"User-Agent": user_agent}
+    if received and received != expected_bytes:
+        headers["Range"] = f"bytes={received}-"
+    keep_partial = resume
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            total = int(response.headers.get("Content-Length") or 0)
-            if expected_bytes and total and total != expected_bytes:
-                raise BackendError(f"{label} has an unexpected download size")
-            if maximum_bytes and total and total > maximum_bytes:
-                raise BackendError(f"{label} exceeds the safe download limit")
-            total = total or int(expected_bytes or 0)
-            with partial.open("xb") as handle:
-                while True:
-                    if cancel.is_set():
-                        raise Cancelled(cancel_message or f"{label} download cancelled")
-                    chunk = response.read(DOWNLOAD_CHUNK_BYTES)
-                    if not chunk:
-                        break
-                    handle.write(chunk)
-                    digest.update(chunk)
-                    received += len(chunk)
-                    if expected_bytes and received > expected_bytes:
-                        raise BackendError(f"{label} exceeds its declared size")
-                    if maximum_bytes and received > maximum_bytes:
-                        raise BackendError(f"{label} exceeds the safe download limit")
-                    if progress is not None:
-                        progress(received, total)
+        if not (received and received == expected_bytes):
+            request = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                remaining = int(response.headers.get("Content-Length") or 0)
+                if received and getattr(response, "status", 200) != 206:
+                    # The server ignored the range: start the file again.
+                    digest, received = hashlib.sha256(), 0
+                total = received + remaining if remaining else 0
+                if expected_bytes and total and total != expected_bytes:
+                    keep_partial = False
+                    raise BackendError(f"{label} has an unexpected download size")
+                if maximum_bytes and total and total > maximum_bytes:
+                    keep_partial = False
+                    raise BackendError(f"{label} exceeds the safe download limit")
+                total = total or int(expected_bytes or 0)
+                mode = "ab" if received else ("wb" if resume else "xb")
+                with partial.open(mode) as handle:
+                    while True:
+                        if cancel.is_set():
+                            raise Cancelled(
+                                cancel_message or f"{label} download cancelled"
+                            )
+                        chunk = response.read(DOWNLOAD_CHUNK_BYTES)
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+                        digest.update(chunk)
+                        received += len(chunk)
+                        if expected_bytes and received > expected_bytes:
+                            keep_partial = False
+                            raise BackendError(f"{label} exceeds its declared size")
+                        if maximum_bytes and received > maximum_bytes:
+                            keep_partial = False
+                            raise BackendError(
+                                f"{label} exceeds the safe download limit"
+                            )
+                        if progress is not None:
+                            progress(received, total)
         if expected_bytes and received != expected_bytes:
             raise BackendError(f"{label} has an unexpected byte size")
         if (
             expected_sha256
             and digest.hexdigest().casefold() != expected_sha256.casefold()
         ):
+            keep_partial = False
             raise BackendError(f"{label} failed SHA-256 verification")
         partial.replace(destination)
     except BaseException:
-        with suppress(OSError):
-            partial.unlink()
+        if not keep_partial:
+            with suppress(OSError):
+                partial.unlink()
         raise
 
 
@@ -701,6 +750,25 @@ class PinnedBundle:
     verify: Callable[[Path], object]
 
 
+def _downloaded(path: Path, item: BundleFile) -> bool:
+    """Whether ``path`` already holds ``item`` exactly (size, then SHA-256)."""
+    return (
+        path.is_file()
+        and path.stat().st_size == item.bytes
+        and sha256_file(path).casefold() == item.sha256.casefold()
+    )
+
+
+def _prune_download(staging: Path, keep: set[str]) -> None:
+    """Remove files of other bundles or revisions from the download folder."""
+    for path in sorted(staging.rglob("*"), reverse=True):
+        if path.is_dir():
+            with suppress(OSError):
+                path.rmdir()  # Only empty folders.
+        elif path.relative_to(staging).as_posix() not in keep:
+            path.unlink()
+
+
 def install_pinned_bundle(
     job: BackgroundJob,
     bundle: PinnedBundle,
@@ -710,8 +778,14 @@ def install_pinned_bundle(
 ) -> str:
     """Download, verify and activate ``bundle`` under the storage ``root``.
 
-    Files land in a private staging folder; only a fully verified folder
-    replaces ``root/active``. The volume must hold the files plus
+    Files land in the ``root/.download`` folder, guarded by the installation
+    lock; only a fully verified folder replaces ``root/active``. The folder
+    survives an interrupted install: files already there with the right
+    SHA-256 are reused and partial files continue where they stopped, so a
+    multi-gigabyte download resumes. Files that no longer belong to the
+    bundle are removed first.
+
+    The volume must hold the remaining bytes plus
     ``DOWNLOAD_HEADROOM_BYTES``, or ``InsufficientResources`` is raised before
     any file is downloaded. The preferred revision falls back to ``main``
     only when it has been removed from the Hub (HTTP 404/410).
@@ -720,12 +794,14 @@ def install_pinned_bundle(
 
     label = bundle.label
     root = Path(root)
-    staging = root / f".staging-{os.getpid()}-{uuid.uuid4().hex}"
+    staging = root / DOWNLOAD_FOLDER
     lock = model_installation_lock(root, label)
     try:
         lock.acquire()
         storage.ensure(root)
-        staging.mkdir(parents=True)
+        for abandoned in root.glob(".staging-*"):
+            remove_tree(abandoned)
+        staging.mkdir(parents=True, exist_ok=True)
         revision = bundle.revision if is_immutable_revision(bundle.revision) else "main"
         cancelled = f"{label} download cancelled"
 
@@ -759,26 +835,58 @@ def install_pinned_bundle(
             fetch(bundle.manifest_path, manifest, 0.01, 0.05)
         job.check_cancelled(f"{label} installation cancelled")
         files = sorted(bundle.list_files(staging), key=lambda item: item.path)
+        destinations = {
+            item.path: contained_path(staging, item.path, label=f"{label} bundle")
+            for item in files
+        }
+        _prune_download(
+            staging,
+            {"manifest.json"}
+            | {item.path for item in files}
+            | {resumable_part(PurePosixPath(item.path)).as_posix() for item in files},
+        )
+        job.update(0.05, f"Checking downloaded {label} files", "Download")
+        reused = {
+            item.path for item in files if _downloaded(destinations[item.path], item)
+        }
+        remaining = sum(
+            item.bytes
+            - (
+                part.stat().st_size
+                if (part := resumable_part(destinations[item.path])).is_file()
+                else 0
+            )
+            for item in files
+            if item.path not in reused
+        )
+        resources.require_disk(
+            staging, remaining + DOWNLOAD_HEADROOM_BYTES, f"The {label} download"
+        )
         remote_root = PurePosixPath(bundle.manifest_path).parent
         total = sum(item.bytes for item in files)
-        resources.require_disk(
-            staging, total + DOWNLOAD_HEADROOM_BYTES, f"The {label} download"
-        )
         completed = 0
         for item in files:
             start = 0.05 + 0.80 * completed / max(total, 1)
             completed += item.bytes
             end = 0.05 + 0.80 * completed / max(total, 1)
+            if item.path in reused:
+                job.update(end, f"Using downloaded {item.path}", "Download")
+                continue
             fetch(
                 str(remote_root / item.path),
-                contained_path(staging, item.path, label=f"{label} bundle"),
+                destinations[item.path],
                 start,
                 end,
                 expected_bytes=item.bytes,
                 expected_sha256=item.sha256,
+                resume=True,
             )
         job.update(0.88, f"Verifying {label} bundle", "Verification")
-        bundle.verify(staging)
+        try:
+            bundle.verify(staging)
+        except (MtpError, OSError, ValueError):
+            remove_tree(staging)
+            raise
         job.check_cancelled(f"{label} installation cancelled")
         job.update(0.96, "Activating verified bundle", "Activation")
         replace_directory(staging, root / "active", root / ".previous")
@@ -786,7 +894,6 @@ def install_pinned_bundle(
         job.update(1.0, f"{label} installed and verified", "Complete")
         return f"{label} installed and verified"
     finally:
-        remove_tree(staging)
         lock.release()
 
 
@@ -1015,6 +1122,7 @@ class ModelBackend:
 
 
 __all__ = [
+    "DOWNLOAD_FOLDER",
     "DOWNLOAD_HEADROOM_BYTES",
     "HF_ENDPOINT",
     "STORAGE_MARKER",
@@ -1030,6 +1138,7 @@ __all__ = [
     "backend_root",
     "contained_path",
     "download_file",
+    "resumable_part",
     "hf_resolve_url",
     "install_pinned_bundle",
     "is_immutable_revision",
