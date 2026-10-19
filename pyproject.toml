@@ -55,6 +55,7 @@ include = [
   "media_to_pose/core/log.py",
   "media_to_pose/core/media_io.py",
   "media_to_pose/core/motion/rohm_format.py",
+  "media_to_pose/core/motion/kimodo",
   "media_to_pose/core/motion/soma.py",
   "media_to_pose/core/paths.py",
   "media_to_pose/core/report.py",
