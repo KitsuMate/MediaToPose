@@ -298,7 +298,8 @@ Other introspection: `api.describe_rig(armature)` (mapping coverage per
 section, unmapped targets, detected profile, shape keys per mesh and scheme,
 and face bones),
 `api.auto_map(armature)`, `api.list_providers()` and `api.model_status()`
-(optional model install state and download sizes).
+(optional model install state and download sizes; for `KIMODO` and
+`LLM2VEC` also the variant, device, `min_ram_bytes` and `license_state`).
 
 ## Command line reference
 

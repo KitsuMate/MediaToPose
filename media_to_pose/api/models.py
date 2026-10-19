@@ -6,6 +6,8 @@ from dataclasses import asdict, is_dataclass, replace
 from typing import Any
 
 from ..backends.anycalib import backend as anycalib_backend
+from ..backends.kimodo import backend as kimodo_backend
+from ..backends.llm2vec import backend as llm2vec_backend
 from ..backends.rohm import backend as rohm_backend
 from ..backends.sam3d import backend as sam3d_backend
 from ..core.requests import CaptureSettings
@@ -54,7 +56,12 @@ def list_providers(*, scene=None) -> list[dict[str, Any]]:
 
 
 def model_status(*, scene=None) -> dict[str, dict[str, Any]]:
-    """Install and load state of the optional models, with download sizes."""
+    """Install and load state of the optional models, with download sizes.
+
+    ``KIMODO`` and ``LLM2VEC`` also report the variant, device, memory need
+    (``min_ram_bytes``) and licence state (``license_state`` is ``ACCEPTED``
+    or ``REQUIRED`` for the pinned revision).
+    """
     settings = resolve_scene(scene).mtp_settings
     sam = _plain(
         sam3d_backend.backend_snapshot(
@@ -69,10 +76,18 @@ def model_status(*, scene=None) -> dict[str, dict[str, Any]]:
     anycalib["loaded"] = anycalib_backend.is_model_loaded()
     rohm = _plain(rohm_backend.backend_snapshot(settings.rohm_device))
     rohm["loaded"] = rohm_backend.is_model_loaded()
+    # Generation settings arrive with the Generate panel; until then the
+    # denoiser reports the AUTO variant and device.
+    kimodo = _plain(kimodo_backend.backend_snapshot("AUTO", "AUTO"))
+    kimodo["loaded"] = kimodo_backend.is_model_loaded()
+    llm2vec = _plain(llm2vec_backend.backend_snapshot())
+    llm2vec["loaded"] = llm2vec_backend.is_model_loaded()
     return {
         "SAM3D_BODY": sam,
         "ANYCALIB": anycalib,
         "ROHM": rohm,
+        "KIMODO": kimodo,
+        "LLM2VEC": llm2vec,
     }
 
 
