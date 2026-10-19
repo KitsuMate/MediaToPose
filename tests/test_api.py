@@ -189,8 +189,15 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(providers["MEDIAPIPE"]["available"])
         self.assertIn("body", providers["MEDIAPIPE"]["parts"])
         status = self.api.model_status()
-        self.assertEqual(set(status), {"SAM3D_BODY", "ANYCALIB", "ROHM"})
+        self.assertEqual(
+            set(status), {"SAM3D_BODY", "ANYCALIB", "ROHM", "KIMODO", "LLM2VEC"}
+        )
         self.assertGreater(status["SAM3D_BODY"]["download_bytes"], 0)
+        for name in ("KIMODO", "LLM2VEC"):
+            with self.subTest(model=name):
+                self.assertIn(status[name]["license_state"], {"ACCEPTED", "REQUIRED"})
+                self.assertGreater(status[name]["min_ram_bytes"], 0)
+                self.assertIn("variant", status[name])
 
     def test_detections_round_trip_through_files(self) -> None:
         exported = self.api.export_detections(self.root / "detections")

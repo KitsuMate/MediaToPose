@@ -21,7 +21,7 @@ from ...core.errors import BackendError, Cancelled, InvalidRequest, ModelMissing
 from ...core.fs import atomic_json, read_json, remove_tree
 from ...core.log import get_logger
 from ...core.requests import SamSetupRequest
-from .. import lifecycle
+from .. import lifecycle, resources
 from ..lifecycle import (
     BackgroundJob,
     InstallationLock,
@@ -227,15 +227,6 @@ def installed_model_storage_root(
     if model.name == "active" and STORAGE.owns(parent):
         return parent
     return None
-
-
-def _closest_existing_directory(path: Path) -> Path:
-    candidate = path.resolve(strict=False)
-    while not candidate.exists() and candidate != candidate.parent:
-        candidate = candidate.parent
-    if not candidate.exists():
-        raise BackendError(f"No accessible parent directory exists for {path}")
-    return candidate
 
 
 def install_running() -> bool:
@@ -764,21 +755,18 @@ def _check_bundle_storage(
     bundle,
     cached_paths: set[str],
 ) -> None:
-    runtime_disk = _closest_existing_directory(layout.root)
-    model_disk = _closest_existing_directory(layout.storage_root)
     model_required = (
         sum(int(item.bytes) for item in bundle.files if item.path not in cached_paths)
         + MODEL_DOWNLOAD_HEADROOM_BYTES
     )
-    same_volume = Path(runtime_disk).stat().st_dev == Path(model_disk).stat().st_dev
-    runtime_free = shutil.disk_usage(runtime_disk).free
-    model_free = shutil.disk_usage(model_disk).free
-    if same_volume:
-        enough = runtime_free >= MIN_RUNTIME_FREE_BYTES + model_required
+    label = "The SAM 3D Body ONNX bundle"
+    if resources.same_volume(layout.root, layout.storage_root):
+        resources.require_disk(
+            layout.root, MIN_RUNTIME_FREE_BYTES + model_required, label
+        )
     else:
-        enough = runtime_free >= MIN_RUNTIME_FREE_BYTES and model_free >= model_required
-    if not enough:
-        raise BackendError("Insufficient free space for the SAM 3D Body ONNX bundle")
+        resources.require_disk(layout.root, MIN_RUNTIME_FREE_BYTES, label)
+        resources.require_disk(layout.storage_root, model_required, label)
 
 
 def _download_ort_bundle(

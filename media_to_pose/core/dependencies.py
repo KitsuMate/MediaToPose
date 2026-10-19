@@ -141,6 +141,23 @@ def import_onnxruntime():
         ) from exc
 
 
+def import_tokenizers():
+    """Import Hugging Face ``tokenizers`` for the optional LLM2Vec encoder.
+
+    Not in ``REQUIRED_MODULES``: only prompts need it, and whether its wheels
+    are bundled is still open (Kimodo plan, Decision 3).
+    """
+    if not _module_is_available("tokenizers"):
+        raise DependencyMissing(
+            "Prompts need the 'tokenizers' package, which this build of Media "
+            "to Pose does not include; generate without a prompt instead"
+        )
+    try:
+        return importlib.import_module("tokenizers")
+    except Exception as exc:
+        raise DependencyMissing(f"'tokenizers' could not be loaded: {exc}") from exc
+
+
 def onnxruntime_diagnostics() -> dict[str, object]:
     """Describe the bundled runtime without attempting hardware inference."""
     runtime = import_onnxruntime()

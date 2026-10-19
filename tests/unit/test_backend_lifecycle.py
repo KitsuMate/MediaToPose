@@ -15,12 +15,26 @@ from unittest import mock
 
 from media_to_pose.backends import lifecycle
 from media_to_pose.core.coordinator import COORDINATOR, OperationKind
-from media_to_pose.core.errors import BackendError, Cancelled, OperationBusy
+from media_to_pose.core.errors import (
+    BackendError,
+    Cancelled,
+    InsufficientResources,
+    OnlineAccessDisabled,
+    OperationBusy,
+)
 
 
 class _Response:
-    def __init__(self, payload: bytes, *, length: int | None = None, fail_after=None):
+    def __init__(
+        self,
+        payload: bytes,
+        *,
+        length: int | None = None,
+        fail_after=None,
+        status: int = 200,
+    ):
         self.payload = payload
+        self.status = status
         self.headers = {
             "Content-Length": str(len(payload) if length is None else length)
         }
@@ -91,6 +105,58 @@ class DownloadTests(TemporaryDirectoryTestCase):
         with self.assertRaisesRegex(TimeoutError, "injected"):
             self._download(_Response(b"abc", length=6, fail_after=1))
         self.assertEqual(list(self.root.iterdir()), [])
+
+    def test_interrupted_resumable_download_continues_with_a_range(self) -> None:
+        payload = b"0123456789" * 3
+        destination = self.root / "model.onnx"
+        part = lifecycle.resumable_part(destination)
+        part.write_bytes(payload[:12])
+        requests = []
+
+        def urlopen(request, timeout):
+            requests.append(request.get_header("Range"))
+            return _Response(payload[12:], status=206)
+
+        with mock.patch.object(
+            lifecycle.urllib.request, "urlopen", side_effect=urlopen
+        ):
+            lifecycle.download_file(
+                "https://example.invalid/model.onnx",
+                destination,
+                cancel=threading.Event(),
+                expected_bytes=len(payload),
+                expected_sha256=_sha(payload),
+                resume=True,
+            )
+        self.assertEqual(requests, ["bytes=12-"])
+        self.assertEqual(destination.read_bytes(), payload)
+        self.assertFalse(part.exists())
+
+    def test_server_ignoring_the_range_restarts_the_file(self) -> None:
+        payload = b"abcdefgh"
+        destination = self.root / "model.onnx"
+        lifecycle.resumable_part(destination).write_bytes(b"XYZ")
+        destination = self._download(
+            _Response(payload),
+            expected_bytes=len(payload),
+            expected_sha256=_sha(payload),
+            resume=True,
+        )
+        self.assertEqual(destination.read_bytes(), payload)
+
+    def test_resumable_part_survives_a_failure_but_not_a_bad_hash(self) -> None:
+        part = lifecycle.resumable_part(self.root / "model.onnx")
+        with self.assertRaises(TimeoutError):
+            self._download(_Response(b"abc", fail_after=1), resume=True)
+        self.assertEqual(part.read_bytes(), b"abc")
+        with self.assertRaises(BackendError):
+            self._download(
+                _Response(b"def", status=206),
+                expected_bytes=6,
+                expected_sha256=_sha(b"other!"),
+                resume=True,
+            )
+        self.assertFalse(part.exists())
 
     def test_cancellation_raises_cancelled(self) -> None:
         cancel = threading.Event()
@@ -350,6 +416,205 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
             )
         self.assertEqual(len(urls), 2)
         self.assertIn("d" * 40, urls[0])
+
+    def test_reinstall_reuses_verified_files_and_resumes_parts(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        root = storage.root(self.root)
+        storage.ensure(root)
+        download = root / lifecycle.DOWNLOAD_FOLDER
+        (download / "onnx").mkdir(parents=True)
+        (download / "small.bin").write_bytes(b"small")
+        (download / "onnx" / ".big.onnx.part").write_bytes(b"big-")
+        (download / "stale.onnx").write_bytes(b"other variant")
+        calls = []
+
+        def fake_download(url, destination, **kwargs):
+            calls.append((Path(destination).name, kwargs.get("resume", False)))
+            if Path(destination).name == "manifest.json":
+                Path(destination).write_bytes(b"{}")
+                return
+            part = lifecycle.resumable_part(Path(destination))
+            self.assertEqual(part.read_bytes(), b"big-")
+            part.write_bytes(b"big-bytes")
+            part.replace(destination)
+
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="f" * 40,
+            manifest_path="manifest.json",
+            list_files=lambda staging: [
+                lifecycle.BundleFile("small.bin", 5, _sha(b"small")),
+                lifecycle.BundleFile("onnx/big.onnx", 9, _sha(b"big-bytes")),
+            ],
+            verify=lambda staging: None,
+        )
+        with mock.patch.object(lifecycle, "download_file", side_effect=fake_download):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                root,
+                self.root / "storage.json",
+            )
+        self.assertEqual(calls, [("manifest.json", False), ("big.onnx", True)])
+        active = root / "active"
+        self.assertEqual(
+            sorted(p.relative_to(active).as_posix() for p in active.rglob("*")),
+            ["manifest.json", "onnx", "onnx/big.onnx", "small.bin"],
+        )
+        self.assertFalse(download.exists())
+
+    def test_cancelled_install_keeps_its_download_folder(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        root = storage.root(self.root)
+
+        def fake_download(url, destination, **_kwargs):
+            if Path(destination).name == "manifest.json":
+                Path(destination).write_bytes(b"{}")
+                return
+            lifecycle.resumable_part(Path(destination)).write_bytes(b"half")
+            raise Cancelled("Test download cancelled")
+
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="f" * 40,
+            manifest_path="manifest.json",
+            list_files=lambda staging: [
+                lifecycle.BundleFile("big.onnx", 8, _sha(b"halfmore"))
+            ],
+            verify=lambda staging: None,
+        )
+        with (
+            mock.patch.object(lifecycle, "download_file", side_effect=fake_download),
+            self.assertRaises(Cancelled),
+        ):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                root,
+                self.root / "storage.json",
+            )
+        part = root / lifecycle.DOWNLOAD_FOLDER / ".big.onnx.part"
+        self.assertEqual(part.read_bytes(), b"half")
+        self.assertFalse((root / "active").exists())
+
+    def test_bundle_listed_in_code_fetches_from_several_repositories(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        root = storage.root(self.root)
+        urls = []
+
+        def fake_download(url, destination, **_kwargs):
+            urls.append(url)
+            Path(destination).parent.mkdir(parents=True, exist_ok=True)
+            Path(destination).write_bytes(b"data")
+
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="a" * 40,
+            manifest_path="",
+            list_files=lambda staging: [
+                lifecycle.BundleFile("onnx/model.onnx", 4, _sha(b"data")),
+                lifecycle.BundleFile(
+                    "stats/mean.npy",
+                    4,
+                    _sha(b"data"),
+                    repository="Upstream/model",
+                    revision="b" * 40,
+                    remote_path="stats/motion/mean.npy",
+                ),
+            ],
+            verify=lambda staging: None,
+        )
+        with mock.patch.object(lifecycle, "download_file", side_effect=fake_download):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                root,
+                self.root / "storage.json",
+            )
+        self.assertEqual(
+            urls,
+            [
+                f"https://huggingface.co/Owner/test-onnx/resolve/{'a' * 40}/onnx/model.onnx",
+                f"https://huggingface.co/Upstream/model/resolve/{'b' * 40}/stats/motion/mean.npy",
+            ],
+        )
+        manifest = json.loads((root / "active" / "manifest.json").read_text())
+        self.assertEqual(manifest["schema_version"], 1)
+        self.assertEqual(
+            [(item["path"], item["repository"]) for item in manifest["files"]],
+            [
+                ("onnx/model.onnx", "Owner/test-onnx"),
+                ("stats/mean.npy", "Upstream/model"),
+            ],
+        )
+
+    def test_offline_install_downloads_nothing(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="f" * 40,
+            manifest_path="manifest.json",
+            list_files=lambda staging: [],
+            verify=lambda staging: None,
+        )
+        with (
+            mock.patch.object(lifecycle, "download_file") as download,
+            self.assertRaises(OnlineAccessDisabled) as caught,
+        ):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                storage.root(self.root),
+                self.root / "storage.json",
+                online_access=False,
+            )
+        download.assert_not_called()
+        self.assertEqual(caught.exception.exit_code, 4)
+        self.assertFalse(storage.root(self.root).exists())
+
+    def test_install_needs_free_space_for_the_files_and_headroom(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        downloads = []
+
+        def fake_download(url, destination, **_kwargs):
+            downloads.append(Path(destination).name)
+            Path(destination).write_bytes(b"{}")
+
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="e" * 40,
+            manifest_path="manifest.json",
+            list_files=lambda staging: [
+                lifecycle.BundleFile("graph.onnx", 4 * 1024**3, "0" * 64)
+            ],
+            verify=lambda staging: None,
+        )
+        free = 4 * 1024**3 + lifecycle.DOWNLOAD_HEADROOM_BYTES - 1
+        with (
+            mock.patch.object(lifecycle, "download_file", side_effect=fake_download),
+            mock.patch.object(
+                lifecycle.resources, "free_disk_bytes", return_value=free
+            ),
+            self.assertRaises(InsufficientResources) as caught,
+        ):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                storage.root(self.root),
+                self.root / "storage.json",
+            )
+        self.assertEqual(downloads, ["manifest.json"])
+        self.assertEqual(caught.exception.details["available_bytes"], free)
 
 
 if __name__ == "__main__":

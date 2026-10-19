@@ -40,6 +40,14 @@ class OperationKind(str, Enum):
     ANYCALIB_MODEL_LOAD = "anycalib_model_load"
     ANYCALIB_MODEL_UNLOAD = "anycalib_model_unload"
     ANYCALIB_UNINSTALL = "anycalib_uninstall"
+    KIMODO_INSTALL = "kimodo_install"
+    KIMODO_MODEL_LOAD = "kimodo_model_load"
+    KIMODO_MODEL_UNLOAD = "kimodo_model_unload"
+    KIMODO_UNINSTALL = "kimodo_uninstall"
+    LLM2VEC_INSTALL = "llm2vec_install"
+    LLM2VEC_ENCODE = "llm2vec_encode"
+    LLM2VEC_UNINSTALL = "llm2vec_uninstall"
+    GENERATE = "generate"
 
 
 class OperationState(str, Enum):

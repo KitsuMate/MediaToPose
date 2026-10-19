@@ -298,7 +298,8 @@ Other introspection: `api.describe_rig(armature)` (mapping coverage per
 section, unmapped targets, detected profile, shape keys per mesh and scheme,
 and face bones),
 `api.auto_map(armature)`, `api.list_providers()` and `api.model_status()`
-(optional model install state and download sizes).
+(optional model install state and download sizes; for `KIMODO` and
+`LLM2VEC` also the variant, device, `min_ram_bytes` and `license_state`).
 
 ## Command line reference
 
@@ -331,8 +332,16 @@ command line exits with the class's code and, with `--json`, prints
 | 2 | `INVALID_REQUEST` | Bad arguments, configuration or names; no matching retained detections |
 | 3 | `MEDIA_ERROR` | Media missing or unreadable |
 | 4 | `MODEL_MISSING`, `DEPENDENCY_MISSING` | Optional model or bundled dependency unavailable |
+| 4 | `ONLINE_ACCESS_DISABLED` | A model must be downloaded but Blender's online access is off; nothing was downloaded |
 | 5 | `MAPPING_INCOMPLETE` | The rig mapping does not cover the requested parts |
 | 6 | `OPERATION_BUSY` | Another capture or model job is running |
 | 7 | `CANCELLED` | Cancelled or timed out; Blender data was rolled back |
 | 8 | `BACKEND_ERROR` | A model runtime failed |
 | 9 | `CAPTURE_FAILED` | The capture started and failed; Blender data was rolled back |
+| 10 | `LICENSE_REQUIRED` | A model's licence has not been accepted; `details` carries `license_id`, `summary`, `url` and the exact `accept_license` value |
+| 11 | `INSUFFICIENT_RESOURCES` | Not enough disk or memory; `details` carries `resource`, `needed_bytes`, `available_bytes` and, when one exists, a `fitting_variant` |
+
+On `LICENSE_REQUIRED`, show the licence (`details.url` and `summary`) to
+the user and accept it only after the user agrees; an agent never accepts a
+licence on its own. Acceptance is recorded per model revision, with when and
+where (panel or command line) it was given.
