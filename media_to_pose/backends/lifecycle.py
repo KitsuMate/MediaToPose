@@ -39,6 +39,7 @@ from ..core.coordinator import (
 from ..core.errors import BackendError, Cancelled, OperationBusy
 from ..core.fs import atomic_json, read_json, remove_tree, replace_directory
 from ..core.log import get_logger
+from . import resources
 
 LOGGER = get_logger(__name__)
 
@@ -47,6 +48,8 @@ DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 15
 STORAGE_OWNER = "media_to_pose"
 STORAGE_MARKER = ".media_to_pose_storage.json"
+# Kept free beyond a bundle's own size, so a download never fills the disk.
+DOWNLOAD_HEADROOM_BYTES = 512 * 1024 * 1024
 _LOG_LIMIT = 200
 _LOG_LEVELS = {
     "DEBUG": logging.DEBUG,
@@ -708,7 +711,9 @@ def install_pinned_bundle(
     """Download, verify and activate ``bundle`` under the storage ``root``.
 
     Files land in a private staging folder; only a fully verified folder
-    replaces ``root/active``. The preferred revision falls back to ``main``
+    replaces ``root/active``. The volume must hold the files plus
+    ``DOWNLOAD_HEADROOM_BYTES``, or ``InsufficientResources`` is raised before
+    any file is downloaded. The preferred revision falls back to ``main``
     only when it has been removed from the Hub (HTTP 404/410).
     """
     import urllib.error
@@ -756,6 +761,9 @@ def install_pinned_bundle(
         files = sorted(bundle.list_files(staging), key=lambda item: item.path)
         remote_root = PurePosixPath(bundle.manifest_path).parent
         total = sum(item.bytes for item in files)
+        resources.require_disk(
+            staging, total + DOWNLOAD_HEADROOM_BYTES, f"The {label} download"
+        )
         completed = 0
         for item in files:
             start = 0.05 + 0.80 * completed / max(total, 1)
@@ -1007,6 +1015,7 @@ class ModelBackend:
 
 
 __all__ = [
+    "DOWNLOAD_HEADROOM_BYTES",
     "HF_ENDPOINT",
     "STORAGE_MARKER",
     "BackgroundJob",

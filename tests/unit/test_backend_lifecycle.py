@@ -15,7 +15,12 @@ from unittest import mock
 
 from media_to_pose.backends import lifecycle
 from media_to_pose.core.coordinator import COORDINATOR, OperationKind
-from media_to_pose.core.errors import BackendError, Cancelled, OperationBusy
+from media_to_pose.core.errors import (
+    BackendError,
+    Cancelled,
+    InsufficientResources,
+    OperationBusy,
+)
 
 
 class _Response:
@@ -350,6 +355,42 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
             )
         self.assertEqual(len(urls), 2)
         self.assertIn("d" * 40, urls[0])
+
+    def test_install_needs_free_space_for_the_files_and_headroom(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        downloads = []
+
+        def fake_download(url, destination, **_kwargs):
+            downloads.append(Path(destination).name)
+            Path(destination).write_bytes(b"{}")
+
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="e" * 40,
+            manifest_path="manifest.json",
+            list_files=lambda staging: [
+                lifecycle.BundleFile("graph.onnx", 4 * 1024**3, "0" * 64)
+            ],
+            verify=lambda staging: None,
+        )
+        free = 4 * 1024**3 + lifecycle.DOWNLOAD_HEADROOM_BYTES - 1
+        with (
+            mock.patch.object(lifecycle, "download_file", side_effect=fake_download),
+            mock.patch.object(
+                lifecycle.resources, "free_disk_bytes", return_value=free
+            ),
+            self.assertRaises(InsufficientResources) as caught,
+        ):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                storage.root(self.root),
+                self.root / "storage.json",
+            )
+        self.assertEqual(downloads, ["manifest.json"])
+        self.assertEqual(caught.exception.details["available_bytes"], free)
 
 
 if __name__ == "__main__":
