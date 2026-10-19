@@ -470,16 +470,26 @@ class ManagedStorage:
                 )
         root.mkdir(parents=True, exist_ok=True)
         existing = read_json(marker_path)
-        if (
-            isinstance(existing, dict)
-            and existing
-            and (
-                existing.get("owner") != STORAGE_OWNER
-                or existing.get("kind") != self.kind
-            )
+        existing = existing if isinstance(existing, dict) else {}
+        if existing and (
+            existing.get("owner") != STORAGE_OWNER or existing.get("kind") != self.kind
         ):
             raise BackendError(f"{self.label} storage is owned by another application")
-        atomic_json(marker_path, self._marker(), private=self.private)
+        # Other fields (licence acceptance) survive re-marking.
+        atomic_json(marker_path, {**existing, **self._marker()}, private=self.private)
+
+    def read_marker(self, root: Path) -> dict[str, Any]:
+        """The marker of an owned folder; empty when the folder is not owned."""
+        if not self.owns(root):
+            return {}
+        marker = read_json(Path(root) / STORAGE_MARKER)
+        return marker if isinstance(marker, dict) else {}
+
+    def update_marker(self, root: Path, **fields: Any) -> None:
+        """Create or adopt ``root`` and store ``fields`` in its marker."""
+        self.ensure(root)
+        marker = {**self.read_marker(root), **fields, **self._marker()}
+        atomic_json(Path(root) / STORAGE_MARKER, marker, private=self.private)
 
     def verified(self, root: Path) -> Path:
         resolved = Path(root).resolve(strict=False)
