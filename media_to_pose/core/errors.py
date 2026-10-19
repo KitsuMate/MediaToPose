@@ -61,6 +61,12 @@ class DependencyMissing(ModelMissing, ImportError):
     code = "DEPENDENCY_MISSING"
 
 
+class OnlineAccessDisabled(ModelMissing):
+    """A model must be downloaded, but Blender's online access is off."""
+
+    code = "ONLINE_ACCESS_DISABLED"
+
+
 class MappingIncomplete(MtpError, ValueError):
     """The rig mapping does not cover the requested capture scope."""
 
@@ -96,17 +102,42 @@ class CaptureFailed(MtpError, RuntimeError):
     exit_code = 9
 
 
+class LicenseRequired(MtpError, RuntimeError):
+    """A model's licence has not been accepted for the installed revision.
+
+    ``details`` carries ``license_id``, ``summary``, ``url`` and
+    ``accept_license`` (the exact value to pass back after the user agrees).
+    """
+
+    code = "LICENSE_REQUIRED"
+    exit_code = 10
+
+
+class InsufficientResources(MtpError, RuntimeError):
+    """Not enough free disk space or memory for a model.
+
+    ``details`` carries ``resource`` (``disk`` or ``ram``), ``needed_bytes``,
+    ``available_bytes`` and, when one exists, a ``fitting_variant``.
+    """
+
+    code = "INSUFFICIENT_RESOURCES"
+    exit_code = 11
+
+
 ERROR_CLASSES: tuple[type[MtpError], ...] = (
     MtpError,
     InvalidRequest,
     MediaError,
     ModelMissing,
     DependencyMissing,
+    OnlineAccessDisabled,
     MappingIncomplete,
     OperationBusy,
     Cancelled,
     BackendError,
     CaptureFailed,
+    LicenseRequired,
+    InsufficientResources,
 )
 
 
@@ -116,10 +147,13 @@ __all__ = [
     "Cancelled",
     "CaptureFailed",
     "DependencyMissing",
+    "InsufficientResources",
     "InvalidRequest",
+    "LicenseRequired",
     "MappingIncomplete",
     "MediaError",
     "ModelMissing",
     "MtpError",
+    "OnlineAccessDisabled",
     "OperationBusy",
 ]

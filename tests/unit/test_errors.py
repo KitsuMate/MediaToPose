@@ -16,9 +16,9 @@ class ErrorTests(unittest.TestCase):
         exit_codes = {
             cls.exit_code
             for cls in errors.ERROR_CLASSES
-            if cls is not errors.DependencyMissing
+            if cls not in {errors.DependencyMissing, errors.OnlineAccessDisabled}
         }
-        self.assertEqual(len(exit_codes), len(errors.ERROR_CLASSES) - 1)
+        self.assertEqual(len(exit_codes), len(errors.ERROR_CLASSES) - 2)
         self.assertNotIn(0, exit_codes)
 
     def test_every_error_is_an_mtp_error(self) -> None:
@@ -35,6 +35,28 @@ class ErrorTests(unittest.TestCase):
         self.assertTrue(issubclass(errors.Cancelled, InterruptedError))
         self.assertTrue(issubclass(errors.DependencyMissing, ImportError))
         self.assertTrue(issubclass(errors.DependencyMissing, errors.ModelMissing))
+        self.assertTrue(issubclass(errors.OnlineAccessDisabled, errors.ModelMissing))
+
+    def test_agent_facing_codes_and_exit_codes(self) -> None:
+        self.assertEqual(
+            (errors.OnlineAccessDisabled.code, errors.OnlineAccessDisabled.exit_code),
+            ("ONLINE_ACCESS_DISABLED", 4),
+        )
+        self.assertEqual(
+            (errors.LicenseRequired.code, errors.LicenseRequired.exit_code),
+            ("LICENSE_REQUIRED", 10),
+        )
+        self.assertEqual(
+            (
+                errors.InsufficientResources.code,
+                errors.InsufficientResources.exit_code,
+            ),
+            ("INSUFFICIENT_RESOURCES", 11),
+        )
+        payload = errors.InsufficientResources(
+            "Not enough memory", resource="ram", needed_bytes=8, available_bytes=4
+        ).to_dict()
+        self.assertEqual(payload["details"]["needed_bytes"], 8)
 
     def test_to_dict_is_json_ready(self) -> None:
         error = errors.MediaError("Video could not be opened", path=object(), frame=3)
