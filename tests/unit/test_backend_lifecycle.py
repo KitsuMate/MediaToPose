@@ -501,6 +501,59 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
         self.assertEqual(part.read_bytes(), b"half")
         self.assertFalse((root / "active").exists())
 
+    def test_bundle_listed_in_code_fetches_from_several_repositories(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        root = storage.root(self.root)
+        urls = []
+
+        def fake_download(url, destination, **_kwargs):
+            urls.append(url)
+            Path(destination).parent.mkdir(parents=True, exist_ok=True)
+            Path(destination).write_bytes(b"data")
+
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="a" * 40,
+            manifest_path="",
+            list_files=lambda staging: [
+                lifecycle.BundleFile("onnx/model.onnx", 4, _sha(b"data")),
+                lifecycle.BundleFile(
+                    "stats/mean.npy",
+                    4,
+                    _sha(b"data"),
+                    repository="Upstream/model",
+                    revision="b" * 40,
+                    remote_path="stats/motion/mean.npy",
+                ),
+            ],
+            verify=lambda staging: None,
+        )
+        with mock.patch.object(lifecycle, "download_file", side_effect=fake_download):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                root,
+                self.root / "storage.json",
+            )
+        self.assertEqual(
+            urls,
+            [
+                f"https://huggingface.co/Owner/test-onnx/resolve/{'a' * 40}/onnx/model.onnx",
+                f"https://huggingface.co/Upstream/model/resolve/{'b' * 40}/stats/motion/mean.npy",
+            ],
+        )
+        manifest = json.loads((root / "active" / "manifest.json").read_text())
+        self.assertEqual(manifest["schema_version"], 1)
+        self.assertEqual(
+            [(item["path"], item["repository"]) for item in manifest["files"]],
+            [
+                ("onnx/model.onnx", "Owner/test-onnx"),
+                ("stats/mean.npy", "Upstream/model"),
+            ],
+        )
+
     def test_offline_install_downloads_nothing(self) -> None:
         storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
         bundle = lifecycle.PinnedBundle(

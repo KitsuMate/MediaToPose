@@ -732,20 +732,31 @@ def run_job(
 
 @dataclass(frozen=True)
 class BundleFile:
-    """One file listed by a bundle manifest, relative to the manifest folder."""
+    """One file of a bundle, at ``path`` inside the installed folder.
+
+    By default it is downloaded from the bundle's repository and revision,
+    relative to the manifest folder. ``repository``, ``revision`` and
+    ``remote_path`` fetch it from somewhere else instead (another pinned
+    repository, or another folder).
+    """
 
     path: str
     bytes: int
     sha256: str
+    repository: str = ""
+    revision: str = ""
+    remote_path: str = ""
 
 
 @dataclass(frozen=True)
 class PinnedBundle:
-    """A manifest-described file set on Hugging Face at a pinned revision.
+    """A file set on Hugging Face at a pinned revision.
 
-    ``list_files`` reads the downloaded manifest from the staging directory;
-    ``verify`` loads the complete staging directory and raises when any file
-    is missing or altered.
+    ``list_files`` reads the downloaded manifest from the staging directory.
+    A bundle without ``manifest_path`` lists its files in code instead; the
+    installer then writes ``manifest.json`` itself, recording every file and
+    where it came from. ``verify`` loads the complete staging directory and
+    raises when any file is missing or altered.
     """
 
     label: str
@@ -754,6 +765,31 @@ class PinnedBundle:
     manifest_path: str
     list_files: Callable[[Path], list[BundleFile]]
     verify: Callable[[Path], object]
+
+
+CODE_MANIFEST_SCHEMA = 1
+
+
+def _code_manifest(
+    bundle: PinnedBundle, revision: str, files: list[BundleFile]
+) -> dict[str, Any]:
+    return {
+        "schema_version": CODE_MANIFEST_SCHEMA,
+        "label": bundle.label,
+        "repository": bundle.repository,
+        "revision": revision,
+        "files": [
+            {
+                "path": item.path,
+                "bytes": item.bytes,
+                "sha256": item.sha256,
+                "repository": item.repository or bundle.repository,
+                "revision": item.revision or revision,
+                "remote_path": item.remote_path or item.path,
+            }
+            for item in files
+        ],
+    }
 
 
 def require_online_access(online_access: bool, label: str) -> None:
@@ -828,10 +864,22 @@ def install_pinned_bundle(
         revision = bundle.revision if is_immutable_revision(bundle.revision) else "main"
         cancelled = f"{label} download cancelled"
 
-        def fetch(remote: str, destination: Path, start: float, end: float, **checks):
+        def fetch(
+            remote: str,
+            destination: Path,
+            start: float,
+            end: float,
+            *,
+            repository: str = "",
+            pinned: str = "",
+            **checks,
+        ):
             download_file(
                 hf_resolve_url(
-                    bundle.repository, revision, remote, label=f"{label} download"
+                    repository or bundle.repository,
+                    pinned or revision,
+                    remote,
+                    label=f"{label} download",
                 ),
                 destination,
                 cancel=job.cancel,
@@ -844,18 +892,21 @@ def install_pinned_bundle(
                 **checks,
             )
 
-        job.update(0.01, f"Downloading {label} manifest", "Manifest")
         manifest = staging / "manifest.json"
-        try:
-            fetch(bundle.manifest_path, manifest, 0.01, 0.05)
-        except urllib.error.HTTPError as exc:
-            if revision == "main" or exc.code not in {404, 410}:
-                raise
-            revision = "main"
-            job.update(
-                0.01, f"Preferred {label} bundle unavailable; using latest", "Manifest"
-            )
-            fetch(bundle.manifest_path, manifest, 0.01, 0.05)
+        if bundle.manifest_path:
+            job.update(0.01, f"Downloading {label} manifest", "Manifest")
+            try:
+                fetch(bundle.manifest_path, manifest, 0.01, 0.05)
+            except urllib.error.HTTPError as exc:
+                if revision == "main" or exc.code not in {404, 410}:
+                    raise
+                revision = "main"
+                job.update(
+                    0.01,
+                    f"Preferred {label} bundle unavailable; using latest",
+                    "Manifest",
+                )
+                fetch(bundle.manifest_path, manifest, 0.01, 0.05)
         job.check_cancelled(f"{label} installation cancelled")
         files = sorted(bundle.list_files(staging), key=lambda item: item.path)
         destinations = {
@@ -896,14 +947,18 @@ def install_pinned_bundle(
                 job.update(end, f"Using downloaded {item.path}", "Download")
                 continue
             fetch(
-                str(remote_root / item.path),
+                item.remote_path or str(remote_root / item.path),
                 destinations[item.path],
                 start,
                 end,
+                repository=item.repository,
+                pinned=item.revision,
                 expected_bytes=item.bytes,
                 expected_sha256=item.sha256,
                 resume=True,
             )
+        if not bundle.manifest_path:
+            atomic_json(manifest, _code_manifest(bundle, revision, files))
         job.update(0.88, f"Verifying {label} bundle", "Verification")
         try:
             bundle.verify(staging)
@@ -1149,6 +1204,7 @@ __all__ = [
     "DOWNLOAD_HEADROOM_BYTES",
     "HF_ENDPOINT",
     "STORAGE_MARKER",
+    "CODE_MANIFEST_SCHEMA",
     "BackgroundJob",
     "BundleFile",
     "PinnedBundle",
