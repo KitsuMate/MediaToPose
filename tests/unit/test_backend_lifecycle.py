@@ -19,6 +19,7 @@ from media_to_pose.core.errors import (
     BackendError,
     Cancelled,
     InsufficientResources,
+    OnlineAccessDisabled,
     OperationBusy,
 )
 
@@ -499,6 +500,32 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
         part = root / lifecycle.DOWNLOAD_FOLDER / ".big.onnx.part"
         self.assertEqual(part.read_bytes(), b"half")
         self.assertFalse((root / "active").exists())
+
+    def test_offline_install_downloads_nothing(self) -> None:
+        storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
+        bundle = lifecycle.PinnedBundle(
+            label="Test",
+            repository="Owner/test-onnx",
+            revision="f" * 40,
+            manifest_path="manifest.json",
+            list_files=lambda staging: [],
+            verify=lambda staging: None,
+        )
+        with (
+            mock.patch.object(lifecycle, "download_file") as download,
+            self.assertRaises(OnlineAccessDisabled) as caught,
+        ):
+            lifecycle.install_pinned_bundle(
+                lifecycle.BackgroundJob("Installing Test"),
+                bundle,
+                storage,
+                storage.root(self.root),
+                self.root / "storage.json",
+                online_access=False,
+            )
+        download.assert_not_called()
+        self.assertEqual(caught.exception.exit_code, 4)
+        self.assertFalse(storage.root(self.root).exists())
 
     def test_install_needs_free_space_for_the_files_and_headroom(self) -> None:
         storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")

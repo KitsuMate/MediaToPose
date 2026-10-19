@@ -36,7 +36,13 @@ from ..core.coordinator import (
     OperationState,
     OperationToken,
 )
-from ..core.errors import BackendError, Cancelled, MtpError, OperationBusy
+from ..core.errors import (
+    BackendError,
+    Cancelled,
+    MtpError,
+    OnlineAccessDisabled,
+    OperationBusy,
+)
 from ..core.fs import atomic_json, read_json, remove_tree, replace_directory
 from ..core.log import get_logger
 from . import resources
@@ -750,6 +756,16 @@ class PinnedBundle:
     verify: Callable[[Path], object]
 
 
+def require_online_access(online_access: bool, label: str) -> None:
+    """Refuse a download while Blender's online access is turned off."""
+    if not online_access:
+        raise OnlineAccessDisabled(
+            f"{label} must be downloaded, but online access is turned off in "
+            "Blender's preferences (System > Network)",
+            model=label,
+        )
+
+
 def _downloaded(path: Path, item: BundleFile) -> bool:
     """Whether ``path`` already holds ``item`` exactly (size, then SHA-256)."""
     return (
@@ -775,8 +791,14 @@ def install_pinned_bundle(
     storage: ManagedStorage,
     root: Path,
     storage_config: Path,
+    *,
+    online_access: bool = True,
 ) -> str:
     """Download, verify and activate ``bundle`` under the storage ``root``.
+
+    ``online_access`` is Blender's ``bpy.app.online_access``, passed in by the
+    operator or API; when it is off, ``OnlineAccessDisabled`` is raised and
+    nothing is downloaded.
 
     Files land in the ``root/.download`` folder, guarded by the installation
     lock; only a fully verified folder replaces ``root/active``. The folder
@@ -793,6 +815,7 @@ def install_pinned_bundle(
     import urllib.error
 
     label = bundle.label
+    require_online_access(online_access, label)
     root = Path(root)
     staging = root / DOWNLOAD_FOLDER
     lock = model_installation_lock(root, label)
@@ -1145,6 +1168,7 @@ __all__ = [
     "model_installation_lock",
     "read_storage_parent",
     "redact",
+    "require_online_access",
     "resolve_user_path",
     "run_job",
     "safe_metadata",
