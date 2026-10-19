@@ -280,3 +280,40 @@ purpose = "Visible expression of each face still as blendshape checks"
 media_type = "application/json"
 schema_version = 1
 sha256 = "3ba04e0f7f11b7035be808c6b773e9ee30c75279b93decf5649b69f28031478d"
+
+[[fixture]]
+id = "kimodo_reference_60f"
+path = "kimodo/reference_60f.npz"
+provider = "KIMODO"
+purpose = "Sampler, guide compilation and decode parity: one 60-frame, 25-step separated-CFG run of upstream Kimodo fp32 on CPU with a root path, a full-body guide and a hands guide, including the per-step denoiser trace"
+media_type = "application/x-npz"
+schema_version = 1
+sha256 = "92ffadd8a5f32c008dc2b8028eaec018ff37858812c723841213476003b86bc6"
+license = "Reference outputs of NVIDIA Kimodo-SOMA-RP-v1.1 (NVIDIA Open Model License); no weights or statistics included"
+creator = "Media to Pose (recorded with ci/kimodo_reference.py)"
+source_url = "https://github.com/nv-tlabs/kimodo/tree/1aece8c124d73d255ceff5086d983b844c9f4e94"
+model_url = "https://huggingface.co/nvidia/Kimodo-SOMA-RP-v1.1/tree/6c9233af1180b8151e3c4703477104af5dce9dd5"
+
+[[fixture]]
+id = "kimodo_reference_tokens"
+path = "kimodo/reference_tokens.npz"
+provider = "LLM2VEC"
+purpose = "Llama-3 tokenizer ids for 30 prompt strings (ASCII, non-ASCII, empty, over 64 tokens), built the upstream LLM2Vec way with transformers 5.1.0"
+media_type = "application/x-npz"
+schema_version = 1
+sha256 = "b93872dcb2af6987c216839674b8947660991f737c9cc2caacfe64fd49f50810"
+license = "Token ids from the Meta Llama 3 tokenizer (Meta Llama 3 Community License); no tokenizer files included"
+creator = "Media to Pose (recorded with ci/kimodo_reference.py)"
+source_url = "https://huggingface.co/KitsuMate/Llama-3-LLM2Vec-MNTP-Supervised-ONNX/tree/883615966398adc12e787d9b3a2dc4da26d4b44c"
+
+[[fixture]]
+id = "kimodo_reference_embeddings"
+path = "kimodo/reference_embeddings.npz"
+provider = "LLM2VEC"
+purpose = "Pooled 4096-d prompt embeddings for 20 prompts from the int4 LLM2Vec ONNX encoder on CPU (no bf16 reference: the upstream encoder was not downloaded)"
+media_type = "application/x-npz"
+schema_version = 1
+sha256 = "cbda407274dc0f14f3ebb3f257cd1e84582fa9a4b8bac872dd22c5ab9752ef32"
+license = "Outputs of a model built with Meta Llama 3 (Meta Llama 3 Community License) and LLM2Vec (MIT); no weights included"
+creator = "Media to Pose (recorded with ci/kimodo_reference.py)"
+source_url = "https://huggingface.co/KitsuMate/Llama-3-LLM2Vec-MNTP-Supervised-ONNX/tree/883615966398adc12e787d9b3a2dc4da26d4b44c"
