@@ -8,7 +8,6 @@ recreates the session on CPU once and retries, as SAM 3D Body does.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -80,33 +79,21 @@ def graph_variant(path: str) -> str:
 
 def load_bundle(root: Path, *, verify_files: bool = True) -> KimodoBundle:
     """Read ``root/manifest.json`` and check that every listed file is intact."""
-    root = Path(root)
     try:
-        manifest = json.loads((root / "manifest.json").read_text(encoding="utf8"))
-        files = tuple(
-            lifecycle.BundleFile(
-                str(item["path"]), int(item["bytes"]), str(item["sha256"])
-            )
-            for item in manifest["files"]
+        revision, files = lifecycle.read_code_manifest(
+            root, verify_files=verify_files, label="Kimodo"
         )
-        revision = str(manifest.get("revision") or "")
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        raise KimodoRuntimeError(f"Kimodo manifest is unreadable: {exc}") from exc
+    except BackendError as exc:
+        raise KimodoRuntimeError(str(exc)) from exc
     graphs = [item.path for item in files if item.path.endswith(".onnx")]
     if len(graphs) != 1 or not graph_variant(graphs[0]):
         raise KimodoRuntimeError("A Kimodo bundle must hold exactly one denoiser")
-    listed = {item.path for item in files}
-    missing = sorted(set(STATS_FILES.values()) - listed)
+    missing = sorted(set(STATS_FILES.values()) - {item.path for item in files})
     if missing:
         raise KimodoRuntimeError(f"Kimodo bundle lacks {', '.join(missing)}")
-    bundle = KimodoBundle(root, graph_variant(graphs[0]), graphs[0], revision, files)
-    for item in files:
-        path = bundle.resolve(item.path)
-        if not path.is_file() or path.stat().st_size != item.bytes:
-            raise KimodoRuntimeError(f"Kimodo file {item.path} is missing or altered")
-        if verify_files and lifecycle.sha256_file(path) != item.sha256.casefold():
-            raise KimodoRuntimeError(f"Kimodo file {item.path} failed verification")
-    return bundle
+    return KimodoBundle(
+        Path(root), graph_variant(graphs[0]), graphs[0], revision, files
+    )
 
 
 def load_stats(bundle: KimodoBundle) -> rep.FeatureStats:

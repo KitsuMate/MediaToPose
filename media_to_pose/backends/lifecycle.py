@@ -802,6 +802,30 @@ def _code_manifest(
     }
 
 
+def read_code_manifest(
+    root: Path, *, verify_files: bool = True, label: str = "Model"
+) -> tuple[str, tuple[BundleFile, ...]]:
+    """The revision and files of a ``manifest.json`` written for a code-listed
+    bundle, checking each file's size (and SHA-256 with ``verify_files``)."""
+    root = Path(root)
+    try:
+        manifest = json.loads((root / "manifest.json").read_text(encoding="utf8"))
+        files = tuple(
+            BundleFile(str(item["path"]), int(item["bytes"]), str(item["sha256"]))
+            for item in manifest["files"]
+        )
+        revision = str(manifest.get("revision") or "")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise BackendError(f"{label} manifest is unreadable: {exc}") from exc
+    for item in files:
+        path = contained_path(root, item.path, label=f"{label} bundle")
+        if not path.is_file() or path.stat().st_size != item.bytes:
+            raise BackendError(f"{label} file {item.path} is missing or altered")
+        if verify_files and sha256_file(path) != item.sha256.casefold():
+            raise BackendError(f"{label} file {item.path} failed verification")
+    return revision, files
+
+
 def require_online_access(online_access: bool, label: str) -> None:
     """Refuse a download while Blender's online access is turned off."""
     if not online_access:
@@ -1232,6 +1256,7 @@ __all__ = [
     "install_pinned_bundle",
     "is_immutable_revision",
     "model_installation_lock",
+    "read_code_manifest",
     "read_storage_parent",
     "redact",
     "require_online_access",
