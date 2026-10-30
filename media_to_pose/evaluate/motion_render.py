@@ -18,6 +18,7 @@ from mathutils import Matrix, Vector
 from ..core.dependencies import import_runtime_dependencies
 from ..core.errors import InvalidRequest
 from ..core.scene import SceneContext
+from ..rig import mapping
 from .render import _bounds, _draw_rig, _fit, _render_rig, _rig_bones
 
 VIEW_ANGLE_DEG = 35.0
@@ -29,7 +30,11 @@ class _FollowCamera:
 
     def __init__(self, scene, armature, bones, frames: Sequence[int]):
         world = armature.matrix_world
-        centers, size = {}, 0.5
+        root = mapping.mapping_by_id(armature.mtp_rig_config).get("ROOT")
+        root_name = root.target_name if root is not None else ""
+        # The ROOT control stands upright on the ground; frame the body.
+        bones = [bone for bone in bones if bone.name != root_name] or bones
+        centers, size, heights = {}, 0.5, []
         for frame in frames:
             scene.frame_set(int(frame))
             points = [world @ bone.head for bone in bones]
@@ -39,6 +44,7 @@ class _FollowCamera:
             center, extent = _bounds(points)
             centers[int(frame)] = center
             size = max(size, extent)
+            heights.append(max(p.z for p in points) - min(p.z for p in points))
         window = 6  # frames either side; a sheet's sparse frames stay apart
 
         def smoothed(frame: int) -> Vector:
@@ -52,7 +58,13 @@ class _FollowCamera:
         scene.collection.objects.link(self.camera)
         turn = Matrix.Rotation(math.radians(VIEW_ANGLE_DEG), 3, "Z")
         forward = (turn @ world.to_3x3() @ Vector((0.0, -1.0, 0.0))).normalized()
-        self.offset = forward * (size * 1.6 + 0.6) + Vector((0.0, 0.0, size * 0.12))
+        distance = size * 1.6 + 0.6
+        # A character lying down for most of the range is seen from above.
+        lying = sorted(heights)[len(heights) // 2] < 0.45 * size
+        pitch = math.radians(50.0 if lying else 7.0)
+        self.offset = forward * distance * math.cos(pitch) + Vector(
+            (0.0, 0.0, distance * math.sin(pitch))
+        )
         self.camera.rotation_euler = (-self.offset).to_track_quat("-Z", "Y").to_euler()
 
     def follow(self, frame: int, *, key: bool = False) -> None:
