@@ -46,6 +46,13 @@ MISSED_POSE_M = 0.12
 MISSED_ROOT_M = 0.3
 
 
+# Automatic step counts. 25 steps halve the time and show no artifacts the
+# others lack (K0 sweep), with slightly smaller motion; on the CPU 50 steps of
+# a 10 s window take about 100 s.
+GPU_STEPS = 50
+CPU_STEPS = 25
+
+
 class GenerateState(StrEnum):
     PREPARED = "PREPARED"
     GENERATING = "GENERATING"
@@ -86,7 +93,7 @@ class GenerateRequest:
     path: str = ""
     face_travel: bool = True
     seed: int = 0
-    steps: int = 50
+    steps: int = 0  # 0 = automatic: GPU_STEPS on a GPU, CPU_STEPS on the CPU
     text_weight: float = 2.0
     guide_weight: float = 2.0
     blend_frames: float = generated.DEFAULT_BLEND_FRAMES
@@ -99,8 +106,10 @@ class GenerateRequest:
                 f"Frame range {self.first:g}..{self.last:g} is empty",
                 parameter="frame_range",
             )
-        if not 1 <= int(self.steps) <= 1000:
-            raise InvalidRequest("steps must be 1 to 1000", parameter="steps")
+        if not 0 <= int(self.steps) <= 1000:
+            raise InvalidRequest(
+                "steps must be 0 (automatic) to 1000", parameter="steps"
+            )
 
     def recipe(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -156,6 +165,7 @@ class GenerateSession:
         self._clock = time.monotonic()
         self._variant = ""
         self._device = ""
+        self._steps = int(request.steps)
 
     # Prepare ------------------------------------------------------------
 
@@ -284,6 +294,9 @@ class GenerateSession:
             snapshot = kimodo_backend.backend_snapshot("AUTO", self.request.device)
             self._variant = str(snapshot.variant)
             self._device = str(snapshot.actual_device)
+            self._steps = int(self.request.steps) or (
+                CPU_STEPS if self._device in {"", "cpu"} else GPU_STEPS
+            )
             self._mark("load")
             request = kimodo_generate.GenerationRequest(
                 frame_count=prepared.frame_count,
@@ -294,7 +307,7 @@ class GenerateSession:
                 start_xz=prepared.start_xz,
                 start_heading=prepared.start_heading,
                 seed=int(self.request.seed),
-                steps=int(self.request.steps),
+                steps=self._steps,
                 text_weight=float(self.request.text_weight),
                 guide_weight=float(self.request.guide_weight),
             )
@@ -561,7 +574,7 @@ class GenerateSession:
             windows=[asdict(window) for window in motion.windows],
             segments=[asdict(segment) for segment in prepared.segments],
             seed=int(motion.seed),
-            steps=int(request.steps),
+            steps=int(self._steps),
             variant=self._variant,
             device=self._device,
             guides=reports,

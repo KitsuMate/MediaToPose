@@ -271,7 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="do not turn towards the next waypoint",
     )
     sub.add_argument("--seed", type=int)
-    sub.add_argument("--steps", type=int, help="denoising steps (default 50)")
+    sub.add_argument(
+        "--steps",
+        type=int,
+        help="denoising steps (default: 50 on a GPU, 25 on the CPU)",
+    )
     sub.add_argument("--text-guidance", type=float)
     sub.add_argument("--guide-guidance", type=float)
     sub.add_argument("--blend-frames", type=float)

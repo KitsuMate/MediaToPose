@@ -20,8 +20,6 @@ from ..session.generate_session import (
 from .common import output_path, resolve_armature, resolve_scene, scene_context
 from .rig import prepare_rig
 
-DEFAULT_STEPS = 50
-
 
 def _segments(segments) -> tuple[PromptSegment, ...]:
     """``[(first_frame, prompt), ...]`` or ``[{"first": f, "prompt": p}]``."""
@@ -69,7 +67,7 @@ _FIELDS = {
     "path": ("path", ""),
     "face_travel": ("face_travel", True),
     "seed": ("seed", 0),
-    "steps": ("steps", DEFAULT_STEPS),
+    "steps": ("steps", 0),
     "text_guidance": ("text_weight", 2.0),
     "guide_guidance": ("guide_weight", 2.0),
     "blend_frames": ("blend_frames", 8.0),
@@ -148,7 +146,8 @@ def generate(
     - ``waypoints``: ``[(frame, x, y), ...]`` world positions the character
       walks through; ``face_travel`` turns it towards the next one.
     - ``path``: a curve object to follow at constant speed.
-    - ``seed``, ``steps`` (default 50), ``text_guidance`` and
+    - ``seed``, ``steps`` (default automatic: 50 on a GPU, 25 on the CPU),
+      ``text_guidance`` and
       ``guide_guidance`` (default 2.0 each).
     - ``output``: ``NEW_ACTION``, ``REPLACE`` or ``NLA_STRIP``.
     - ``dry_run``: return the ``GeneratePlan`` without loading a model.
@@ -249,4 +248,4 @@ def encode_prompt(prompt: str) -> dict[str, Any]:
     }
 
 
-__all__ = ["DEFAULT_STEPS", "describe_guides", "encode_prompt", "generate"]
+__all__ = ["describe_guides", "encode_prompt", "generate"]

@@ -54,9 +54,12 @@ class MTPGenerateSettings(PropertyGroup):
     seed: IntProperty(name="Seed", default=0, min=0)
     steps: IntProperty(
         name="Steps",
-        description="Denoising steps: 25 is fast, 50 the default, 100 the most detailed",
-        default=50,
-        min=1,
+        description=(
+            "Denoising steps; 0 picks 50 on a GPU and 25 on the CPU. 25 is "
+            "fast, 100 the most detailed"
+        ),
+        default=0,
+        min=0,
         max=1000,
     )
     text_weight: FloatProperty(

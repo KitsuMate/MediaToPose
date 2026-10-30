@@ -269,7 +269,7 @@ Warning codes: `PROMPT_TRUNCATED`, `WINDOWED`, `GUIDE_COLLISION`,
 | Pops at a guide | the sheet around the guide | Raise `blend_frames` |
 | Misses a waypoint | `guide_error_m` of the root guide | Raise `guide_guidance`; give the walk more frames |
 | Wrong action | the sheet | Phrase it as "A person …" with one or two actions; split into `segments` |
-| Too slow | `seconds` | Fewer `steps` (25 is fast); prompts are cached after the first run |
+| Too slow | `seconds` | `steps` defaults to 50 on a GPU and 25 on the CPU; fewer is faster. Prompts are cached after the first run. Each new Blender process loads the model again (`load`) and warms the GPU on its first sampling: several generations in one session (Python or the Blender MCP server) skip both |
 
 Limits: realistic single-person motion on flat ground; no fingers or face;
 the pelvis carries the motion (and a mapped ROOT the ground path and
