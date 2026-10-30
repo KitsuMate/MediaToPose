@@ -10,6 +10,7 @@ from ..backends.kimodo import backend as kimodo_backend
 from ..backends.llm2vec import backend as llm2vec_backend
 from ..backends.rohm import backend as rohm_backend
 from ..backends.sam3d import backend as sam3d_backend
+from ..core.dependencies import refresh_dependency_snapshot
 from ..core.requests import CaptureSettings
 from ..providers import DESCRIPTORS
 from ..session import capture_options
@@ -33,6 +34,8 @@ def _plain(snapshot) -> dict[str, Any]:
 def list_providers(*, scene=None) -> list[dict[str, Any]]:
     """Capture providers, the parts they capture and whether they can run."""
     settings = CaptureSettings.from_rna(resolve_scene(scene).mtp_settings)
+    # The panel fills the snapshot lazily; a script may be the first caller.
+    refresh_dependency_snapshot()
     providers = []
     for identifier, descriptor in DESCRIPTORS.items():
         options = capture_options.options_from_settings(
