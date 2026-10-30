@@ -139,7 +139,6 @@ class TemporaryTestCase(unittest.TestCase):
 class PinTests(unittest.TestCase):
     def test_revisions_and_hashes_are_pinned(self) -> None:
         self.assertRegex(backend.REVISION, HEX40)
-        self.assertRegex(backend.STATS_REVISION, HEX40)
         for variant in (
             backend.KimodoVariant.FP16,
             backend.KimodoVariant.FP32,
@@ -151,7 +150,11 @@ class PinTests(unittest.TestCase):
                 self.assertRegex(item.sha256, HEX64)
                 self.assertGreater(item.bytes, 0)
 
-    def test_statistics_come_from_the_pinned_upstream_repository(self) -> None:
+    def test_every_file_comes_from_the_pinned_kitsumate_repository(self) -> None:
+        self.assertTrue(backend.REPOSITORY.startswith("KitsuMate/"))
+        for item in backend.bundle_files(backend.KimodoVariant.FP16):
+            self.assertIn(item.repository, {"", backend.REPOSITORY})
+            self.assertIn(item.revision, {"", backend.REVISION})
         stats = [
             item
             for item in backend.bundle_files(backend.KimodoVariant.FP32)
@@ -160,9 +163,6 @@ class PinTests(unittest.TestCase):
         self.assertEqual(
             sorted(item.path for item in stats), sorted(runtime.STATS_FILES.values())
         )
-        for item in stats:
-            self.assertEqual(item.repository, "nvidia/Kimodo-SOMA-RP-v1.1")
-            self.assertEqual(item.revision, backend.STATS_REVISION)
         licence_files = {item.path for item in backend.SHARED_FILES}
         self.assertTrue(set(backend.LICENSE.files) <= licence_files)
 

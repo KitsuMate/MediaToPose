@@ -1,8 +1,7 @@
 """Download, verify, license and load the optional Kimodo denoiser.
 
-The denoiser comes from ``KitsuMate/Kimodo-SOMA-RP-v1.1-ONNX`` and the
-normalisation statistics from ``nvidia/Kimodo-SOMA-RP-v1.1``, both at pinned
-commits. One variant is installed at a time. The NVIDIA Open Model License
+The denoiser graphs and NVIDIA's normalisation statistics both come from
+``KitsuMate/Kimodo-SOMA-RP-v1.1-ONNX`` at one pinned commit. One variant is installed at a time. The NVIDIA Open Model License
 must be accepted for the pinned revision before anything is downloaded, and
 its LICENSE and NOTICE are installed next to the model.
 """
@@ -37,11 +36,10 @@ from . import runtime
 
 LABEL = "Kimodo"
 REPOSITORY = "KitsuMate/Kimodo-SOMA-RP-v1.1-ONNX"
-REVISION = "7520fac9267951878686b416c52c4eda55832e1e"
-STATS_REPOSITORY = "nvidia/Kimodo-SOMA-RP-v1.1"
-STATS_REVISION = "6c9233af1180b8151e3c4703477104af5dce9dd5"
-# Decision 1 is pending: until a manifest with the statistics is published in
-# REPOSITORY, the file list lives in ``bundle_files`` below.
+# The commit that added NVIDIA's motion statistics beside the graphs, so the
+# whole bundle comes from one pinned KitsuMate revision. No manifest is
+# published there; the file list lives in ``bundle_files`` below.
+REVISION = "da022f2180b84d4a788564219364785de6cb2ce0"
 MANIFEST_PATH = ""
 MODEL_STORAGE_FOLDER = "media_to_pose_kimodo"
 STORAGE = ManagedStorage(MODEL_STORAGE_FOLDER, "kimodo_models", LABEL)
@@ -110,13 +108,7 @@ VARIANTS: dict[KimodoVariant, VariantSpec] = {
 
 
 def _stats_file(relative: str, size: int, sha256: str) -> BundleFile:
-    return BundleFile(
-        relative,
-        size,
-        sha256,
-        repository=STATS_REPOSITORY,
-        revision=STATS_REVISION,
-    )
+    return BundleFile(relative, size, sha256)
 
 
 SHARED_FILES: tuple[BundleFile, ...] = (
@@ -611,8 +603,6 @@ __all__ = [
     "LICENSE",
     "REPOSITORY",
     "REVISION",
-    "STATS_REPOSITORY",
-    "STATS_REVISION",
     "VARIANTS",
     "BackendSnapshot",
     "KimodoVariant",
