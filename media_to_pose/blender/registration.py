@@ -19,6 +19,7 @@ from ..rig.planning import clear_rig_solve_plans
 from . import host, properties, ui
 from . import preview as cache_preview
 from .operators import capture as operators_capture
+from .operators import generate as operators_generate
 from .operators import mapping as operators_mapping
 from .operators import models as model_operators
 
@@ -41,6 +42,7 @@ MODULES = (
     operators_mapping,
     model_operators,
     operators_capture,
+    operators_generate,
     ui,
 )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..classes import register_classes, unregister_classes
 from .panels.capture import MTP_PT_create_from_media
 from .panels.cleanup import MTP_PT_pose_motion_cleanup
+from .panels.generate import MTP_PT_generate
 from .panels.rig_setup import MTP_PT_rig_setup, MTP_UL_mappings
 from .preferences import MTP_AddonPreferences
 
@@ -13,6 +14,7 @@ CLASSES = (
     MTP_PT_create_from_media,
     MTP_PT_rig_setup,
     MTP_PT_pose_motion_cleanup,
+    MTP_PT_generate,
     MTP_AddonPreferences,
 )
 

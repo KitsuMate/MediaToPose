@@ -6,6 +6,7 @@ import bpy
 from bpy.props import PointerProperty
 
 from ..classes import register_classes, unregister_classes
+from .generate import MTPGenerateSettings
 from .rig import (
     MTPMappingEntry,
     MTPPostProcessingModuleConfig,
@@ -20,6 +21,7 @@ CLASSES = (
     MTPPostProcessingModuleConfig,
     MTPRigConfig,
     MTPSceneSettings,
+    MTPGenerateSettings,
 )
 
 
@@ -29,12 +31,15 @@ def register() -> None:
     try:
         bpy.types.Object.mtp_rig_config = PointerProperty(type=MTPRigConfig)
         bpy.types.Scene.mtp_settings = PointerProperty(type=MTPSceneSettings)
+        bpy.types.Scene.mtp_generate = PointerProperty(type=MTPGenerateSettings)
     except Exception:
         unregister()
         raise
 
 
 def unregister() -> None:
+    if hasattr(bpy.types.Scene, "mtp_generate"):
+        del bpy.types.Scene.mtp_generate
     if hasattr(bpy.types.Scene, "mtp_settings"):
         del bpy.types.Scene.mtp_settings
     if hasattr(bpy.types.Object, "mtp_rig_config"):

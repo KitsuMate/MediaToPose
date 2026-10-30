@@ -386,7 +386,13 @@ class GenerateSession:
                     self._finish_success()
                     return GenerateUpdate(self.state, self.status, 1.0)
                 if progress.total:
-                    fraction = 0.8 + 0.2 * progress.current / progress.total
+                    # Posing takes 0.80-0.95, writing keys the rest.
+                    start, share = (
+                        (0.8, 0.15)
+                        if progress.phase.startswith("Posing")
+                        else (0.95, 0.05)
+                    )
+                    fraction = start + share * progress.current / progress.total
                     self._update(
                         f"{progress.phase} {progress.current}/{progress.total}",
                         fraction,
