@@ -24,8 +24,9 @@ from ..backends.llm2vec import backend as llm2vec_backend
 from ..core.coordinator import COORDINATOR, OperationKind, OperationState
 from ..core.errors import Cancelled, InvalidRequest, MtpError, OperationBusy
 from ..core.log import get_logger
-from ..core.motion import limb_solve, retime, soma
+from ..core.motion import foot_contact, limb_solve, retime, soma
 from ..core.motion.kimodo import generate as kimodo_generate
+from ..core.motion.kimodo import guides as model_guides
 from ..core.motion.kimodo import windows as kimodo_windows
 from ..core.requests import OutputMode
 from ..core.scene import SceneContext
@@ -430,16 +431,27 @@ class GenerateSession:
             float(frame)
             for frame in range(math.ceil(request.first), math.floor(request.last) + 1)
         ]
-        # Limb roll from the bend planes: the model leaves straight limbs'
-        # twist free and may wring them.
+        # Plant the feet during the model's own contacts (upstream's
+        # post-processing), then rebuild the unpinned bone rolls: the model
+        # leaves straight limbs' twist free and may wring them.
+        guide_frames = [
+            guide.frame
+            for guide in prepared.model_guides
+            if not isinstance(guide, model_guides.RootGuide)
+        ]
+        positions, planted = foot_contact.plant_feet(
+            motion.frames.positions, motion.frames.contacts, guide_frames=guide_frames
+        )
+        self._planted = planted
         solved = replace(
             motion.frames,
+            positions=positions,
             global_rotations=limb_solve.solve_limbs(
-                motion.frames.global_rotations, motion.frames.positions
+                motion.frames.global_rotations, positions
             ),
             # The ROOT turns with this: no 180° jump when the hip line
             # stands up (rolling over, lying on a side).
-            heading=soma.steady_heading(motion.frames.positions),
+            heading=soma.steady_heading(positions),
         )
         frames = retime.resample(
             solved, scene_frames, request.first, self.scene_context.fps
@@ -453,6 +465,13 @@ class GenerateSession:
             scene_context=self.scene_context,
         )
         self._mark("bake")
+        self._rig_planted = generated.plant_rig_feet(
+            prepared.binding,
+            samples,
+            frames.contacts,
+            [guide.frame for guide in prepared.scene_guides if guide.poses],
+            scene_context=self.scene_context,
+        )
         self._warps = generated.warp_to_guides(
             prepared.binding,
             samples,

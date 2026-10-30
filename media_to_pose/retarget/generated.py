@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
-from ..core.motion import guide_warp
+from ..core.motion import foot_contact, guide_warp, soma
 from ..core.motion.kimodo import rep
 from ..core.scene import SceneContext
 from .guides import SceneGuide
@@ -27,6 +27,7 @@ from .samples import (
     _restore_sequence_state,
     _scene_set_float,
     _sequence_state,
+    _store_bone_basis,
 )
 from .soma_pose import SomaRigBinding, apply_soma_frame
 
@@ -75,6 +76,98 @@ def iter_bake(
 
 def _quaternions(samples: Sequence[_BakedFrameSample], name: str) -> np.ndarray:
     return np.array([tuple(sample.bones[name].rotation) for sample in samples])
+
+
+_LEGS = (("Left", 0, 1), ("Right", 2, 3))
+
+
+def _has_ik(*bones) -> bool:
+    return any(
+        constraint.type == "IK" and not constraint.mute
+        for bone in bones
+        for constraint in bone.constraints
+    )
+
+
+def plant_rig_feet(
+    binding: SomaRigBinding,
+    samples: list[_BakedFrameSample],
+    contacts: np.ndarray,
+    guide_frames: Sequence[float] = (),
+    *,
+    scene_context: SceneContext,
+) -> int:
+    """Pin the rig's own ankles during the model's contact intervals.
+
+    The model's feet are planted on SOMA's proportions; copying leg angles to
+    a rig with another thigh-to-shin ratio or hip width moves a planted
+    ankle again. This pins the rig ankle (its FOOT head) at its position on
+    the interval's middle or guide frame, with the same fades, by turning
+    the thigh and shin (two-bone IK in armature space); the foot keeps its
+    armature-space rotation. As on SOMA, the ankle is pinned while the heel
+    touches and the toe while only the toe does. Legs driven by IK
+    constraints are left alone.
+    Returns the number of frames changed.
+    """
+    armature = binding.armature
+    times = np.array([sample.destination for sample in samples])
+    guides = [int(np.argmin(np.abs(times - frame))) for frame in guide_frames]
+    state = _sequence_state(armature, scene_context=scene_context)
+    changed = 0
+    try:
+        for side, heel, toe in _LEGS:
+            thigh = binding.bones.get(soma.JOINT_INDEX[f"{side}Leg"])
+            shin = binding.bones.get(soma.JOINT_INDEX[f"{side}Shin"])
+            foot = binding.bones.get(soma.JOINT_INDEX[f"{side}Foot"])
+            if thigh is None or shin is None or foot is None or _has_ik(thigh, shin):
+                continue
+            tip = binding.bones.get(soma.JOINT_INDEX[f"{side}ToeBase"])
+            if not (contacts[:, heel] | contacts[:, toe]).any():
+                continue
+            hips, knees, ankles, toes = [], [], [], []
+            for sample in samples:
+                _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
+                hips.append(tuple(thigh.head))
+                knees.append(tuple(shin.head))
+                ankles.append(tuple(foot.head))
+                toes.append(tuple(tip.head if tip is not None else foot.tail))
+            hip, knee, ankle, toe_point = (
+                np.array(values) for values in (hips, knees, ankles, toes)
+            )
+            offsets, _runs, _count = foot_contact.foot_translation(
+                ankle,
+                toe_point,
+                contacts[:, heel],
+                contacts[:, toe],
+                guide_frames=guides,
+            )
+            new_knee, new_ankle = foot_contact.two_bone_ik(
+                hip, knee, ankle, ankle + offsets
+            )
+            for index in np.flatnonzero(np.linalg.norm(offsets, axis=-1) > 1.0e-7):
+                sample = samples[index]
+                _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
+                foot_rotation = foot.matrix.to_3x3()
+                for bone, start, end, child in (
+                    (thigh, hip[index], new_knee[index], shin),
+                    (shin, new_knee[index], new_ankle[index], foot),
+                ):
+                    current = Vector(child.head) - Vector(bone.head)
+                    turn = current.rotation_difference(Vector(end) - Vector(start))
+                    matrix = (turn.to_matrix() @ bone.matrix.to_3x3()).to_4x4()
+                    matrix.translation = bone.matrix.translation
+                    bone.matrix = matrix
+                    scene_context.update()
+                matrix = foot_rotation.to_4x4()
+                matrix.translation = foot.matrix.translation
+                foot.matrix = matrix
+                scene_context.update()
+                for bone in (thigh, shin, foot):
+                    _store_bone_basis(sample, bone)
+                changed += 1
+    finally:
+        _restore_sequence_state(armature, state, scene_context=scene_context)
+    return changed
 
 
 def _local_targets(
