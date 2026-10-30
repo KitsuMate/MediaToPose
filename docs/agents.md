@@ -236,6 +236,13 @@ contains them. Keyed full poses are reached exactly (`guide_warp_deg` says
 how much correction that took); keys of only the pelvis or ROOT location
 are root waypoints.
 
+Poses you build yourself (lying, sitting, kneeling) need the pelvis
+location keyed at the height you want; without it the pose is stood on its
+feet. Key the rotation of most body bones so the frame reads as a full
+pose. A change of state such as lying on the front to lying on the back
+works when the two poses agree on where the head is; a prompt that
+describes the change ("rolls over onto the back") helps.
+
 ```python
 plan = api.generate("Rig", "A person dances.", frame_range=(1, 121), dry_run=True)
 print(plan.guides)                         # what the keys were read as
