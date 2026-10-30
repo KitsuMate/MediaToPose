@@ -224,6 +224,27 @@ def heading_angle(positions: np.ndarray) -> np.ndarray:
     return np.arctan2(across[..., 2], -across[..., 0])
 
 
+def steady_heading(positions: np.ndarray) -> np.ndarray:
+    """Facing angles [T] from the hip joints, unwrapped and filled in where
+    the hip line is nearly vertical (lying on a side, mid-roll), so the
+    heading never jumps.
+
+    Frames whose hip line keeps less than half its length on the ground
+    take the angle interpolated between their reliable neighbours.
+    """
+    joints = np.asarray(positions, dtype=np.float64)
+    right, left = HIP_JOINTS
+    across = joints[:, right, :] - joints[:, left, :]
+    ground = np.hypot(across[:, 0], across[:, 2])
+    reliable = ground > 0.5 * np.linalg.norm(across, axis=-1)
+    raw = np.arctan2(across[:, 2], -across[:, 0])
+    frames = np.arange(len(raw))
+    if not reliable.any():
+        return np.zeros(len(raw))
+    angles = np.unwrap(raw[reliable])
+    return np.interp(frames, frames[reliable], angles)
+
+
 def rotation_y(angle: np.ndarray | float) -> np.ndarray:
     """Rotation matrices [..., 3, 3] about +Y."""
     angles = np.asarray(angle, dtype=np.float64)
@@ -250,4 +271,5 @@ __all__ = [
     "global_to_local",
     "heading_angle",
     "rotation_y",
+    "steady_heading",
 ]

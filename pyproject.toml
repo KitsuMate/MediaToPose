@@ -57,6 +57,7 @@ include = [
   "media_to_pose/core/motion/rohm_format.py",
   "media_to_pose/core/motion/guide_warp.py",
   "media_to_pose/core/motion/kimodo",
+  "media_to_pose/core/motion/limb_solve.py",
   "media_to_pose/core/motion/quaternions.py",
   "media_to_pose/core/motion/retime.py",
   "media_to_pose/core/motion/soma.py",

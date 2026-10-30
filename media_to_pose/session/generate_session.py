@@ -12,7 +12,7 @@ import math
 import threading
 import time
 from collections.abc import Iterator
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
@@ -24,7 +24,7 @@ from ..backends.llm2vec import backend as llm2vec_backend
 from ..core.coordinator import COORDINATOR, OperationKind, OperationState
 from ..core.errors import Cancelled, InvalidRequest, MtpError, OperationBusy
 from ..core.log import get_logger
-from ..core.motion import retime, soma
+from ..core.motion import limb_solve, retime, soma
 from ..core.motion.kimodo import generate as kimodo_generate
 from ..core.motion.kimodo import windows as kimodo_windows
 from ..core.requests import OutputMode
@@ -430,8 +430,19 @@ class GenerateSession:
             float(frame)
             for frame in range(math.ceil(request.first), math.floor(request.last) + 1)
         ]
+        # Limb roll from the bend planes: the model leaves straight limbs'
+        # twist free and may wring them.
+        solved = replace(
+            motion.frames,
+            global_rotations=limb_solve.solve_limbs(
+                motion.frames.global_rotations, motion.frames.positions
+            ),
+            # The ROOT turns with this: no 180° jump when the hip line
+            # stands up (rolling over, lying on a side).
+            heading=soma.steady_heading(motion.frames.positions),
+        )
         frames = retime.resample(
-            motion.frames, scene_frames, request.first, self.scene_context.fps
+            solved, scene_frames, request.first, self.scene_context.fps
         )
         sink: list[str] = []
         samples = yield from generated.iter_bake(
