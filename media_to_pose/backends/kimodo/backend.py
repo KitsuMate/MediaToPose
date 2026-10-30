@@ -462,12 +462,16 @@ def _require_ram(variant: KimodoVariant) -> None:
         raise
 
 
-def verify_bundle(bundle_directory: str = "") -> runtime.KimodoBundle:
+def verify_bundle(
+    bundle_directory: str = "", *, verify_files: bool = True
+) -> runtime.KimodoBundle:
+    """The installed bundle; ``verify_files`` re-hashes every file, otherwise
+    only sizes are checked (as for a load)."""
     invalidate_backend_snapshot()
     directory = Path(bundle_directory) if bundle_directory else active_directory()
     if not (directory / "manifest.json").is_file():
         raise ModelMissing("Kimodo is not installed")
-    return runtime.load_bundle(directory)
+    return runtime.load_bundle(directory, verify_files=verify_files)
 
 
 def loaded_session() -> runtime.KimodoSession:
@@ -490,7 +494,8 @@ def ensure_model_loaded(
     if current is not None and current.requested_mode == requested:
         return current
     unload_model()
-    bundle = verify_bundle(bundle_directory)
+    # Install and Verify hash the files; a load checks sizes only.
+    bundle = verify_bundle(bundle_directory, verify_files=False)
     _require_ram(KimodoVariant(bundle.variant))
     session = BACKEND.set_session(runtime.KimodoSession(bundle, requested))
     BACKEND.last_diagnostic = "Bundle verification and runtime session creation passed"
