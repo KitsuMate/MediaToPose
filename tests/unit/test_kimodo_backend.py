@@ -166,7 +166,7 @@ class PinTests(unittest.TestCase):
         licence_files = {item.path for item in backend.SHARED_FILES}
         self.assertTrue(set(backend.LICENSE.files) <= licence_files)
 
-    def test_auto_variant_follows_the_device(self) -> None:
+    def test_auto_variant_is_full_precision_on_every_device(self) -> None:
         def resolve(providers, device="AUTO"):
             with mock.patch.object(
                 backend.ort_runtime,
@@ -176,7 +176,7 @@ class PinTests(unittest.TestCase):
                 return backend.resolve_variant("AUTO", device)
 
         gpu = ("WebGpuExecutionProvider", "CPUExecutionProvider")
-        self.assertIs(resolve(gpu), backend.KimodoVariant.FP16)
+        self.assertIs(resolve(gpu), backend.KimodoVariant.FP32)
         self.assertIs(resolve(gpu, "CPU"), backend.KimodoVariant.FP32)
         self.assertIs(resolve(("CPUExecutionProvider",)), backend.KimodoVariant.FP32)
         self.assertIs(backend.resolve_variant("int8"), backend.KimodoVariant.INT8)

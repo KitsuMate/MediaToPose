@@ -76,7 +76,7 @@ class VariantSpec:
 VARIANTS: dict[KimodoVariant, VariantSpec] = {
     KimodoVariant.FP16: VariantSpec(
         "FP16",
-        "Half precision; the fastest on WebGPU and CoreML",
+        "Half precision; 25% faster on WebGPU, but its output jitters",
         BundleFile(
             "onnx/model_fp16.onnx",
             587_590_790,
@@ -86,7 +86,7 @@ VARIANTS: dict[KimodoVariant, VariantSpec] = {
     ),
     KimodoVariant.FP32: VariantSpec(
         "FP32",
-        "Full precision; the fastest and most exact on CPU",
+        "Full precision; smooth output on every device (the default)",
         BundleFile(
             "onnx/model_fp32.onnx",
             1_174_634_698,
@@ -96,7 +96,7 @@ VARIANTS: dict[KimodoVariant, VariantSpec] = {
     ),
     KimodoVariant.INT8: VariantSpec(
         "INT8",
-        "8-bit weights; half the memory, slower on CPU",
+        "8-bit weights; the least memory, but its output jitters",
         BundleFile(
             "onnx/model_int8.onnx",
             305_933_441,
@@ -205,18 +205,16 @@ def normalize_variant(value: object) -> KimodoVariant:
 
 
 def resolve_variant(variant: object, device: object = "AUTO") -> KimodoVariant:
-    """A concrete variant: AUTO is FP16 with an accelerator and FP32 on CPU."""
+    """A concrete variant: AUTO is FP32 on every device.
+
+    The FP16 and INT8 graphs match FP32 closely per step (cosine 0.997), but
+    their sampled motion jitters frame to frame: 10-14 mm of whole-body shake
+    against 2-4 mm, and three to five times the foot sliding (measured
+    2026-10-30). FP32 costs about 25% more time on WebGPU.
+    """
+    del device  # Every device gets the same precision.
     selected = normalize_variant(variant)
-    if selected is not KimodoVariant.AUTO:
-        return selected
-    try:
-        available = ort_runtime.available_execution_providers()
-        _provider, actual, _fallback = ort_runtime.select_execution_provider(
-            device, available
-        )
-    except MtpError:
-        actual = "cpu"
-    return KimodoVariant.FP32 if actual == "cpu" else KimodoVariant.FP16
+    return KimodoVariant.FP32 if selected is KimodoVariant.AUTO else selected
 
 
 # Storage ---------------------------------------------------------------------
