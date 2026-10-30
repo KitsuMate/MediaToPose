@@ -144,13 +144,13 @@ def import_onnxruntime():
 def import_tokenizers():
     """Import Hugging Face ``tokenizers`` for the optional LLM2Vec encoder.
 
-    Not in ``REQUIRED_MODULES``: only prompts need it, and whether its wheels
-    are bundled is still open (Kimodo plan, Decision 3).
+    Not in ``REQUIRED_MODULES``: the wheels are bundled, but only prompts
+    need them, so capture keeps working when they fail to activate.
     """
     if not _module_is_available("tokenizers"):
         raise DependencyMissing(
-            "Prompts need the 'tokenizers' package, which this build of Media "
-            "to Pose does not include; generate without a prompt instead"
+            "Prompts need the bundled 'tokenizers' package, which Blender did "
+            "not activate; reinstall Media to Pose or generate without a prompt"
         )
     try:
         return importlib.import_module("tokenizers")

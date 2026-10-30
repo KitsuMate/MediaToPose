@@ -51,11 +51,14 @@ wheels = [
   "./wheels/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
   "./wheels/six-1.17.0-py2.py3-none-any.whl",
   "./wheels/sympy-1.14.0-py3-none-any.whl",
+  "./wheels/tokenizers-0.22.2-cp39-abi3-macosx_11_0_arm64.whl",
+  "./wheels/tokenizers-0.22.2-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+  "./wheels/tokenizers-0.22.2-cp39-abi3-win_amd64.whl",
 ]
 
 [permissions]
 files = "Open media and presets, and write the detection cache"
-network = "Download optional immutable SAM, RoHM, and AnyCalib models"
+network = "Download optional immutable SAM, RoHM, AnyCalib, Kimodo and LLM2Vec models"
 
 [build]
 paths_exclude_pattern = [
