@@ -13,14 +13,17 @@ from ..core.errors import InvalidRequest
 from ..core.fs import atomic_json
 from ..core.types import CanonicalFrame
 from ..evaluate import metrics as metrics_module
+from ..evaluate import motion_render
 from ..evaluate import render as render_module
+from ..session.generate_results import GenerateResult
 from ..session.results import CaptureResult
 from .common import output_path, resolve_armature, scene_context
 
 
 def load_result(result) -> dict[str, Any]:
-    """A capture result as a dict, from the object, a dict or a JSON path."""
-    if isinstance(result, CaptureResult):
+    """A capture or generate result as a dict, from the object, a dict or a
+    JSON path."""
+    if isinstance(result, CaptureResult | GenerateResult):
         return result.to_dict()
     if isinstance(result, dict):
         return result
@@ -124,6 +127,56 @@ def _render_still(scene) -> None:
         bpy.ops.render.render(write_still=True, scene=scene.name)
 
 
+def _render_animation(scene) -> None:
+    with bpy.context.temp_override(scene=scene):
+        bpy.ops.render.render(animation=True, scene=scene.name)
+
+
+def _render_generated(
+    path, target, context, data, *, frames, count: int, size: int, render_meshes: bool
+) -> dict[str, Any]:
+    """A generate result: a sheet of the rig with guides marked, or an MP4
+    when ``path`` ends in ``.mp4``."""
+    first, last = (int(round(float(value))) for value in data["timeline_frame_range"])
+    destination = output_path(path)
+    if destination is None:
+        raise InvalidRequest("Give an output path", parameter="path")
+    if destination.suffix.lower() == ".mp4":
+        written = motion_render.render_motion_video(
+            context,
+            target,
+            destination,
+            first,
+            last,
+            render_animation=_render_animation,
+            size=int(size),
+        )
+        return {"path": str(written), "frames": [first, last]}
+    marked = sorted(
+        {
+            float(guide["frame"])
+            for guide in data.get("guides", ())
+            if guide.get("kind") == "FULL_BODY"
+        }
+    )
+    if frames is None:
+        step = max(last - first, 1) / max(int(count) - 1, 1)
+        frames = sorted(
+            {first + int(round(index * step)) for index in range(max(int(count), 1))}
+            | {int(round(frame)) for frame in marked}
+        )
+    written = motion_render.render_motion_sheet(
+        context,
+        target,
+        destination,
+        frames,
+        marked=marked,
+        size=int(size),
+        render_still=_render_still if render_meshes else None,
+    )
+    return {"path": str(written), "frames": list(frames)}
+
+
 def render_comparison(
     path,
     armature,
@@ -147,6 +200,17 @@ def render_comparison(
     target = resolve_armature(armature)
     context = scene_context(scene)
     data = load_result(result)
+    if "model_frames" in data:
+        return _render_generated(
+            path,
+            target,
+            context,
+            data,
+            frames=frames,
+            count=count,
+            size=size,
+            render_meshes=render_meshes,
+        )
     per_frame = data.get("confidence", {}).get("per_frame", [])
     if not per_frame:
         raise InvalidRequest("The result has no applied frames", parameter="result")

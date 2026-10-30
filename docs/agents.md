@@ -206,6 +206,68 @@ likeness matters. VRoid's authored joy key can open the mouth even for a
 closed-mouth smile; combining it with visemes can exaggerate that opening.
 `expression_fit` measures mapped values, not visual likeness to the source.
 
+### Generate motion (Kimodo)
+
+Generation needs the Kimodo denoiser and, for prompts, the LLM2Vec text
+encoder. Install them once; each first reports `LICENSE_REQUIRED` with the
+licence to show the user (see Errors). Generation from guides alone never
+loads the text encoder. Prompts are "Built with Meta Llama 3".
+
+```python
+api.install_model("KIMODO", accept_license=value_the_user_accepted)
+api.install_model("LLM2VEC", accept_license=value_the_user_accepted)
+```
+
+Walk from A to B (world units, scene frames):
+
+```python
+result = api.generate(
+    "Rig", "A person walks forward.",
+    frame_range=(1, 120),
+    waypoints=[(1, 0.0, 0.0), (120, 0.0, -3.0)],   # (frame, x, y)
+    seed=1, result_path="walk.json",
+)
+api.render_comparison("walk.mp4", "Rig", result=result)   # or a .png sheet
+```
+
+In-between keyed poses: key full poses on the rig (by hand, or with
+`api.capture(image, ...)` and a keyframe), then generate over a range that
+contains them. Keyed full poses are reached exactly (`guide_warp_deg` says
+how much correction that took); keys of only the pelvis or ROOT location
+are root waypoints.
+
+```python
+plan = api.generate("Rig", "A person dances.", frame_range=(1, 121), dry_run=True)
+print(plan.guides)                         # what the keys were read as
+result = api.generate("Rig", "A person dances.", frame_range=(1, 121), seed=3)
+```
+
+Several prompts: `segments=[(1, "A person walks."), (90, "A person waves.")]`.
+Follow a curve: `path="Path"`. Try another seed with the same inputs:
+`api.generate("Rig", recipe=result.recipe, seed=4)`. `output="NLA_STRIP"`
+keeps each attempt on its own NLA track.
+
+The generate result has `status`, `message`, `action`, `output_mode`,
+`model_frames` (30 fps frames), `windows`, `segments`, `seed`, `steps`,
+`variant`, `device`, `seconds` per phase, `recipe`, `warnings` and one entry
+per guide with `guide_error_m` (model output against the guide, in rig
+metres, before the warp), `guide_warp_deg` and `guide_warp_m`.
+
+Warning codes: `PROMPT_TRUNCATED`, `WINDOWED`, `GUIDE_COLLISION`,
+`GUIDE_WARP_LARGE`, `GENERATE_WARNING`.
+
+| Symptom | Check | Change |
+| --- | --- | --- |
+| Ignores a guide | `GUIDE_WARP_LARGE`, `guide_error_m` | Raise `steps` or `guide_guidance`; make the prompt agree with the pose |
+| Pops at a guide | the sheet around the guide | Raise `blend_frames` |
+| Misses a waypoint | `guide_error_m` of the root guide | Raise `guide_guidance`; give the walk more frames |
+| Wrong action | the sheet | Phrase it as "A person …" with one or two actions; split into `segments` |
+| Too slow | `seconds` | Fewer `steps` (25 is fast); prompts are cached after the first run |
+
+Limits: realistic single-person motion on flat ground; no fingers or face;
+the pelvis carries the motion (and a mapped ROOT the ground path and
+heading).
+
 ### Run from the Blender MCP server
 
 `execute_blender_code` runs in the open Blender session, so the same calls
@@ -322,7 +384,10 @@ the JSON document and `--save` to save the .blend afterwards.
 | `providers`, `models` | `api.list_providers`, `api.model_status` |
 | `models install MODEL [--variant V] [--device D] [--storage DIR] [--accept-license VALUE] [--timeout S] [--progress jsonl]` | `api.install_model`; `MODEL` is `SAM3D_BODY`, `ANYCALIB`, `ROHM`, `KIMODO` or `LLM2VEC` |
 | `export-detections PATH`, `import-detections PATH` | `api.export_detections`, `api.import_detections` |
-| `render --armature A --result FILE --out PNG [--frames 10,20] [--count N] [--size PX] [--no-meshes] [--face]` | `api.render_comparison` |
+| `render --armature A --result FILE --out PNG [--frames 10,20] [--count N] [--size PX] [--no-meshes] [--face]` | `api.render_comparison`; with a generate result, a rig sheet with guides marked, or an MP4 when `--out` ends in `.mp4` |
+| `generate --armature A [--prompt P] [--segment FRAME:PROMPT ...] [--frame-range FIRST:LAST] [--waypoint FRAME:X,Y ...] [--path CURVE] [--no-guides] [--ignore-frames 10,20] [--no-face-travel] [--seed N] [--steps N] [--text-guidance W] [--guide-guidance W] [--blend-frames N] [--output] [--device] [--dry-run] [--recipe FILE] [--timeout S] [--progress jsonl] [--out FILE]` | `api.generate` |
+| `guides --armature A [--frame-range FIRST:LAST] [--waypoint FRAME:X,Y ...] [--path CURVE]` | `api.describe_guides` |
+| `encode-prompt PROMPT` | `api.encode_prompt` |
 
 ## Errors and exit codes
 

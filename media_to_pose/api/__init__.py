@@ -28,11 +28,13 @@ from ..core.errors import (
     OperationBusy,
 )
 from ..evaluate.metrics import Metrics
+from ..session.generate_results import GeneratePlan, GenerateResult
 from ..session.results import CaptureResult
 from .capture import capture, retarget_cached
 from .config import get_config, list_postprocessors, set_config
 from .detections import export_detections, import_detections
 from .evaluation import evaluate, load_result, render_comparison
+from .generate import describe_guides, encode_prompt, generate
 from .models import install_model, list_providers, model_status
 from .rig import auto_map, describe_rig
 
@@ -41,6 +43,8 @@ __all__ = [
     "Cancelled",
     "CaptureFailed",
     "CaptureResult",
+    "GeneratePlan",
+    "GenerateResult",
     "InvalidRequest",
     "MappingIncomplete",
     "MediaError",
@@ -50,9 +54,12 @@ __all__ = [
     "OperationBusy",
     "auto_map",
     "capture",
+    "describe_guides",
     "describe_rig",
+    "encode_prompt",
     "evaluate",
     "export_detections",
+    "generate",
     "get_config",
     "import_detections",
     "install_model",

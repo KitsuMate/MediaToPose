@@ -28,6 +28,7 @@ from .capture import capture, retarget_cached
 from .config import get_config, list_postprocessors, set_config
 from .detections import export_detections, import_detections
 from .evaluation import evaluate, render_comparison
+from .generate import describe_guides, encode_prompt, generate
 from .models import MODELS, install_model, list_providers, model_status
 from .rig import auto_map, describe_rig
 
@@ -66,6 +67,41 @@ def _frames(value: str) -> list[int]:
         return [int(part) for part in value.split(",") if part.strip()]
     except ValueError as exc:
         raise argparse.ArgumentTypeError("use comma-separated frames") from exc
+
+
+def _waypoint(value: str) -> tuple[float, float, float]:
+    try:
+        frame, position = value.split(":", 1)
+        x, y = (float(part) for part in position.split(","))
+        return float(frame), x, y
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "use FRAME:X,Y in world units, for example 1:0,0"
+        ) from exc
+
+
+def _segment(value: str) -> tuple[float, str]:
+    frame, separator, prompt = value.partition(":")
+    try:
+        return float(frame), prompt if separator else ""
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            'use FRAME:PROMPT, for example "61:A person dances."'
+        ) from exc
+
+
+def _guide_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--armature", required=True, help="armature object name")
+    parser.add_argument(
+        "--frame-range", type=_frame_range, help="scene frames FIRST:LAST (inclusive)"
+    )
+    parser.add_argument(
+        "--waypoint",
+        type=_waypoint,
+        action="append",
+        help="FRAME:X,Y world position to pass through (repeatable)",
+    )
+    parser.add_argument("--path", help="curve object to follow")
 
 
 def _read_json(path: str) -> Any:
@@ -209,10 +245,57 @@ def build_parser() -> argparse.ArgumentParser:
         sub.add_argument("path")
         _common(sub)
 
+    sub = commands.add_parser("generate", help="generate motion with Kimodo")
+    _guide_options(sub)
+    sub.add_argument("--prompt", help='what the person does, "A person walks."')
+    sub.add_argument(
+        "--segment",
+        type=_segment,
+        action="append",
+        help="FRAME:PROMPT, a prompt from that frame on (repeatable)",
+    )
+    sub.add_argument(
+        "--no-guides", action="store_true", help="ignore the armature's keys"
+    )
+    sub.add_argument(
+        "--ignore-frames", type=_frames, help="keyed frames not to use as guides"
+    )
+    sub.add_argument(
+        "--no-face-travel",
+        action="store_true",
+        help="do not turn towards the next waypoint",
+    )
+    sub.add_argument("--seed", type=int)
+    sub.add_argument("--steps", type=int, help="denoising steps (default 50)")
+    sub.add_argument("--text-guidance", type=float)
+    sub.add_argument("--guide-guidance", type=float)
+    sub.add_argument("--blend-frames", type=float)
+    sub.add_argument("--output", help="NEW_ACTION, REPLACE or NLA_STRIP")
+    sub.add_argument("--device", help="AUTO, GPU or CPU")
+    sub.add_argument(
+        "--dry-run", action="store_true", help="plan only; no model is loaded"
+    )
+    sub.add_argument("--recipe", help="replay a result JSON's recipe")
+    sub.add_argument("--timeout", type=float, help="seconds before cancelling")
+    _progress_option(sub)
+    sub.add_argument("--out", help="write the result JSON here")
+    _common(sub)
+
+    sub = commands.add_parser("guides", help="guides a generation would use")
+    _guide_options(sub)
+    sub.add_argument("--out")
+    _common(sub)
+
+    sub = commands.add_parser("encode-prompt", help="cache a prompt's embedding")
+    sub.add_argument("prompt")
+    _common(sub)
+
     sub = commands.add_parser("render", help="contact sheet of source and rig")
     sub.add_argument("--armature", required=True)
-    sub.add_argument("--result", required=True, help="capture result JSON")
-    sub.add_argument("--out", required=True, help="PNG path")
+    sub.add_argument("--result", required=True, help="capture or generate result JSON")
+    sub.add_argument(
+        "--out", required=True, help="PNG path; .mp4 renders a generate result"
+    )
     sub.add_argument("--frames", type=_frames, help="timeline frames, comma-separated")
     sub.add_argument("--count", type=int, default=6)
     sub.add_argument("--size", type=int, default=384)
@@ -302,6 +385,39 @@ def run(args) -> Any:
         payload = export_detections(args.path)
     elif command == "import-detections":
         payload = import_detections(args.path)
+    elif command == "generate":
+        recipe = _read_json(args.recipe).get("recipe") if args.recipe else None
+        payload = generate(
+            args.armature,
+            args.prompt,
+            segments=args.segment,
+            frame_range=args.frame_range,
+            guides=False if args.no_guides else None,
+            ignore_frames=args.ignore_frames,
+            waypoints=args.waypoint,
+            path=args.path,
+            face_travel=False if args.no_face_travel else None,
+            seed=args.seed,
+            steps=args.steps,
+            text_guidance=args.text_guidance,
+            guide_guidance=args.guide_guidance,
+            blend_frames=args.blend_frames,
+            output=args.output,
+            device=args.device,
+            dry_run=args.dry_run,
+            recipe=recipe,
+            timeout=args.timeout,
+            progress=_progress_writer(args),
+        ).to_dict()
+    elif command == "guides":
+        payload = describe_guides(
+            args.armature,
+            frame_range=args.frame_range,
+            waypoints=args.waypoint,
+            path=args.path,
+        )
+    elif command == "encode-prompt":
+        payload = encode_prompt(args.prompt)
     elif command == "render":
         payload = render_comparison(
             args.out,
@@ -325,6 +441,17 @@ def _summary(command: str, payload: Any) -> str:
         return (
             f"{payload['status']}: {payload['message']}\n"
             f"action {payload['action'] or '-'}, {payload['frames_processed']} frame(s)"
+        )
+    if command == "generate":
+        if payload.get("dry_run"):
+            return (
+                f"Plan: {payload['model_frames']} model frames in "
+                f"{len(payload['windows'])} window(s), {len(payload['guides'])} guide(s)"
+            )
+        return (
+            f"{payload['status']}: {payload['message']}\n"
+            f"action {payload['action'] or '-'}, seed {payload['seed']}, "
+            f"{len(payload['guides'])} guide(s), {len(payload['warnings'])} warning(s)"
         )
     if command == "evaluate":
         return "\n".join(
