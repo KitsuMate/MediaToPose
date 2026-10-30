@@ -60,12 +60,14 @@ include = [
   "media_to_pose/core/motion/quaternions.py",
   "media_to_pose/core/motion/retime.py",
   "media_to_pose/core/motion/soma.py",
+  "media_to_pose/core/motion/soma_align.py",
   "media_to_pose/core/paths.py",
   "media_to_pose/core/report.py",
   "media_to_pose/core/requests.py",
   "media_to_pose/core/scene.py",
   "media_to_pose/core/types.py",
   "media_to_pose/providers/base.py",
+  "media_to_pose/session/generate_results.py",
   "media_to_pose/session/results.py",
 ]
 
