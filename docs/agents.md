@@ -231,7 +231,7 @@ api.render_comparison("walk.mp4", "Rig", result=result)   # or a .png sheet
 ```
 
 In-between keyed poses: key full poses on the rig (by hand, or with
-`api.capture(image, ...)` and a keyframe), then generate over a range that
+`api.capture(image, ..., key=True, start_frame=F)`), then generate over a range that
 contains them. Keyed full poses are reached exactly (`guide_warp_deg` says
 how much correction that took); keys of only the pelvis or ROOT location
 are root waypoints.
@@ -374,7 +374,7 @@ the JSON document and `--save` to save the .blend afterwards.
 
 | Command | Does |
 | --- | --- |
-| `capture --media M --armature A [--parts body,hands] [--mode] [--frame N] [--frame-range FIRST:END] [--start-frame F] [--root-motion] [--face-output] [--mirror] [--config FILE] [--output NEW_ACTION\|REPLACE\|NLA_STRIP] [--no-cache] [--timeout S] [--out FILE]` | `api.capture` |
+| `capture --media M --armature A [--parts body,hands] [--mode] [--frame N] [--frame-range FIRST:END] [--start-frame F] [--root-motion] [--face-output] [--mirror] [--config FILE] [--output NEW_ACTION\|REPLACE\|NLA_STRIP] [--no-cache] [--key] [--timeout S] [--out FILE]` | `api.capture` |
 | `retarget` (same options, without `--no-cache`) | `api.retarget_cached` |
 | `describe-rig --armature A` | `api.describe_rig` |
 | `auto-map --armature A [--force-profile]` | `api.auto_map` |

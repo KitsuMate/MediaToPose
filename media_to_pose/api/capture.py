@@ -116,6 +116,7 @@ def _run(
     output="NEW_ACTION",
     timeout=None,
     result_path=None,
+    key=False,
     **overrides: Any,
 ) -> CaptureResult:
     context = scene_context(scene)
@@ -143,6 +144,7 @@ def _run(
         start_frame=start_frame,
         postprocess_config=_postprocess(target, config),
         require_cache=require_cache,
+        key_pose=bool(key) and selected_mode == CaptureMode.POSE,
     )
     drive(session, timeout=timeout)
     result = build_capture_result(session, armature=target)
@@ -168,6 +170,7 @@ def capture(
     config: dict | list | None = None,
     output: str = "NEW_ACTION",
     keep_cache: bool | None = None,
+    key: bool = False,
     scene=None,
     timeout: float | None = None,
     result_path=None,
@@ -185,6 +188,9 @@ def capture(
       exclusive, for ``KEYFRAMES``; only those frames are keyed, at the same
       timeline frames as a full capture.
     - ``start_frame``: timeline frame of source frame 0 (default: current).
+    - ``key``: for ``POSE``, also key the pose at ``start_frame`` (or the
+      current frame), for example to block a pose that ``generate`` then
+      reaches as a guide.
     - ``root_motion``: ``AUTOMATIC``, ``IN_PLACE`` or ``OFF``.
     - ``config``: clean-up settings for this capture only, as returned by
       ``get_config`` or ``{module_id: {setting: value}}``; the rig keeps
@@ -215,6 +221,7 @@ def capture(
         mirror=mirror,
         keep_cache=keep_cache,
         video_frame=frame,
+        key=key,
     )
 
 

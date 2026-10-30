@@ -173,6 +173,8 @@ class CaptureRequest:
     output_mode: OutputMode = OutputMode.NEW_ACTION
     # Source frames ``[first, end)`` to apply, 0-based; ``None`` applies all.
     frame_range: tuple[int, int] | None = None
+    # A POSE capture also keys the pose at ``start_frame``.
+    key_pose: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "mode", CaptureMode(self.mode))

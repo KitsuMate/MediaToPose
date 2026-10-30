@@ -251,6 +251,7 @@ class CaptureSession:
         start_frame: float | None = None,
         postprocess_config: PostProcessConfig | None = None,
         require_cache: bool = False,
+        key_pose: bool = False,
     ) -> CaptureSession:
         """Validate everything before any Blender data changes.
 
@@ -258,8 +259,9 @@ class CaptureSession:
         where the animation goes, ``frame_range`` applies only source frames
         ``[first, end)``, ``start_frame`` replaces the scene's current frame,
         ``postprocess_config`` replaces the rig's clean-up settings for this
-        capture only, and ``require_cache`` fails instead of running
-        detection when no retained detections match.
+        capture only, ``require_cache`` fails instead of running detection
+        when no retained detections match, and ``key_pose`` keys a POSE
+        capture at ``start_frame``.
 
         Raises an ``MtpError`` subclass with the message the user should see.
         """
@@ -360,6 +362,7 @@ class CaptureSession:
             output_mode=output_mode,
             frame_range=frame_range,
             postprocess_config=postprocess_config,
+            key_pose=key_pose,
         )
         common = {"notices": tuple(notices)}
         if settings.keep_detection_cache:
@@ -459,6 +462,7 @@ class CaptureSession:
         output_mode: OutputMode = OutputMode.NEW_ACTION,
         frame_range: tuple[int, int] | None = None,
         postprocess_config: PostProcessConfig | None = None,
+        key_pose: bool = False,
     ) -> CaptureRequest:
         scene = scene_context.scene
         action = (
@@ -517,6 +521,7 @@ class CaptureSession:
             cache_identity=cache_identity,
             output_mode=output_mode,
             frame_range=frame_range,
+            key_pose=bool(key_pose),
         )
 
     # ------------------------------------------------------------------
@@ -728,10 +733,15 @@ class CaptureSession:
         self._observe_camera(detected)
         self._observe_frame(detected, self.request.source_frame_index)
         self.outcome.cached = bool(cached)
+        key_pose = self.request.key_pose
+        if key_pose:
+            self.scene_context.set_frame(self.request.start_frame)
         self._pose_iterator = iter_apply_frame(
             armature,
             detected,
             self.request,
+            keyframe=key_pose,
+            scene_frame=self.request.start_frame,
             scene_context=self.scene_context,
         )
         self.state = SessionState.APPLYING_POSE

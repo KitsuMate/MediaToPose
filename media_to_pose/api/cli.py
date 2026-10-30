@@ -137,6 +137,11 @@ def _capture_options(parser: argparse.ArgumentParser, *, cached: bool) -> None:
         parser.add_argument(
             "--no-cache", action="store_true", help="do not keep the detections"
         )
+        parser.add_argument(
+            "--key",
+            action="store_true",
+            help="POSE: also key the pose at --start-frame (or the current frame)",
+        )
     parser.add_argument("--timeout", type=float, help="seconds before cancelling")
     parser.add_argument("--out", help="write the result JSON here")
 
@@ -328,6 +333,7 @@ def _capture(args, *, cached: bool) -> dict[str, Any]:
     else:
         if args.no_cache:
             options["keep_cache"] = False
+        options["key"] = args.key
         result = capture(args.media, args.armature, **options)
     return result.to_dict()
 
