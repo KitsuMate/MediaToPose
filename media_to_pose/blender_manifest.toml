@@ -58,7 +58,7 @@ wheels = [
 
 [permissions]
 files = "Open media and presets, and write the detection cache"
-network = "Download optional immutable SAM, RoHM, AnyCalib, Kimodo and LLM2Vec models"
+network = "Download optional pinned capture and generation models"
 
 [build]
 paths_exclude_pattern = [
