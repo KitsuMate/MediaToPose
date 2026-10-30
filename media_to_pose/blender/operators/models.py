@@ -195,6 +195,7 @@ class MTP_OT_anycalib_install(ModelJobModal, Operator):
             job = anycalib_backend.start_install(
                 self.model_storage_directory,
                 context.scene.mtp_settings.anycalib_device,
+                online_access=bpy.app.online_access,
             )
         except OperationBusy:
             self._report_blocked(context)
@@ -308,7 +309,9 @@ class MTP_OT_rohm_install(ModelJobModal, Operator):
             self.report({"WARNING"}, "Media to Pose is busy")
             return {"CANCELLED"}
         try:
-            job = rohm_backend.start_install(self.model_storage_directory)
+            job = rohm_backend.start_install(
+                self.model_storage_directory, online_access=bpy.app.online_access
+            )
         except OperationBusy:
             self.report({"WARNING"}, "Media to Pose is busy")
             return {"CANCELLED"}
@@ -459,6 +462,7 @@ class MTP_OT_sam3d_install(ModelJobModal, Operator):
                 self.model_storage_directory,
                 scene_name=context.scene.name,
                 scene_pointer=context.scene.as_pointer(),
+                online_access=bpy.app.online_access,
             )
         except OperationBusy:
             self.report({"ERROR"}, "Media to Pose is already busy")

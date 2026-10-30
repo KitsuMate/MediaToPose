@@ -169,8 +169,14 @@ def invalidate_backend_snapshot() -> None:
 def start_install(
     storage_parent: str = "",
     device: object = "AUTO",
+    *,
+    online_access: bool = True,
 ) -> BackgroundJob:
-    """Start downloading the precision that suits ``device`` on a worker thread."""
+    """Start downloading the precision that suits ``device`` on a worker thread.
+
+    ``online_access`` is ``bpy.app.online_access``.
+    """
+    lifecycle.require_online_access(online_access, "AnyCalib")
     if not is_published():
         raise ModelMissing("AnyCalib ONNX bundle is not published")
     root = model_storage_root(storage_parent)
@@ -180,7 +186,12 @@ def start_install(
     def work(job: BackgroundJob) -> str:
         try:
             lifecycle.install_pinned_bundle(
-                job, pinned_bundle(precision), STORAGE, root, config
+                job,
+                pinned_bundle(precision),
+                STORAGE,
+                root,
+                config,
+                online_access=online_access,
             )
         finally:
             invalidate_backend_snapshot()

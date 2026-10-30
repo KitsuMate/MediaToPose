@@ -999,8 +999,13 @@ def start_install(
     *,
     scene_name: str = "",
     scene_pointer: int = 0,
+    online_access: bool = True,
 ) -> BackgroundJob:
-    """Start installing ``variant`` into the selected storage parent."""
+    """Start installing ``variant`` into the selected storage parent.
+
+    ``online_access`` is ``bpy.app.online_access``.
+    """
+    lifecycle.require_online_access(online_access, "SAM 3D Body")
     if is_model_loaded():
         raise InvalidRequest("Unload SAM 3D Body before repairing it")
     storage_parent = _normalize_storage_parent(storage_selection)

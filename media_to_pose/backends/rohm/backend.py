@@ -151,8 +151,14 @@ def invalidate_backend_snapshot() -> None:
     BACKEND.invalidate()
 
 
-def start_install(storage_parent: str = "") -> BackgroundJob:
-    """Start downloading the pinned RoHM bundle on a worker thread."""
+def start_install(
+    storage_parent: str = "", *, online_access: bool = True
+) -> BackgroundJob:
+    """Start downloading the pinned RoHM bundle on a worker thread.
+
+    ``online_access`` is ``bpy.app.online_access``.
+    """
+    lifecycle.require_online_access(online_access, "RoHM")
     if not is_published():
         raise ModelMissing("RoHM ONNX bundle is not published")
     root = model_storage_root(storage_parent)
@@ -161,7 +167,12 @@ def start_install(storage_parent: str = "") -> BackgroundJob:
     def work(job: BackgroundJob) -> str:
         try:
             return lifecycle.install_pinned_bundle(
-                job, pinned_bundle(), STORAGE, root, config
+                job,
+                pinned_bundle(),
+                STORAGE,
+                root,
+                config,
+                online_access=online_access,
             )
         finally:
             invalidate_backend_snapshot()
