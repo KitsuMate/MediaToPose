@@ -18,6 +18,7 @@ from mathutils import Matrix, Quaternion, Vector
 from ..core.motion import foot_contact, guide_warp, soma
 from ..core.motion.kimodo import rep
 from ..core.scene import SceneContext
+from . import fast_pose
 from .guides import SceneGuide
 from .keyframes import _iter_commit_baked_samples
 from .samples import (
@@ -56,7 +57,8 @@ def iter_bake(
     samples: list[_BakedFrameSample] = []
     try:
         for index, frame in enumerate(scene_frames):
-            _scene_set_float(scene_context.scene, frame)
+            if not binding.fast:  # the fast path reads no scene state
+                _scene_set_float(scene_context.scene, frame)
             sample = _BakedFrameSample(destination=float(frame), warning_sink=warnings)
             apply_soma_frame(
                 binding,
@@ -89,6 +91,72 @@ def _has_ik(*bones) -> bool:
     )
 
 
+def _sample_basis(sample: _BakedFrameSample, bone) -> Matrix:
+    channel = sample.bones.get(bone.name)
+    if channel is None:
+        return bone.matrix_basis
+    return Matrix.LocRotScale(channel.location, channel.rotation, channel.scale)
+
+
+def _store_basis(sample: _BakedFrameSample, bone, basis: Matrix) -> None:
+    channel = sample.bones.get(bone.name)
+    if channel is None:
+        return
+    location, rotation, scale = basis.decompose()
+    channel.location = location
+    channel.rotation = rotation.normalized()
+    channel.scale = scale
+
+
+class _BlenderLeg:
+    """Reads and turns a leg through the scene (any rig)."""
+
+    def __init__(self, binding, sample, scene_context):
+        self.armature = binding.armature
+        self.sample = sample
+        self.scene_context = scene_context
+        _apply_baked_sample_pose(self.armature, sample, scene_context=scene_context)
+
+    def head(self, bone) -> Vector:
+        return bone.head.copy()
+
+    def tail(self, bone) -> Vector:
+        return bone.tail.copy()
+
+    def pose(self, bone) -> Matrix:
+        return bone.matrix.copy()
+
+    def set_pose(self, bone, matrix: Matrix) -> None:
+        bone.matrix = matrix
+        self.scene_context.update()
+
+    def store(self, bone) -> None:
+        _store_bone_basis(self.sample, bone)
+
+
+class _MatrixLeg:
+    """Reads and turns a leg in matrix maths (plain FK rigs)."""
+
+    def __init__(self, binding, sample, _scene_context):
+        self.sample = sample
+        self.chain = fast_pose.PoseChain(lambda bone: _sample_basis(sample, bone))
+
+    def head(self, bone) -> Vector:
+        return self.chain.pose(bone).to_translation()
+
+    def tail(self, bone) -> Vector:
+        return self.chain.pose(bone) @ Vector((0.0, bone.bone.length, 0.0))
+
+    def pose(self, bone) -> Matrix:
+        return self.chain.pose(bone).copy()
+
+    def set_pose(self, bone, matrix: Matrix) -> None:
+        self.chain.set_pose(bone, matrix)
+
+    def store(self, bone) -> None:
+        _store_basis(self.sample, bone, self.chain.basis(bone))
+
+
 def plant_rig_feet(
     binding: SomaRigBinding,
     samples: list[_BakedFrameSample],
@@ -110,6 +178,7 @@ def plant_rig_feet(
     Returns the number of frames changed.
     """
     armature = binding.armature
+    leg_type = _MatrixLeg if binding.fast else _BlenderLeg
     times = np.array([sample.destination for sample in samples])
     guides = [int(np.argmin(np.abs(times - frame))) for frame in guide_frames]
     state = _sequence_state(armature, scene_context=scene_context)
@@ -126,11 +195,11 @@ def plant_rig_feet(
                 continue
             hips, knees, ankles, toes = [], [], [], []
             for sample in samples:
-                _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
-                hips.append(tuple(thigh.head))
-                knees.append(tuple(shin.head))
-                ankles.append(tuple(foot.head))
-                toes.append(tuple(tip.head if tip is not None else foot.tail))
+                leg = leg_type(binding, sample, scene_context)
+                hips.append(tuple(leg.head(thigh)))
+                knees.append(tuple(leg.head(shin)))
+                ankles.append(tuple(leg.head(foot)))
+                toes.append(tuple(leg.head(tip) if tip is not None else leg.tail(foot)))
             hip, knee, ankle, toe_point = (
                 np.array(values) for values in (hips, knees, ankles, toes)
             )
@@ -145,25 +214,23 @@ def plant_rig_feet(
                 hip, knee, ankle, ankle + offsets
             )
             for index in np.flatnonzero(np.linalg.norm(offsets, axis=-1) > 1.0e-7):
-                sample = samples[index]
-                _apply_baked_sample_pose(armature, sample, scene_context=scene_context)
-                foot_rotation = foot.matrix.to_3x3()
+                leg = leg_type(binding, samples[index], scene_context)
+                foot_rotation = leg.pose(foot).to_3x3()
                 for bone, start, end, child in (
                     (thigh, hip[index], new_knee[index], shin),
                     (shin, new_knee[index], new_ankle[index], foot),
                 ):
-                    current = Vector(child.head) - Vector(bone.head)
+                    current = leg.head(child) - leg.head(bone)
                     turn = current.rotation_difference(Vector(end) - Vector(start))
-                    matrix = (turn.to_matrix() @ bone.matrix.to_3x3()).to_4x4()
-                    matrix.translation = bone.matrix.translation
-                    bone.matrix = matrix
-                    scene_context.update()
+                    pose = leg.pose(bone)
+                    matrix = (turn.to_matrix() @ pose.to_3x3()).to_4x4()
+                    matrix.translation = pose.to_translation()
+                    leg.set_pose(bone, matrix)
                 matrix = foot_rotation.to_4x4()
-                matrix.translation = foot.matrix.translation
-                foot.matrix = matrix
-                scene_context.update()
+                matrix.translation = leg.head(foot)
+                leg.set_pose(foot, matrix)
                 for bone in (thigh, shin, foot):
-                    _store_bone_basis(sample, bone)
+                    leg.store(bone)
                 changed += 1
     finally:
         _restore_sequence_state(armature, state, scene_context=scene_context)

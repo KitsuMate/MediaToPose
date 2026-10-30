@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -174,6 +175,78 @@ class GenerateTests(unittest.TestCase):
         self.assertGreater(result.guides[0]["guide_warp_deg"], 1.0)
         bpy.context.scene.frame_set(12)
         self.assertLess(arm.rotation_quaternion.rotation_difference(keyed).angle, 1e-3)
+
+    def test_fast_path_matches_the_scene_path(self) -> None:
+        name = self.addon.__name__
+        mod = lambda path: __import__(f"{name}.{path}", fromlist=["x"])  # noqa: E731
+        soma_pose, generated = mod("retarget.soma_pose"), mod("retarget.generated")
+        samples_mod, scene_mod = mod("retarget.samples"), mod("core.scene")
+        mapping, planning = mod("rig.mapping"), mod("rig.planning")
+        frames_mod, soma = mod("retarget.solve.frames"), mod("core.motion.soma")
+        entries = mapping.mapping_by_id(self.armature.mtp_rig_config)
+        plan = planning.compile_rig_solve_plan(
+            self.armature,
+            entries,
+            lambda: frames_mod.target_rest_basis(self.armature, entries),
+        )
+        fast = soma_pose.bind(self.armature, plan)
+        self.assertTrue(fast.fast)
+        slow = replace(fast, fast=False)
+        context = scene_mod.SceneContext(
+            bpy.context.scene, bpy.context.view_layer, bpy.context.preferences
+        )
+        rng = np.random.default_rng(5)
+        count = 12
+        local = np.empty((count, soma.JOINT_COUNT, 3, 3))
+        for frame in range(count):
+            for joint in range(soma.JOINT_COUNT):
+                axis = rng.normal(size=3)
+                axis /= np.linalg.norm(axis)
+                angle = rng.uniform(0.0, 0.6)
+                k = np.array(
+                    (
+                        (0, -axis[2], axis[1]),
+                        (axis[2], 0, -axis[0]),
+                        (-axis[1], axis[0], 0),
+                    )
+                )
+                local[frame, joint] = (
+                    np.eye(3) + np.sin(angle) * k + (1 - np.cos(angle)) * k @ k
+                )
+        hips = np.zeros((count, 3))
+        hips[:, 1] = soma.REST_HIP_HEIGHT
+        hips[:, 0] = np.linspace(0.0, 0.3, count)
+        rotations, _positions = soma.forward_kinematics(local, hips)
+        smooth = np.stack((hips[:, 0], np.zeros(count), hips[:, 2]), axis=1)
+        baked = {}
+        for label, binding in (("fast", fast), ("slow", slow)):
+            samples = []
+            for frame in range(count):
+                sample = samples_mod._BakedFrameSample(float(frame + 1), [])
+                soma_pose.apply_soma_frame(
+                    binding,
+                    rotations[frame],
+                    hips[frame],
+                    sample,
+                    scene_context=context,
+                    smooth_root=smooth[frame],
+                    heading=0.1 * frame,
+                )
+                samples.append(sample)
+            contacts = np.zeros((count, 4), dtype=bool)
+            contacts[2:10, 0] = True
+            generated.plant_rig_feet(binding, samples, contacts, scene_context=context)
+            baked[label] = samples
+        for fast_sample, slow_sample in zip(baked["fast"], baked["slow"], strict=True):
+            self.assertEqual(set(fast_sample.bones), set(slow_sample.bones))
+            for bone_name, channel in fast_sample.bones.items():
+                other = slow_sample.bones[bone_name]
+                with self.subTest(bone=bone_name, frame=fast_sample.destination):
+                    self.assertLess(
+                        channel.rotation.rotation_difference(other.rotation).angle, 1e-4
+                    )
+                    self.assertLess((channel.location - other.location).length, 1e-5)
+                    self.assertEqual(channel.key_location, other.key_location)
 
     def test_command_line_dry_run_and_errors(self) -> None:
         code, output = run_cli(

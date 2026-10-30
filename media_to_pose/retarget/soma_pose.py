@@ -22,6 +22,7 @@ from ..core.errors import MappingIncomplete
 from ..core.motion import soma, soma_align
 from ..core.scene import SceneContext
 from ..rig import planning as rig_planning
+from . import fast_pose
 from .pose import _commit_target_pose
 from .samples import _BakedBoneSample, _BakedFrameSample
 from .solve.common import _mapped_bone
@@ -60,6 +61,9 @@ class SomaRigBinding:
     pelvis_offset: float
     pelvis: object
     root: object | None = None
+    # Plain FK bones only (no constraints, IK, locks or drivers): posing can
+    # skip the dependency graph (``fast_pose``) with the same result.
+    fast: bool = False
 
     @property
     def entries(self):
@@ -103,6 +107,18 @@ def _rest_direction(armature, entries, semantic_id: str, bone) -> np.ndarray:
     return np.array(bone.bone.tail_local[:]) - _rest_head(bone)
 
 
+def _fast_rig(rig_plan: rig_planning.RigSolvePlan, bones) -> bool:
+    locked = any(
+        any(bone.lock_rotation) or bone.lock_rotation_w or any(bone.lock_location)
+        for bone in bones
+    )
+    # ``ik_chains`` lists every limb chain; IK controls are constraints,
+    # which ``constraint_free`` already excludes.
+    return bool(
+        rig_plan.constraint_free and not locked and fast_pose.chain_is_plain(bones)
+    )
+
+
 def bind(armature, rig_plan: rig_planning.RigSolvePlan) -> SomaRigBinding:
     """Bind the rig's rest to SOMA. Raises ``MappingIncomplete`` when the
     body roles generation needs are not mapped."""
@@ -142,6 +158,7 @@ def bind(armature, rig_plan: rig_planning.RigSolvePlan) -> SomaRigBinding:
     anchor = np.array((hip_center[0], hip_center[1], ground))
     pelvis_rest = _rest_head(pelvis) @ basis
     pelvis_offset = float(pelvis_rest[2] - (scale * soma.REST_HIP_HEIGHT + ground))
+    root = _mapped_bone(armature, entries, "ROOT")
     return SomaRigBinding(
         armature=armature,
         rig_plan=rig_plan,
@@ -153,7 +170,8 @@ def bind(armature, rig_plan: rig_planning.RigSolvePlan) -> SomaRigBinding:
         anchor=anchor,
         pelvis_offset=pelvis_offset,
         pelvis=pelvis,
-        root=_mapped_bone(armature, entries, "ROOT"),
+        root=root,
+        fast=_fast_rig(rig_plan, [*bones.values(), *([root] if root else [])]),
     )
 
 
@@ -199,9 +217,9 @@ def _store(sample: _BakedFrameSample, bone, *, location: bool, rotation: bool) -
     )
 
 
-def _place_root(
+def _root_matrix(
     binding: SomaRigBinding, smooth_root: np.ndarray, heading: float
-) -> None:
+) -> Matrix:
     """The ROOT control follows the model's smooth root on the ground and
     turns with the heading; the pelvis keeps the rest of the motion."""
     root = binding.root
@@ -210,7 +228,58 @@ def _place_root(
     delta = binding.basis @ turn @ binding.basis.T
     matrix = Matrix(delta.tolist()).to_4x4() @ root.bone.matrix_local.to_3x3().to_4x4()
     matrix.translation = Vector(tuple(float(v) for v in binding.to_armature(ground)))
-    root.matrix = matrix
+    return matrix
+
+
+def _desired_rotations(binding: SomaRigBinding, global_rotations: np.ndarray):
+    """Armature-space rotation [3x3] per mapped bone for one SOMA frame."""
+    rotations = soma_align.soma_to_rig(global_rotations, binding.alignment)
+    # SOMA rotations are in the world frame, which a turned ROOT does not
+    # change, so the rest basis converts them.
+    for joint, bone in binding.bones.items():
+        delta = binding.basis @ rotations[joint] @ binding.basis.T
+        yield joint, bone, Matrix(delta.tolist()) @ bone.bone.matrix_local.to_3x3()
+
+
+def _apply_fast(
+    binding: SomaRigBinding,
+    global_rotations: np.ndarray,
+    hips: np.ndarray,
+    sample: _BakedFrameSample,
+    smooth_root: np.ndarray | None,
+    heading: float,
+) -> None:
+    """``apply_soma_frame`` for plain FK rigs, in matrix maths only."""
+    chain = fast_pose.PoseChain(lambda bone: bone.matrix_basis)
+    placed = {binding.pelvis.name}
+    if binding.root is not None and smooth_root is not None:
+        chain.set_pose(binding.root, _root_matrix(binding, smooth_root, heading))
+        placed.add(binding.root.name)
+    desired = sorted(
+        _desired_rotations(binding, global_rotations),
+        key=lambda item: len(item[1].parent_recursive),
+    )
+    for _joint, bone, rotation in desired:
+        pose = rotation.to_4x4()
+        pose.translation = (
+            binding.pelvis_target(hips)
+            if bone is binding.pelvis
+            else chain.head_with_basis_location(bone)
+        )
+        chain.set_pose(bone, pose)
+    bones = [bone for _joint, bone, _rotation in desired]
+    if binding.root is not None and binding.root.name in placed:
+        bones.append(binding.root)
+    for bone in bones:
+        location, rotation, scale = chain.basis(bone).decompose()
+        sample.bones[bone.name] = _BakedBoneSample(
+            bone=bone,
+            location=location,
+            rotation=rotation.normalized(),
+            scale=scale,
+            key_location=bone.name in placed,
+            key_rotation=True,
+        )
 
 
 def apply_soma_frame(
@@ -228,9 +297,12 @@ def apply_soma_frame(
     With a mapped ROOT control and ``smooth_root``, the root carries the
     ground path and heading.
     """
+    if binding.fast:
+        _apply_fast(binding, global_rotations, hips, sample, smooth_root, heading)
+        return
     armature = binding.armature
     if binding.root is not None and smooth_root is not None:
-        _place_root(binding, smooth_root, heading)
+        binding.root.matrix = _root_matrix(binding, smooth_root, heading)
         armature.update_tag(refresh={"OBJECT"})
         scene_context.update()
     # The pelvis head goes first: IK targets are solved against it.
@@ -250,12 +322,7 @@ def apply_soma_frame(
         posed_root,
         rig_plan=binding.rig_plan,
     )
-    rotations = soma_align.soma_to_rig(global_rotations, binding.alignment)
-    # SOMA rotations are in the world frame, which a turned ROOT does not
-    # change, so the rest basis converts them.
-    for joint, bone in binding.bones.items():
-        delta = binding.basis @ rotations[joint] @ binding.basis.T
-        desired = Matrix(delta.tolist()) @ bone.bone.matrix_local.to_3x3()
+    for joint, bone, desired in _desired_rotations(binding, global_rotations):
         target_pose.set_desired_rotation(
             binding.semantics[joint], bone, desired, owner=OWNER
         )
