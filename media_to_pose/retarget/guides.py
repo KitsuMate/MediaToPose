@@ -59,8 +59,9 @@ class GuideSource(str, Enum):
 class SceneGuide:
     """One guide at a scene frame, in Kimodo space.
 
-    ``basis`` holds the keyed bones' local transforms at that frame
-    (location, quaternion), which the apply step restores exactly.
+    ``poses`` holds the keyed bones' armature-space matrices at that frame
+    (flattened 4x4), which the apply step restores exactly; ``located``
+    names the bones whose location is keyed there too.
     """
 
     frame: float
@@ -70,16 +71,15 @@ class SceneGuide:
     root_xz: np.ndarray | None = None
     heading: float | None = None
     rotations: np.ndarray | None = None
-    basis: Mapping[str, tuple[tuple[float, ...], tuple[float, ...]]] = field(
-        default_factory=dict
-    )
+    poses: Mapping[str, tuple[float, ...]] = field(default_factory=dict)
+    located: frozenset[str] = frozenset()
 
     def to_dict(self) -> dict:
         payload = {
             "frame": self.frame,
             "kind": self.kind.value,
             "source": self.source.value,
-            "keyed_bones": sorted(self.basis),
+            "keyed_bones": sorted(self.poses),
         }
         if self.root_xz is not None:
             payload["root_xz"] = [round(float(v), 4) for v in self.root_xz]
@@ -125,15 +125,12 @@ def keyed_channels(
     return frames
 
 
-def _basis(armature, names: Iterable[str]) -> dict:
-    result = {}
-    for name in names:
-        bone = armature.pose.bones.get(name)
-        if bone is None:
-            continue
-        location, rotation, _scale = bone.matrix_basis.decompose()
-        result[name] = (tuple(location), tuple(rotation.normalized()))
-    return result
+def _poses(armature, names: Iterable[str]) -> dict[str, tuple[float, ...]]:
+    return {
+        name: tuple(value for row in bone.matrix for value in row)
+        for name in names
+        if (bone := armature.pose.bones.get(name)) is not None
+    }
 
 
 def read_key_guides(
@@ -183,7 +180,8 @@ def read_key_guides(
                         positions=positions,
                         root_xz=positions[soma.ROOT, [0, 2]].copy(),
                         rotations=rotations,
-                        basis=_basis(armature, keyed),
+                        poses=_poses(armature, keyed),
+                        located=frozenset(located & keyed),
                     )
                 )
             else:
@@ -199,7 +197,8 @@ def read_key_guides(
                         GuideSource.KEYS,
                         root_xz=positions[soma.ROOT, [0, 2]].copy(),
                         heading=heading,
-                        basis=_basis(armature, keyed),
+                        poses=_poses(armature, keyed),
+                        located=frozenset(located & keyed),
                     )
                 )
     finally:

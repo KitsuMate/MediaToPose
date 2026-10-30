@@ -443,7 +443,11 @@ class GenerateSession:
         )
         self._mark("bake")
         self._warps = generated.warp_to_guides(
-            samples, prepared.scene_guides, request.blend_frames
+            prepared.binding,
+            samples,
+            prepared.scene_guides,
+            request.blend_frames,
+            scene_context=self.scene_context,
         )
         self._keys, _shapes = yield from generated.iter_write(
             prepared.binding, samples, scene_context=self.scene_context
