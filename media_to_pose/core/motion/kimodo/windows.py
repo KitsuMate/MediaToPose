@@ -62,6 +62,11 @@ def _validate(segments: Sequence[Segment], total: int) -> None:
     for segment in segments:
         if segment.frame_count < 1:
             raise InvalidRequest("Every segment needs at least one frame")
+    # The second segment's window reaches back over the first one's frames.
+    if len(segments) > 1 and segments[0].frame_count < TRANSITION_FRAMES:
+        raise InvalidRequest(
+            f"The first segment needs at least {TRANSITION_FRAMES} frames"
+        )
 
 
 def plan_windows(total: int, segments: Sequence[Segment] | None = None) -> list[Window]:
@@ -83,11 +88,8 @@ def plan_windows(total: int, segments: Sequence[Segment] | None = None) -> list[
             TRANSITION_FRAMES if transition else 0
         )
         later_capacity = rep.MAX_WINDOW_FRAMES - TRANSITION_FRAMES
-        count = (
-            1
-            if length <= first_capacity
-            else 1 + int(np.ceil((length - first_capacity) / later_capacity))
-        )
+        # Chunks are near-equal, so each must fit the smaller later capacity.
+        count = 1 if length <= first_capacity else int(np.ceil(length / later_capacity))
         bounds = np.linspace(segment.start, segment.stop, count + 1).round().astype(int)
         for chunk, (start, stop) in enumerate(
             zip(bounds[:-1], bounds[1:], strict=True)

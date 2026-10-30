@@ -182,6 +182,22 @@ class WindowTests(unittest.TestCase):
         with self.assertRaises(InvalidRequest):
             windows.plan_windows(1)
 
+    def test_every_length_fits_the_model(self):
+        for total in range(2, 1800):
+            plan = windows.plan_windows(total)
+            self.assertTrue(
+                all(w.frame_count <= rep.MAX_WINDOW_FRAMES for w in plan), total
+            )
+            self.assertTrue(all(w.transition for w in plan[1:]), total)
+        segments = (windows.Segment(0, 200, "walk"), windows.Segment(200, 795, "run"))
+        plan = windows.plan_windows(795, segments)
+        self.assertTrue(all(w.frame_count <= rep.MAX_WINDOW_FRAMES for w in plan))
+
+    def test_first_segment_must_cover_the_transition(self):
+        segments = (windows.Segment(0, 3, "wave"), windows.Segment(3, 100, "walk"))
+        with self.assertRaises(InvalidRequest):
+            windows.plan_windows(100, segments)
+
     def test_crossfade_keeps_length_and_ends(self):
         previous, current = np.zeros((10, 2)), np.ones((8, 2))
         result = windows.crossfade(previous, current, 5)
