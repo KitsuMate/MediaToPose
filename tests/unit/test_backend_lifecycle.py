@@ -109,7 +109,7 @@ class DownloadTests(TemporaryDirectoryTestCase):
     def test_interrupted_resumable_download_continues_with_a_range(self) -> None:
         payload = b"0123456789" * 3
         destination = self.root / "model.onnx"
-        part = lifecycle.resumable_part(destination)
+        part = lifecycle.resumable_part(destination, _sha(payload))
         part.write_bytes(payload[:12])
         requests = []
 
@@ -135,7 +135,7 @@ class DownloadTests(TemporaryDirectoryTestCase):
     def test_server_ignoring_the_range_restarts_the_file(self) -> None:
         payload = b"abcdefgh"
         destination = self.root / "model.onnx"
-        lifecycle.resumable_part(destination).write_bytes(b"XYZ")
+        lifecycle.resumable_part(destination, _sha(payload)).write_bytes(b"XYZ")
         destination = self._download(
             _Response(payload),
             expected_bytes=len(payload),
@@ -145,9 +145,13 @@ class DownloadTests(TemporaryDirectoryTestCase):
         self.assertEqual(destination.read_bytes(), payload)
 
     def test_resumable_part_survives_a_failure_but_not_a_bad_hash(self) -> None:
-        part = lifecycle.resumable_part(self.root / "model.onnx")
+        part = lifecycle.resumable_part(self.root / "model.onnx", _sha(b"other!"))
         with self.assertRaises(TimeoutError):
-            self._download(_Response(b"abc", fail_after=1), resume=True)
+            self._download(
+                _Response(b"abc", fail_after=1),
+                expected_sha256=_sha(b"other!"),
+                resume=True,
+            )
         self.assertEqual(part.read_bytes(), b"abc")
         with self.assertRaises(BackendError):
             self._download(
@@ -424,7 +428,10 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
         download = root / lifecycle.DOWNLOAD_FOLDER
         (download / "onnx").mkdir(parents=True)
         (download / "small.bin").write_bytes(b"small")
-        (download / "onnx" / ".big.onnx.part").write_bytes(b"big-")
+        big_part = lifecycle.resumable_part(Path("onnx/big.onnx"), _sha(b"big-bytes"))
+        (download / big_part).write_bytes(b"big-")
+        stale_part = lifecycle.resumable_part(Path("small.bin"), _sha(b"old revision"))
+        (download / stale_part).write_bytes(b"old")
         (download / "stale.onnx").write_bytes(b"other variant")
         calls = []
 
@@ -433,7 +440,10 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
             if Path(destination).name == "manifest.json":
                 Path(destination).write_bytes(b"{}")
                 return
-            part = lifecycle.resumable_part(Path(destination))
+            self.assertFalse((download / stale_part).exists())
+            part = lifecycle.resumable_part(
+                Path(destination), kwargs.get("expected_sha256", "")
+            )
             self.assertEqual(part.read_bytes(), b"big-")
             part.write_bytes(b"big-bytes")
             part.replace(destination)
@@ -469,11 +479,13 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
         storage = lifecycle.ManagedStorage("media_to_pose_test", "test_models", "Test")
         root = storage.root(self.root)
 
-        def fake_download(url, destination, **_kwargs):
+        def fake_download(url, destination, **kwargs):
             if Path(destination).name == "manifest.json":
                 Path(destination).write_bytes(b"{}")
                 return
-            lifecycle.resumable_part(Path(destination)).write_bytes(b"half")
+            lifecycle.resumable_part(
+                Path(destination), kwargs.get("expected_sha256", "")
+            ).write_bytes(b"half")
             raise Cancelled("Test download cancelled")
 
         bundle = lifecycle.PinnedBundle(
@@ -497,7 +509,11 @@ class PinnedBundleTests(TemporaryDirectoryTestCase):
                 root,
                 self.root / "storage.json",
             )
-        part = root / lifecycle.DOWNLOAD_FOLDER / ".big.onnx.part"
+        part = (
+            root
+            / lifecycle.DOWNLOAD_FOLDER
+            / lifecycle.resumable_part(Path("big.onnx"), _sha(b"halfmore"))
+        )
         self.assertEqual(part.read_bytes(), b"half")
         self.assertFalse((root / "active").exists())
 

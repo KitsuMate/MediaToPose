@@ -165,9 +165,14 @@ def sha256_file(path: Path) -> str:
 ProgressCallback = Callable[[int, int], None]
 
 
-def resumable_part[P: PurePath](destination: P) -> P:
-    """The fixed ``.part`` sibling a resumable download continues from."""
-    return destination.with_name(f".{destination.name}.part")
+def resumable_part[P: PurePath](destination: P, sha256: str = "") -> P:
+    """The fixed ``.part`` sibling a resumable download continues from.
+
+    The expected SHA-256 is part of the name, so a part left by another
+    revision of the same file is never resumed.
+    """
+    tag = f".{sha256.casefold()[:16]}" if sha256 else ""
+    return destination.with_name(f".{destination.name}{tag}.part")
 
 
 def _hash_existing(path: Path, digest) -> int:
@@ -208,7 +213,7 @@ def download_file(
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     partial = (
-        resumable_part(destination)
+        resumable_part(destination, expected_sha256)
         if resume
         else destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.part")
     )
@@ -852,7 +857,12 @@ def _prune_download(staging: Path, keep: set[str]) -> None:
             with suppress(OSError):
                 path.rmdir()  # Only empty folders.
         elif path.relative_to(staging).as_posix() not in keep:
-            path.unlink()
+            try:
+                path.unlink()
+            except OSError as exc:
+                raise BackendError(
+                    f"Cannot remove the stale download {path}: {exc}"
+                ) from exc
 
 
 def install_pinned_bundle(
@@ -951,7 +961,10 @@ def install_pinned_bundle(
             staging,
             {"manifest.json"}
             | {item.path for item in files}
-            | {resumable_part(PurePosixPath(item.path)).as_posix() for item in files},
+            | {
+                resumable_part(PurePosixPath(item.path), item.sha256).as_posix()
+                for item in files
+            },
         )
         job.update(0.05, f"Checking downloaded {label} files", "Download")
         reused = {
@@ -961,7 +974,9 @@ def install_pinned_bundle(
             item.bytes
             - (
                 part.stat().st_size
-                if (part := resumable_part(destinations[item.path])).is_file()
+                if (
+                    part := resumable_part(destinations[item.path], item.sha256)
+                ).is_file()
                 else 0
             )
             for item in files
