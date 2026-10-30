@@ -24,7 +24,8 @@ def _draw_models(layout) -> bool:
         row.operator("mtp.kimodo_install", icon="IMPORT")
     row = box.row()
     if encoder:
-        row.label(text="Text encoder ready (Built with Meta Llama 3)", icon="CHECKMARK")
+        row.label(text="Text encoder ready", icon="CHECKMARK")
+        box.label(text="Built with Meta Llama 3", icon="INFO")
     else:
         row.operator("mtp.llm2vec_install", icon="IMPORT")
         box.label(text="Without it, generate from keyed poses only", icon="INFO")
@@ -49,6 +50,14 @@ class MTP_PT_generate(Panel):
         busy = COORDINATOR.is_busy()
         ready = _draw_models(layout)
 
+        target = context.scene.mtp_settings.target_armature
+        active = context.active_object
+        if target is None and active is not None and active.type == "ARMATURE":
+            target = active
+        layout.label(
+            text=f"Character: {target.name}" if target else "Choose a target character",
+            icon="ARMATURE_DATA" if target else "ERROR",
+        )
         column = layout.column()
         column.enabled = ready and not busy
         column.prop(settings, "prompt", text="", icon="TEXT")

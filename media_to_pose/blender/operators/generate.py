@@ -11,6 +11,7 @@ import bpy
 from bpy.props import BoolProperty
 from bpy.types import Operator
 
+from ...api.rig import prepare_rig
 from ...backends import licenses
 from ...backends.kimodo import backend as kimodo_backend
 from ...backends.llm2vec import backend as llm2vec_backend
@@ -28,6 +29,15 @@ def _status(settings, message: str, kind: str = "INFO", progress: float | None =
     settings.status_kind = kind
     if progress is not None:
         settings.progress = progress
+
+
+def _target(context):
+    """The panels' Target Character, else the active armature."""
+    target = context.scene.mtp_settings.target_armature
+    if target is not None and target.name in context.view_layer.objects:
+        return target
+    active = context.active_object
+    return active if active is not None and active.type == "ARMATURE" else None
 
 
 def _request(context, armature) -> GenerateRequest:
@@ -69,9 +79,8 @@ class MTP_OT_generate(Operator):
 
     @classmethod
     def poll(cls, context):
-        obj = context.active_object
-        if obj is None or obj.type != "ARMATURE":
-            cls.poll_message_set("Select the armature to animate")
+        if _target(context) is None:
+            cls.poll_message_set("Choose a target character or select an armature")
             return False
         if COORDINATOR.is_busy():
             cls.poll_message_set(BUSY)
@@ -83,8 +92,10 @@ class MTP_OT_generate(Operator):
 
     def invoke(self, context, _event):
         settings = context.scene.mtp_generate
-        armature = context.active_object
+        armature = _target(context)
         try:
+            # Map a rig that was never set up, as capture does.
+            prepare_rig(armature, context.scene.mtp_settings)
             session = GenerateSession(
                 _request(context, armature),
                 armature,
