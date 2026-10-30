@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased (0.3.0)
+
+### Added
+
+- Generate Motion with Kimodo: text to motion, in-betweening from keyed
+  poses, root waypoints and curve paths, several prompts on one timeline.
+  Keyed poses are reached exactly. Available in the sidebar, as
+  `api.generate` and as the `generate`, `guides` and `encode-prompt`
+  commands.
+- `models install` and `api.install_model` download optional models from
+  scripts, with licence acceptance recorded per model revision.
+- `render` turns a generate result into a rig contact sheet or an MP4.
+- `capture --key` keys an image pose at a chosen frame, so an image can
+  block a pose for generation.
+
+### Fixed
+
+- AnyCalib, RoHM and SAM 3D installs respect Blender's offline setting.
+- `providers` reports MediaPipe correctly from the command line.
+- Interrupted downloads never resume a part file of another model revision.
+
 ## 0.2.1
 
 Face capture is stronger and measurable: more rigs are recognised, bone

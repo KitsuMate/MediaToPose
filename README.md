@@ -76,6 +76,14 @@ All video cleanup processors are experimental.
   **AI Pose Cleanup** option is Alpha and disabled by default. The model
   download is about 222 MB.
 
+- **Generate Motion with Kimodo** (NVIDIA Kimodo-SOMA-RP v1.1, converted to
+  ONNX by KitsuMate) creates body motion from a text prompt, between keyed
+  poses, through waypoints or along a curve. The motion model download is
+  about 0.6 GiB (NVIDIA Open Model License). Prompts also need the LLM2Vec
+  text encoder, about 5.5 GiB (Meta Llama 3 Community License); generating
+  from keyed poses alone does not. Built with Meta Llama 3. Kimodo makes
+  realistic single-person motion on flat ground, without fingers or face.
+
 These models are not included in the plugin ZIP. The extension downloads a
 pinned model only after you choose **Install**. It checks file size and SHA-256
 before use and stores the model outside the extension folder.
@@ -111,6 +119,11 @@ blender -b scene.blend -c media_to_pose capture --media clip.mp4 \
     --armature Rig --parts body,hands --out result.json --save
 blender -b scene.blend -c media_to_pose evaluate --armature Rig \
     --result result.json --json
+blender -b scene.blend -c media_to_pose generate --armature Rig \
+    --prompt "A person walks forward." --frame-range 1:120 \
+    --waypoint 1:0,0 --waypoint 120:0,-3 --out walk.json --save
+blender -b scene.blend -c media_to_pose render --armature Rig \
+    --result walk.json --out walk.mp4
 ```
 
 Each capture returns a JSON result (frames, confidence, rejected and filled
