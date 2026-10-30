@@ -14,6 +14,9 @@
 - `render` turns a generate result into a rig contact sheet or an MP4.
 - `capture --key` keys an image pose at a chosen frame, so an image can
   block a pose for generation.
+- Generated motion plants the feet during the model's contacts (as Kimodo's
+  own post-processing does), keeps knees and elbows as hinges, and uses the
+  full-precision model by default; reduced-precision graphs shake.
 
 ### Fixed
 

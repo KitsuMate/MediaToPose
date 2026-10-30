@@ -275,6 +275,14 @@ Limits: realistic single-person motion on flat ground; no fingers or face;
 the pelvis carries the motion (and a mapped ROOT the ground path and
 heading).
 
+What happens after sampling: the feet are planted during the model's own
+heel and toe contacts (on the model's skeleton, then again on the rig's
+proportions; legs driven by IK constraints are left as generated), bone
+roll is rebuilt so knees and elbows bend as hinges, and the ROOT heading is
+low-passed. Install the default `FP32` model: the `FP16` and `INT8`
+variants (`models install KIMODO --variant FP16`) use less memory but
+their motion shakes by about 1 cm from frame to frame.
+
 ### Run from the Blender MCP server
 
 `execute_blender_code` runs in the open Blender session, so the same calls

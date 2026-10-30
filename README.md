@@ -79,7 +79,7 @@ All video cleanup processors are experimental.
 - **Generate Motion with Kimodo** (NVIDIA Kimodo-SOMA-RP v1.1, converted to
   ONNX by KitsuMate) creates body motion from a text prompt, between keyed
   poses, through waypoints or along a curve. The motion model download is
-  about 0.6 GiB (NVIDIA Open Model License). Prompts also need the LLM2Vec
+  about 1.2 GiB (NVIDIA Open Model License). Prompts also need the LLM2Vec
   text encoder, about 5.5 GiB (Meta Llama 3 Community License); generating
   from keyed poses alone does not. Built with Meta Llama 3. Kimodo makes
   realistic single-person motion on flat ground, without fingers or face.
