@@ -16,7 +16,8 @@ and rebuilds every other bone from the joint positions:
   plane where it agrees with the previous frame's axis; a straight or
   over-straightened limb keeps the previous axis, carried along its swing
   and pulled gently towards the parent's;
-- the foot rolls with the knee hinge, and the hand takes its roll from the
+- the foot rolls with the knee hinge and the toes keep the model's bend
+  against it; the hand takes its roll from the
   thumb, with half of the hand's roll about the forearm moved into the
   forearm, as pronation spreads along it.
 
@@ -249,7 +250,8 @@ def solve_limbs(global_rotations: np.ndarray, positions: np.ndarray) -> np.ndarr
     """Global rotations [T, 30, 3, 3] rebuilt from ``positions`` [T, 30, 3]
     for every bone whose roll no child pins; the hips, chest and head are
     kept."""
-    result = np.array(global_rotations, dtype=np.float64, copy=True)
+    original = np.asarray(global_rotations, dtype=np.float64)
+    result = original.copy()
     points = np.asarray(positions, dtype=np.float64)
     _torso(result, points)
     for side in ("Left", "Right"):
@@ -259,7 +261,10 @@ def solve_limbs(global_rotations: np.ndarray, positions: np.ndarray) -> np.ndarr
     for side in ("Left", "Right"):
         for end in ("HandMiddleEnd", "HandThumbEnd"):
             result[:, _J[f"{side}{end}"]] = result[:, _J[f"{side}Hand"]]
-        result[:, _J[f"{side}ToeBase"]] = result[:, _J[f"{side}Foot"]]
+        # The toes keep the model's bend against the foot (toe-off).
+        foot, toe = _J[f"{side}Foot"], _J[f"{side}ToeBase"]
+        bend = np.swapaxes(original[:, foot], -1, -2) @ original[:, toe]
+        result[:, toe] = result[:, foot] @ bend
     return result
 
 

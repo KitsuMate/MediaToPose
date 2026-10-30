@@ -224,10 +224,11 @@ def heading_angle(positions: np.ndarray) -> np.ndarray:
     return np.arctan2(across[..., 2], -across[..., 0])
 
 
-def steady_heading(positions: np.ndarray) -> np.ndarray:
+def steady_heading(positions: np.ndarray, smoothing: float = 4.0) -> np.ndarray:
     """Facing angles [T] from the hip joints, unwrapped and filled in where
     the hip line is nearly vertical (lying on a side, mid-roll), so the
-    heading never jumps.
+    heading never jumps, then low-passed (Gaussian, ``smoothing`` frames) so
+    it does not sway with the pelvis on every stride.
 
     Frames whose hip line keeps less than half its length on the ground
     take the angle interpolated between their reliable neighbours.
@@ -241,8 +242,13 @@ def steady_heading(positions: np.ndarray) -> np.ndarray:
     frames = np.arange(len(raw))
     if not reliable.any():
         return np.zeros(len(raw))
-    angles = np.unwrap(raw[reliable])
-    return np.interp(frames, frames[reliable], angles)
+    angles = np.interp(frames, frames[reliable], np.unwrap(raw[reliable]))
+    if smoothing <= 0.0 or len(angles) < 3:
+        return angles
+    radius = int(np.ceil(3.0 * smoothing))
+    kernel = np.exp(-0.5 * (np.arange(-radius, radius + 1) / smoothing) ** 2)
+    padded = np.pad(angles, radius, mode="edge")
+    return np.convolve(padded, kernel / kernel.sum(), mode="valid")
 
 
 def rotation_y(angle: np.ndarray | float) -> np.ndarray:
