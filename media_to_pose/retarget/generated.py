@@ -37,6 +37,7 @@ class WarpReport:
     frame: float
     rotation_deg: float
     location_m: float
+    bone: str = ""
 
 
 def iter_bake(
@@ -91,7 +92,7 @@ def warp_to_guides(
         matches = np.flatnonzero(np.isclose(times, guide.frame, atol=1.0e-3))
         if len(matches):
             rows[guide.frame] = int(matches[0])
-    reports = {frame: [0.0, 0.0] for frame in rows}
+    reports: dict[float, list] = {frame: [0.0, 0.0, ""] for frame in rows}
     names = {name for guide in keyed for name in guide.basis}
     for name in sorted(names):
         if any(name not in sample.bones for sample in samples):
@@ -108,7 +109,9 @@ def warp_to_guides(
             times, _quaternions(samples, name), rotations, blend_frames
         )
         for frame, angle in zip(sorted(rotations), angles, strict=True):
-            reports[frame][0] = max(reports[frame][0], math.degrees(float(angle)))
+            if math.degrees(float(angle)) > reports[frame][0]:
+                reports[frame][0] = math.degrees(float(angle))
+                reports[frame][2] = name
         for sample, value in zip(samples, warped, strict=True):
             sample.bones[name].rotation = Quaternion(value).normalized()
         if not samples[0].bones[name].key_location:
@@ -121,7 +124,7 @@ def warp_to_guides(
         for sample, value in zip(samples, moved, strict=True):
             sample.bones[name].location = Vector(value)
     return [
-        WarpReport(frame, round(values[0], 3), round(values[1], 4))
+        WarpReport(frame, round(values[0], 3), round(values[1], 4), values[2])
         for frame, values in sorted(reports.items())
     ]
 

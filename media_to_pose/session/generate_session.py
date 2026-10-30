@@ -38,7 +38,11 @@ from .generate_results import GeneratePlan, GenerateResult
 from .transaction import CaptureTransaction
 
 LOGGER = get_logger(__name__)
-WARP_LARGE_DEG = 30.0
+# A guide counts as missed when the model's joints (or root) were this far
+# from it, in rig metres. Positions are what the model is asked to meet; the
+# warp angle also includes bone roll, which positions leave free.
+MISSED_POSE_M = 0.12
+MISSED_ROOT_M = 0.3
 
 
 class GenerateState(StrEnum):
@@ -467,13 +471,21 @@ class GenerateSession:
             warp = warps.get(guide.frame)
             payload["guide_warp_deg"] = warp.rotation_deg if warp else 0.0
             payload["guide_warp_m"] = warp.location_m if warp else 0.0
-            if warp and warp.rotation_deg > WARP_LARGE_DEG:
+            payload["guide_warp_bone"] = warp.bone if warp else ""
+            limit = MISSED_POSE_M if guide.positions is not None else MISSED_ROOT_M
+            if payload["guide_error_m"] > limit:
+                correction = (
+                    f"; the keys needed up to {warp.rotation_deg:.0f}° ({warp.bone})"
+                    if warp
+                    else ""
+                )
                 prepared.warnings.append(
                     _warning(
                         "GUIDE_WARP_LARGE",
-                        f"Frame {guide.frame:g} needed {warp.rotation_deg:.0f}° of "
-                        "correction; the model ignored this guide. Try more steps, "
-                        "a higher guide_weight or a prompt that agrees with the pose",
+                        f"Frame {guide.frame:g}: the model stayed "
+                        f"{payload['guide_error_m']:.2f} m from the guide{correction}. "
+                        "Try more steps, a higher guide_guidance or a prompt that "
+                        "agrees with the pose",
                     )
                 )
             reports.append(payload)

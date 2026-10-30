@@ -36,6 +36,12 @@ from .soma_pose import SomaRigBinding, current_soma_pose
 FULL_BODY_SHARE = 0.5
 _BONE_PATH = re.compile(r'^pose\.bones\["((?:[^"\\]|\\.)*)"\]\.(\w+)$')
 _ROTATIONS = {"rotation_quaternion", "rotation_euler", "rotation_axis_angle"}
+_LIMBS = frozenset(("LEFT_HAND", "RIGHT_HAND", "LEFT_FOOT", "RIGHT_FOOT"))
+_FEET = tuple(
+    index
+    for chain in ("LEFT_FOOT", "RIGHT_FOOT")
+    for index in soma.EFFECTOR_CHAINS[chain]
+)
 
 
 class GuideKind(str, Enum):
@@ -63,6 +69,7 @@ class SceneGuide:
     positions: np.ndarray | None = None
     root_xz: np.ndarray | None = None
     heading: float | None = None
+    rotations: np.ndarray | None = None
     basis: Mapping[str, tuple[tuple[float, ...], tuple[float, ...]]] = field(
         default_factory=dict
     )
@@ -160,7 +167,12 @@ def read_key_guides(
             else:
                 continue
             scene_context.set_frame(frame)
-            _globals, positions = current_soma_pose(binding)
+            rotations, positions = current_soma_pose(binding)
+            if not placement & located:
+                # No keyed height: stand the pose on the ground, as the
+                # model expects, instead of leaving it at the rest height.
+                positions = positions.copy()
+                positions[:, 1] -= positions[list(_FEET), 1].min()
             keyed = (rotated | located) & (mapped | placement)
             if kind is GuideKind.FULL_BODY:
                 guides.append(
@@ -170,6 +182,7 @@ def read_key_guides(
                         GuideSource.KEYS,
                         positions=positions,
                         root_xz=positions[soma.ROOT, [0, 2]].copy(),
+                        rotations=rotations,
                         basis=_basis(armature, keyed),
                     )
                 )
@@ -323,6 +336,18 @@ def model_guide_list(
             result.append(
                 model_guides.FullBodyGuide(index, guide.positions, guide.root_xz)
             )
+            if guide.rotations is not None:
+                # Hand and foot rotations pin the limb twist, which joint
+                # positions alone leave free (as upstream's transitions do).
+                result.append(
+                    model_guides.EffectorGuide(
+                        index,
+                        _LIMBS,
+                        guide.positions,
+                        guide.rotations,
+                        guide.root_xz,
+                    )
+                )
         else:
             result.append(model_guides.RootGuide(index, guide.root_xz, guide.heading))
     return result, warnings
