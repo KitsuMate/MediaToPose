@@ -33,7 +33,7 @@ from .capture import capture, retarget_cached
 from .config import get_config, list_postprocessors, set_config
 from .detections import export_detections, import_detections
 from .evaluation import evaluate, load_result, render_comparison
-from .models import list_providers, model_status
+from .models import install_model, list_providers, model_status
 from .rig import auto_map, describe_rig
 
 __all__ = [
@@ -55,6 +55,7 @@ __all__ = [
     "export_detections",
     "get_config",
     "import_detections",
+    "install_model",
     "list_postprocessors",
     "list_providers",
     "load_result",

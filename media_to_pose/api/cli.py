@@ -18,6 +18,7 @@ from typing import Any
 
 import bpy
 
+from ..backends.licenses import AcceptanceSource
 from ..core.errors import InvalidRequest, MtpError
 from ..core.log import get_logger
 
@@ -27,7 +28,7 @@ from .capture import capture, retarget_cached
 from .config import get_config, list_postprocessors, set_config
 from .detections import export_detections, import_detections
 from .evaluation import evaluate, render_comparison
-from .models import list_providers, model_status
+from .models import MODELS, install_model, list_providers, model_status
 from .rig import auto_map, describe_rig
 
 COMMAND = "media_to_pose"
@@ -104,6 +105,25 @@ def _capture_options(parser: argparse.ArgumentParser, *, cached: bool) -> None:
     parser.add_argument("--out", help="write the result JSON here")
 
 
+def _progress_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--progress",
+        choices=("jsonl",),
+        help="write progress to stderr as one JSON object per line",
+    )
+
+
+def _progress_writer(args):
+    if getattr(args, "progress", None) != "jsonl":
+        return None
+
+    def write(update: dict[str, Any]) -> None:
+        sys.stderr.write(json.dumps({"event": "progress", **update}) + "\n")
+        sys.stderr.flush()
+
+    return write
+
+
 def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="print JSON")
     parser.add_argument(
@@ -162,11 +182,24 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--armature")
     _common(sub)
 
-    for name, help_text in (
-        ("providers", "capture providers and availability"),
-        ("models", "optional model install state"),
-    ):
-        _common(commands.add_parser(name, help=help_text))
+    _common(commands.add_parser("providers", help="capture providers and availability"))
+
+    sub = commands.add_parser("models", help="optional model state and installs")
+    sub.add_argument(
+        "action", nargs="?", choices=("status", "install"), default="status"
+    )
+    sub.add_argument("model", nargs="?", help=", ".join(MODELS))
+    sub.add_argument("--variant", default="", help="model variant (default: AUTO)")
+    sub.add_argument("--device", default="", help="AUTO, GPU or CPU")
+    sub.add_argument("--storage", default="", help="model storage parent folder")
+    sub.add_argument(
+        "--accept-license",
+        default="",
+        help="accept the licence: the exact value LICENSE_REQUIRED reports",
+    )
+    sub.add_argument("--timeout", type=float, help="seconds before cancelling")
+    _progress_option(sub)
+    _common(sub)
 
     for name, help_text in (
         ("export-detections", "write retained detections as JSON and npz"),
@@ -250,7 +283,21 @@ def run(args) -> Any:
     elif command == "providers":
         payload = list_providers()
     elif command == "models":
-        payload = model_status()
+        if args.action == "install":
+            if not args.model:
+                raise InvalidRequest("models install needs a model name")
+            payload = install_model(
+                args.model,
+                variant=args.variant,
+                device=args.device,
+                storage_parent=args.storage,
+                accept_license=args.accept_license,
+                timeout=args.timeout,
+                progress=_progress_writer(args),
+                source=AcceptanceSource.CLI,
+            )
+        else:
+            payload = model_status()
     elif command == "export-detections":
         payload = export_detections(args.path)
     elif command == "import-detections":

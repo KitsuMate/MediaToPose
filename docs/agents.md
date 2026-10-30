@@ -300,6 +300,10 @@ and face bones),
 `api.auto_map(armature)`, `api.list_providers()` and `api.model_status()`
 (optional model install state and download sizes; for `KIMODO` and
 `LLM2VEC` also the variant, device, `min_ram_bytes` and `license_state`).
+`api.install_model(model, accept_license=..., progress=...)` downloads and
+verifies one model and blocks until it is ready; files already downloaded
+are reused, so an interrupted install resumes. Kimodo and LLM2Vec first
+raise `LICENSE_REQUIRED` (see below).
 
 ## Command line reference
 
@@ -316,6 +320,7 @@ the JSON document and `--save` to save the .blend afterwards.
 | `config get --armature A [--out FILE]` / `config set FILE --armature A` | `api.get_config` / `api.set_config` |
 | `postprocessors [--armature A]` | `api.list_postprocessors` |
 | `providers`, `models` | `api.list_providers`, `api.model_status` |
+| `models install MODEL [--variant V] [--device D] [--storage DIR] [--accept-license VALUE] [--timeout S] [--progress jsonl]` | `api.install_model`; `MODEL` is `SAM3D_BODY`, `ANYCALIB`, `ROHM`, `KIMODO` or `LLM2VEC` |
 | `export-detections PATH`, `import-detections PATH` | `api.export_detections`, `api.import_detections` |
 | `render --armature A --result FILE --out PNG [--frames 10,20] [--count N] [--size PX] [--no-meshes] [--face]` | `api.render_comparison` |
 
