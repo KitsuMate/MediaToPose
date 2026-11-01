@@ -138,21 +138,41 @@ def foot_translation(
 
 
 def two_bone_ik(
-    hip: np.ndarray, knee: np.ndarray, ankle: np.ndarray, target: np.ndarray
+    hip: np.ndarray,
+    knee: np.ndarray,
+    ankle: np.ndarray,
+    target: np.ndarray,
+    pole: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Knee and ankle [T, 3] reaching ``target`` from ``hip``, keeping bone
-    lengths and the original bend plane."""
+    lengths and the original bend plane.
+
+    A nearly straight leg has no reliable bend plane: its knee would land in
+    whatever plane the noise suggests, flipping from frame to frame. There
+    the knee points along ``pole`` (the foot's direction, as knees point
+    over the toes), blending into the measured bend as the leg bends.
+    """
     upper = np.linalg.norm(knee - hip, axis=-1, keepdims=True)
     lower = np.linalg.norm(ankle - knee, axis=-1, keepdims=True)
     reach = target - hip
     distance = np.linalg.norm(reach, axis=-1, keepdims=True)
     distance = np.clip(distance, np.abs(upper - lower) + 1.0e-6, upper + lower - 1.0e-6)
     along = reach / np.maximum(np.linalg.norm(reach, axis=-1, keepdims=True), 1.0e-9)
-    bend = knee - hip
-    bend = bend - along * np.sum(bend * along, axis=-1, keepdims=True)
-    fallback = np.cross(along, np.array((1.0, 0.0, 0.0)))
-    side = np.linalg.norm(bend, axis=-1, keepdims=True)
-    bend = np.where(side > 1.0e-6, bend / np.maximum(side, 1.0e-9), fallback)
+
+    def across(vectors: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        flat = vectors - along * np.sum(vectors * along, axis=-1, keepdims=True)
+        length = np.linalg.norm(flat, axis=-1, keepdims=True)
+        return flat / np.maximum(length, 1.0e-9), length
+
+    bend, side = across(knee - hip)
+    fallback, _ = across(np.broadcast_to(np.array((0.0, 0.0, 1.0)), along.shape))
+    if pole is not None:
+        hint, hint_length = across(np.asarray(pole, dtype=np.float64))
+        fallback = np.where(hint_length > 1.0e-6, hint, fallback)
+    # The measured bend takes over between about 2° and 8° of knee bend.
+    weight = np.clip((side / upper - 0.035) / 0.105, 0.0, 1.0)
+    weight = weight * weight * (3.0 - 2.0 * weight)
+    bend, _ = across(weight * bend + (1.0 - weight) * fallback)
     cosine = np.clip(
         (upper**2 + distance**2 - lower**2) / (2.0 * upper * distance), -1.0, 1.0
     )
@@ -211,7 +231,11 @@ def plant_feet(
         planted += count
         foot = result[:, tip] - result[:, ankle]
         new_knee, new_ankle = two_bone_ik(
-            result[:, hip], result[:, knee], result[:, ankle], result[:, ankle] + move
+            result[:, hip],
+            result[:, knee],
+            result[:, ankle],
+            result[:, ankle] + move,
+            pole=foot,
         )
         result[:, knee] = new_knee
         result[:, ankle] = new_ankle

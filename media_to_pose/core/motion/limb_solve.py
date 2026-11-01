@@ -11,7 +11,8 @@ and rebuilds every other bone from the joint positions:
 
 - the direction of a bone comes from its joint to its child;
 - spine and neck segments roll between the hips, chest and head;
-- a clavicle rolls with the chest, carried along its swing;
+- a clavicle rolls with the chest, carried along its swing, and turns at
+  most ``CLAVICLE_TURN`` per frame;
 - the upper and lower limb share the knee or elbow hinge axis, from the bend
   plane where it agrees with the previous frame's axis; a straight or
   over-straightened limb keeps the previous axis, carried along its swing
@@ -21,8 +22,9 @@ and rebuilds every other bone from the joint positions:
   thumb, with half of the hand's roll about the forearm moved into the
   forearm, as pronation spreads along it.
 
-Positions are unchanged: every rebuilt rotation sends the rest bone to the
-same child joint. Only the standard library and NumPy.
+Positions are unchanged, apart from a shoulder joint while its clavicle's
+turn is limited: every rebuilt rotation sends the rest bone to the same
+child joint. Only the standard library and NumPy.
 """
 
 from __future__ import annotations
@@ -90,6 +92,40 @@ def _smoothstep(value: np.ndarray) -> np.ndarray:
     return x * x * (3.0 - 2.0 * x)
 
 
+# The most a hinge axis turns per model frame (30 fps), so a change of bend
+# plane is spread over frames instead of snapping.
+MAX_AXIS_TURN = np.radians(12.0)
+
+
+def _turn_towards(start: np.ndarray, end: np.ndarray, limit: float) -> np.ndarray:
+    """``end``, or ``start`` turned towards it by at most ``limit`` radians."""
+    angle = float(np.arccos(np.clip(float(start @ end), -1.0, 1.0)))
+    if angle <= limit:
+        return end
+    side = end - start * float(start @ end)
+    length = float(np.linalg.norm(side))
+    if length < 1.0e-9:  # opposite: turn about any perpendicular
+        side = np.cross(start, (1.0, 0.0, 0.0))
+        if np.linalg.norm(side) < 1.0e-6:
+            side = np.cross(start, (0.0, 1.0, 0.0))
+        length = float(np.linalg.norm(side))
+    return np.cos(limit) * start + np.sin(limit) * side / length
+
+
+# The model can snap a clavicle by 80-100° in one frame during fast moves.
+# A clavicle is short, so limiting its turn barely moves the shoulder joint
+# and removes the pop in the arm's local rotation.
+CLAVICLE_TURN = np.radians(15.0)
+
+
+def _limited(directions: np.ndarray, limit: float) -> np.ndarray:
+    """Unit directions [T, 3] turning at most ``limit`` radians per frame."""
+    result = np.array(directions, copy=True)
+    for frame in range(1, len(result)):
+        result[frame] = _turn_towards(result[frame - 1], result[frame], limit)
+    return result
+
+
 def _hinge_track(
     upper: np.ndarray,
     lower: np.ndarray,
@@ -103,15 +139,19 @@ def _hinge_track(
     small swing, pulled gently towards the parent's rest axis carried along
     the swing from rest (where that is well defined: it flips when the limb
     points opposite its rest direction). The bend plane takes over as the
-    limb bends, but only where its normal agrees with that axis: knees and
-    elbows bend one way, so a reversed normal is an over-straightened limb.
+    limb bends. A slightly reversed normal is an over-straightened limb and
+    is ignored; a clear bend is trusted. The axis turns at most
+    ``MAX_AXIS_TURN`` per frame.
     """
     reference = _carried(parent, rest_direction, rest_axis, upper)
     start = _unit(parent @ np.asarray(rest_direction, float))
     alignment = np.sum(start * _unit(upper), axis=-1)
     pull = 0.2 * np.clip((alignment + 0.5) / 0.5, 0.0, 1.0)
     normal = np.cross(_unit(upper), _unit(lower))
-    bend = _smoothstep(np.linalg.norm(normal, axis=-1))
+    sine = np.linalg.norm(normal, axis=-1)
+    bend = _smoothstep(sine)
+    # Mapped onto _smoothstep's input range: about 9° to 17° of bend.
+    clear = _STRAIGHT + (sine - 0.15) / 0.15 * (_BENT - _STRAIGHT)
     normal = _unit(normal)
     axes = np.empty_like(reference)
     previous = reference[0]
@@ -121,11 +161,18 @@ def _hinge_track(
             previous = swing @ previous
         carried = (1.0 - pull[frame]) * previous + pull[frame] * reference[frame]
         carried /= max(float(np.linalg.norm(carried)), 1.0e-9)
-        agree = np.clip((float(normal[frame] @ carried) + 0.3) / 0.6, 0.0, 1.0)
+        # A slightly reversed normal is an over-straightened limb; a clear
+        # bend is real whatever the tracked axis says.
+        agree = max(
+            float(np.clip((float(normal[frame] @ carried) + 0.3) / 0.6, 0.0, 1.0)),
+            float(_smoothstep(np.array(clear[frame]))),
+        )
         weight = float(bend[frame]) * agree
         axis = weight * normal[frame] + (1.0 - weight) * carried
-        previous = axis / max(float(np.linalg.norm(axis)), 1.0e-9)
-        axes[frame] = previous
+        axis /= max(float(np.linalg.norm(axis)), 1.0e-9)
+        if frame:
+            axis = _turn_towards(axes[frame - 1], axis, MAX_AXIS_TURN)
+        previous = axes[frame] = axis
     return axes
 
 
@@ -239,7 +286,7 @@ def _torso(globals_: np.ndarray, positions: np.ndarray) -> None:
     forward = np.array((0.0, 0.0, 1.0))
     for side in ("Left", "Right"):
         j, c = _J[f"{side}Shoulder"], _J[f"{side}Arm"]
-        direction = positions[:, c] - positions[:, j]
+        direction = _limited(_unit(positions[:, c] - positions[:, j]), CLAVICLE_TURN)
         roll = _carried(
             globals_[:, _J["Chest"]], _REST[c] - _REST[j], forward, direction
         )
