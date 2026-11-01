@@ -4,12 +4,18 @@ Runs on the main thread before anything is staged. Keyed frames of the
 armature's own action slot are classified by which mapped channels carry
 keys there:
 
-- most mapped body bones rotated → a full-body guide (the evaluated pose,
-  converted to SOMA on SOMA's proportions);
+- the torso and all four limbs rotated → a full-body guide (the evaluated
+  pose, converted to SOMA on SOMA's proportions), plus all four effectors;
+- otherwise the keyed parts only, as Kimodo effectors: a keyed arm is its
+  hand, a keyed leg its foot, a keyed pelvis (rotation or location) the
+  hips. Parts without keys are not passed, so the model fills them in;
 - only the pelvis or root location → a root waypoint (with heading when the
   pelvis rotation is keyed too);
-- anything else (fingers, face, custom properties) is not a guide and is
-  left as it is.
+- other keyed body bones (head, spine) → kept exactly, with no model guide;
+- fingers, face and custom properties are not guides and are left as they
+  are.
+
+Every keyed body bone is restored exactly at its frame afterwards.
 
 Explicit waypoints and a curve path add root guides on top of the keys.
 """
@@ -33,10 +39,17 @@ from .keyframes import _action_fcurves
 from .samples import _restore_sequence_state, _sequence_state
 from .soma_pose import SomaRigBinding, current_soma_pose
 
-FULL_BODY_SHARE = 0.5
 _BONE_PATH = re.compile(r'^pose\.bones\["((?:[^"\\]|\\.)*)"\]\.(\w+)$')
 _ROTATIONS = {"rotation_quaternion", "rotation_euler", "rotation_axis_angle"}
 _LIMBS = frozenset(("LEFT_HAND", "RIGHT_HAND", "LEFT_FOOT", "RIGHT_FOOT"))
+# Which Kimodo effector a keyed body bone asks for.
+_EFFECTOR_OF = {"PELVIS": "HIPS"}
+_TORSO = frozenset(("PELVIS", "SPINE_01", "SPINE_02", "CHEST", "NECK", "HEAD"))
+for _side, _suffix in (("LEFT", "L"), ("RIGHT", "R")):
+    for _role in ("UPPER_ARM", "LOWER_ARM", "HAND"):
+        _EFFECTOR_OF[f"{_role}_{_suffix}"] = f"{_side}_HAND"
+    for _role in ("UPPER_LEG", "LOWER_LEG", "FOOT", "TOE"):
+        _EFFECTOR_OF[f"{_role}_{_suffix}"] = f"{_side}_FOOT"
 _FEET = tuple(
     index
     for chain in ("LEFT_FOOT", "RIGHT_FOOT")
@@ -46,7 +59,11 @@ _FEET = tuple(
 
 class GuideKind(str, Enum):
     FULL_BODY = "FULL_BODY"
+    # Hand, foot or hip chains keyed without the full body.
+    EFFECTOR = "EFFECTOR"
     ROOT = "ROOT"
+    # Other keyed body bones: no model guide, but kept exactly.
+    KEYS = "KEYS"
 
 
 class GuideSource(str, Enum):
@@ -59,9 +76,9 @@ class GuideSource(str, Enum):
 class SceneGuide:
     """One guide at a scene frame, in Kimodo space.
 
-    ``poses`` holds the keyed bones' armature-space matrices at that frame
-    (flattened 4x4), which the apply step restores exactly; ``located``
-    names the bones whose location is keyed there too.
+    ``poses`` holds the keyed bones' armature-space pose and local basis at
+    that frame (two flattened 4x4s), which the apply step restores exactly;
+    ``located`` names the bones whose location is keyed there too.
     """
 
     frame: float
@@ -71,6 +88,12 @@ class SceneGuide:
     root_xz: np.ndarray | None = None
     heading: float | None = None
     rotations: np.ndarray | None = None
+    effectors: frozenset[str] = frozenset()
+    # What the keys say about the body's placement at this frame: a keyed
+    # pelvis or root location pins the root position, a keyed pelvis or
+    # root rotation the heading. Unkeyed placement is left to the model.
+    pin_root_position: bool = True
+    pin_heading: bool = True
     poses: Mapping[str, tuple[float, ...]] = field(default_factory=dict)
     located: frozenset[str] = frozenset()
 
@@ -81,6 +104,8 @@ class SceneGuide:
             "source": self.source.value,
             "keyed_bones": sorted(self.poses),
         }
+        if self.effectors:
+            payload["effectors"] = sorted(self.effectors)
         if self.root_xz is not None:
             payload["root_xz"] = [round(float(v), 4) for v in self.root_xz]
         if self.heading is not None:
@@ -126,8 +151,10 @@ def keyed_channels(
 
 
 def _poses(armature, names: Iterable[str]) -> dict[str, tuple[float, ...]]:
+    """Armature-space pose and local basis of each bone, flattened 4x4s."""
     return {
         name: tuple(value for row in bone.matrix for value in row)
+        + tuple(value for row in bone.matrix_basis for value in row)
         for name in names
         if (bone := armature.pose.bones.get(name)) is not None
     }
@@ -146,8 +173,23 @@ def read_key_guides(
     armature = binding.armature
     skipped = {round(float(frame), 4) for frame in ignored}
     mapped = {bone.name for bone in binding.bones.values()}
+    chains = {
+        bone.name: _EFFECTOR_OF.get(binding.semantics[joint])
+        for joint, bone in binding.bones.items()
+    }
+    torso_bones = {
+        bone.name
+        for joint, bone in binding.bones.items()
+        if binding.semantics[joint] in _TORSO
+    }
     pelvis = binding.pelvis.name
     placement = {pelvis} | ({binding.root.name} if binding.root is not None else set())
+    # A pose's height is known when the pelvis or root location is keyed
+    # anywhere: frames between such keys take the interpolated height.
+    height_keyed = any(
+        placement & located
+        for _rotated, located in keyed_channels(armature, -np.inf, np.inf).values()
+    )
     state = _sequence_state(armature, scene_context=scene_context)
     guides: list[SceneGuide] = []
     try:
@@ -157,21 +199,36 @@ def read_key_guides(
             if frame in skipped:
                 continue
             body = rotated & mapped
-            if len(body) >= FULL_BODY_SHARE * len(mapped):
+            effectors = frozenset(
+                chain for name in body if (chain := chains.get(name)) is not None
+            )
+            # A keyed pelvis location joins a pose as the hips; alone it is
+            # a root waypoint below.
+            if effectors and pelvis in located:
+                effectors |= {"HIPS"}
+            torso = any(name in torso_bones for name in body)
+            # Only a pose keyed everywhere goes in as a full body; anything
+            # less passes just the keyed effectors, so the model fills in
+            # what was not keyed instead of following interpolated values.
+            if torso and effectors >= _LIMBS:
                 kind = GuideKind.FULL_BODY
+            elif effectors:
+                kind = GuideKind.EFFECTOR
             elif placement & located:
                 kind = GuideKind.ROOT
+            elif body:
+                kind = GuideKind.KEYS
             else:
                 continue
             scene_context.set_frame(frame)
             rotations, positions = current_soma_pose(binding)
-            if not placement & located:
+            if not placement & located and not height_keyed:
                 # No keyed height: stand the pose on the ground, as the
                 # model expects, instead of leaving it at the rest height.
                 positions = positions.copy()
                 positions[:, 1] -= positions[list(_FEET), 1].min()
             keyed = (rotated | located) & (mapped | placement)
-            if kind is GuideKind.FULL_BODY:
+            if kind in {GuideKind.FULL_BODY, GuideKind.EFFECTOR}:
                 guides.append(
                     SceneGuide(
                         frame,
@@ -180,6 +237,21 @@ def read_key_guides(
                         positions=positions,
                         root_xz=positions[soma.ROOT, [0, 2]].copy(),
                         rotations=rotations,
+                        effectors=effectors
+                        if kind is GuideKind.EFFECTOR
+                        else frozenset(),
+                        pin_root_position=bool(placement & located),
+                        pin_heading=bool(placement & rotated),
+                        poses=_poses(armature, keyed),
+                        located=frozenset(located & keyed),
+                    )
+                )
+            elif kind is GuideKind.KEYS:
+                guides.append(
+                    SceneGuide(
+                        frame,
+                        kind,
+                        GuideSource.KEYS,
                         poses=_poses(armature, keyed),
                         located=frozenset(located & keyed),
                     )
@@ -314,8 +386,10 @@ def model_guide_list(
     Two scene guides on one model frame keep the first; full-body guides
     come before root guides, so a keyed pose wins over a waypoint.
     """
+    priority = {GuideKind.FULL_BODY: 0, GuideKind.EFFECTOR: 1, GuideKind.ROOT: 2}
     ordered = sorted(
-        guides, key=lambda guide: (guide.kind is GuideKind.ROOT, guide.frame)
+        (guide for guide in guides if guide.kind in priority),
+        key=lambda guide: (priority[guide.kind], guide.frame),
     )
     used: dict[int, float] = {}
     result: list[model_guides.Guide] = []
@@ -347,6 +421,23 @@ def model_guide_list(
                         guide.root_xz,
                     )
                 )
+        elif guide.kind is GuideKind.EFFECTOR:
+            result.append(
+                model_guides.EffectorGuide(
+                    index,
+                    guide.effectors,
+                    guide.positions,
+                    guide.rotations,
+                    guide.root_xz,
+                    pin_root_position=guide.pin_root_position,
+                    pin_heading=guide.pin_heading,
+                    rotation_only=(
+                        frozenset({"HIPS"})
+                        if "HIPS" in guide.effectors and not guide.pin_root_position
+                        else frozenset()
+                    ),
+                )
+            )
         else:
             result.append(model_guides.RootGuide(index, guide.root_xz, guide.heading))
     return result, warnings

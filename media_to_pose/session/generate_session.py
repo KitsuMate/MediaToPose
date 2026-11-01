@@ -511,22 +511,39 @@ class GenerateSession:
                 max(retime.model_index(guide.frame, first, fps), 0),
                 prepared.frame_count - 1,
             )
-            if guide.positions is not None:
-                error = np.linalg.norm(
-                    motion.frames.positions[index] - guide.positions, axis=-1
-                ).mean()
-            else:
+            payload = guide.to_dict()
+            if guide.root_xz is None:
+                # Keys the model had no guide for: only the warp applies.
+                error = None
+            elif guide.positions is None:
                 error = np.linalg.norm(
                     motion.frames.smooth_root[index, [0, 2]] - guide.root_xz
                 )
-            payload = guide.to_dict()
-            payload["guide_error_m"] = round(float(error) * scale, 4)
+            else:
+                joints = (
+                    sorted(
+                        {
+                            joint
+                            for name in guide.effectors
+                            for joint in soma.EFFECTOR_CHAINS[name]
+                        }
+                    )
+                    if guide.effectors
+                    else list(range(soma.JOINT_COUNT))
+                )
+                error = np.linalg.norm(
+                    motion.frames.positions[index, joints] - guide.positions[joints],
+                    axis=-1,
+                ).mean()
+            payload["guide_error_m"] = (
+                None if error is None else round(float(error) * scale, 4)
+            )
             warp = warps.get(guide.frame)
             payload["guide_warp_deg"] = warp.rotation_deg if warp else 0.0
             payload["guide_warp_m"] = warp.location_m if warp else 0.0
             payload["guide_warp_bone"] = warp.bone if warp else ""
             limit = MISSED_POSE_M if guide.positions is not None else MISSED_ROOT_M
-            if payload["guide_error_m"] > limit:
+            if error is not None and payload["guide_error_m"] > limit:
                 correction = (
                     f"; the keys needed up to {warp.rotation_deg:.0f}° ({warp.bone})"
                     if warp

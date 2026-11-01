@@ -182,6 +182,34 @@ class GuideTests(unittest.TestCase):
         self.assertEqual(int(root_mask.sum()), 2)
         self.assertEqual(root_only[0, 0], 1.0)
 
+    def test_sparse_effector_guide_pins_only_what_was_keyed(self):
+        pose = _rest_pose((1.0, 0.95, 2.0))
+        identity = np.broadcast_to(np.eye(3), (soma.JOINT_COUNT, 3, 3))
+        guide = guides.EffectorGuide(
+            4,
+            frozenset({"LEFT_HAND", "HIPS"}),
+            pose,
+            identity,
+            pin_root_position=False,
+            pin_heading=False,
+            rotation_only=frozenset({"HIPS"}),
+        )
+        observed, mask = guides.compile_guides([guide], 10)
+        # No root position, height or heading; the hand chain's two joints
+        # (positions) and two base rotations (hand, hips).
+        self.assertFalse(mask[4, rep.SMOOTH_ROOT].any())
+        self.assertFalse(mask[4, rep.HEADING].any())
+        self.assertEqual(int(mask.sum()), 2 * 3 + 2 * 6)
+        hips = rep.POSITIONS.start + 3 * soma.ROOT
+        self.assertFalse(mask[4, hips : hips + 3].any())
+        # The hand stays relative to the guide's own root.
+        hand = soma.JOINT_INDEX["LeftHand"]
+        start = rep.POSITIONS.start + 3 * hand
+        np.testing.assert_allclose(
+            observed[4, start : start + 3],
+            pose[hand] - (pose[soma.ROOT, 0], 0.0, pose[soma.ROOT, 2]),
+        )
+
     def test_guides_are_validated(self):
         with self.assertRaises(InvalidRequest):
             guides.compile_guides([guides.RootGuide(5, (0.0, 0.0))], 5)

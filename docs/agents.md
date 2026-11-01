@@ -230,16 +230,28 @@ result = api.generate(
 api.render_comparison("walk.mp4", "Rig", result=result)   # or a .png sheet
 ```
 
-In-between keyed poses: key full poses on the rig (by hand, or with
+In-between keyed poses: key poses on the rig (by hand, or with
 `api.capture(image, ..., key=True, start_frame=F)`), then generate over a range that
-contains them. Keyed full poses are reached exactly (`guide_warp_deg` says
-how much correction that took); keys of only the pelvis or ROOT location
-are root waypoints.
+contains them. Keys can be sparse, both in time and in body parts; the
+model gets only what the keys say:
+
+| Keyed at a frame | Model input (`guides[].kind`, `effectors`) |
+| --- | --- |
+| Torso and all four limbs | `FULL_BODY`: every joint |
+| Some limbs, e.g. only the arms, only the legs, only the left side | `EFFECTOR`: `LEFT_HAND` / `RIGHT_HAND` for keyed arms, `LEFT_FOOT` / `RIGHT_FOOT` for keyed legs, `HIPS` for a keyed pelvis; the rest is free |
+| Only the pelvis or ROOT location | `ROOT`: a waypoint |
+| Other body bones (head, spine) | `KEYS`: no model input |
+
+The body's ground position and height are passed only when the pelvis or
+ROOT location is keyed at that frame (or anywhere in the action, for a full
+pose), and its facing only when their rotation is. Every keyed bone gets its
+keyed values back exactly afterwards (`guide_warp_deg` says how much
+correction that took); a keyed pelvis under an unkeyed ROOT keeps its keyed
+pose in armature space.
 
 Poses you build yourself (lying, sitting, kneeling) need the pelvis
 location keyed at the height you want; without it the pose is stood on its
-feet. Key the rotation of most body bones so the frame reads as a full
-pose. A change of state such as lying on the front to lying on the back
+feet. A change of state such as lying on the front to lying on the back
 works when the two poses agree on where the head is; a prompt that
 describes the change ("rolls over onto the back") helps.
 

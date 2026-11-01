@@ -211,7 +211,7 @@ def plant_rig_feet(
                 guide_frames=guides,
             )
             new_knee, new_ankle = foot_contact.two_bone_ik(
-                hip, knee, ankle, ankle + offsets
+                hip, knee, ankle, ankle + offsets, pole=toe_point - ankle
             )
             for index in np.flatnonzero(np.linalg.norm(offsets, axis=-1) > 1.0e-7):
                 leg = leg_type(binding, samples[index], scene_context)
@@ -245,12 +245,15 @@ def _local_targets(
     *,
     scene_context: SceneContext,
 ) -> dict[float, dict[str, tuple[Vector, Quaternion]]]:
-    """Each guide's keyed armature-space poses as local transforms under the
-    generated parents at that frame.
+    """Each guide's keyed bones as the local transforms to restore.
 
-    Restoring local transforms directly would be wrong when a parent the
-    user did not key (such as a ROOT that follows the heading) moved.
-    Unkeyed locations keep the generated value.
+    A keyed bone gets its keyed local values back: the keys stay exactly as
+    the animator set them, under whatever the model did with unkeyed
+    parents. The exception is a keyed bone directly under the ROOT control
+    when the ROOT itself was not keyed there: the ROOT follows the model's
+    heading, which turns 180° when a body rolls over, so that bone keeps
+    its keyed armature-space pose instead. Unkeyed locations keep the
+    generated value.
     """
     armature = binding.armature
     state = _sequence_state(armature, scene_context=scene_context)
@@ -264,18 +267,31 @@ def _local_targets(
                 armature, samples[row], scene_context=scene_context
             )
             targets = {}
+            root = binding.root
             bones = [armature.pose.bones.get(name) for name in guide.poses]
             for bone in sorted(
                 (bone for bone in bones if bone is not None),
                 key=lambda item: len(item.parent_recursive),
             ):
                 values = guide.poses[bone.name]
-                matrix = Matrix([values[0:4], values[4:8], values[8:12], values[12:16]])
-                if bone.name not in guide.located:
-                    matrix.translation = bone.matrix.translation
-                bone.matrix = matrix
-                scene_context.update()
-                location, rotation, _scale = bone.matrix_basis.decompose()
+                pose = Matrix([values[0:4], values[4:8], values[8:12], values[12:16]])
+                basis = Matrix(
+                    [values[16:20], values[20:24], values[24:28], values[28:32]]
+                )
+                if (
+                    root is not None
+                    and bone.parent == root
+                    and root.name not in guide.poses
+                ):
+                    if bone.name not in guide.located:
+                        pose.translation = bone.matrix.translation
+                    bone.matrix = pose
+                    scene_context.update()
+                    location, rotation, _scale = bone.matrix_basis.decompose()
+                else:
+                    location, rotation, _scale = basis.decompose()
+                    if bone.name not in guide.located:
+                        location = bone.matrix_basis.to_translation()
                 targets[bone.name] = (location.copy(), rotation.normalized())
             result[guide.frame] = targets
     finally:

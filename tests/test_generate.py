@@ -176,6 +176,39 @@ class GenerateTests(unittest.TestCase):
         bpy.context.scene.frame_set(12)
         self.assertLess(arm.rotation_quaternion.rotation_difference(keyed).angle, 1e-3)
 
+    def test_partial_keys_pass_only_their_effectors(self) -> None:
+        bpy.context.scene.frame_set(12)
+        keyed = {}
+        for semantic in ("UPPER_ARM_L", "LOWER_ARM_L", "HAND_L"):
+            bone = self._bone(semantic)
+            bone.rotation_mode = "QUATERNION"
+            bone.rotation_quaternion = (0.9, 0.0, 0.0, 0.43589)
+            bone.keyframe_insert("rotation_quaternion", frame=12)
+            keyed[bone.name] = bone.rotation_quaternion.copy()
+        head = self._bone("HEAD")
+        head.rotation_mode = "QUATERNION"
+        head.rotation_quaternion = (0.95, 0.31225, 0.0, 0.0)
+        head.keyframe_insert("rotation_quaternion", frame=18)
+        keyed[head.name] = head.rotation_quaternion.copy()
+        result = self.api.generate(
+            self.armature.name, frame_range=(1, 24), steps=4, output="REPLACE"
+        )
+        kinds = {g["frame"]: (g["kind"], g.get("effectors")) for g in result.guides}
+        self.assertEqual(kinds[12.0], ("EFFECTOR", ["LEFT_HAND"]))
+        self.assertEqual(kinds[18.0], ("KEYS", None))
+        for frame, names in (
+            (12, ("UPPER_ARM_L", "LOWER_ARM_L", "HAND_L")),
+            (18, ("HEAD",)),
+        ):
+            bpy.context.scene.frame_set(frame)
+            for semantic in names:
+                bone = self._bone(semantic)
+                with self.subTest(bone=semantic):
+                    difference = bone.rotation_quaternion.rotation_difference(
+                        keyed[bone.name]
+                    )
+                    self.assertLess(difference.angle, 1e-3)
+
     def test_fast_path_matches_the_scene_path(self) -> None:
         name = self.addon.__name__
         mod = lambda path: __import__(f"{name}.{path}", fromlist=["x"])  # noqa: E731

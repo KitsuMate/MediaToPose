@@ -60,6 +60,15 @@ class EffectorGuide:
     positions: np.ndarray
     rotations: np.ndarray
     smooth_root_xz: np.ndarray | None = None
+    # What the guide pins besides its chains. Upstream always pins the smooth
+    # root, pelvis height and heading with every joint guide; a sparse key
+    # that did not key them leaves them free. Chain positions stay relative
+    # to the guide's own root, so the limb's pose against the body holds.
+    pin_root_position: bool = True
+    pin_heading: bool = True
+    # Effectors whose base rotation is pinned but not their positions (the
+    # hips, when the pelvis rotation is keyed but not its location).
+    rotation_only: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         effectors = frozenset(self.effectors)
@@ -69,6 +78,9 @@ class EffectorGuide:
                 f"Effector guides take a non-empty subset of {sorted(EFFECTORS)}"
             )
         object.__setattr__(self, "effectors", effectors)
+        object.__setattr__(self, "rotation_only", frozenset(self.rotation_only))
+        if not self.rotation_only <= effectors:
+            raise InvalidRequest("rotation_only must name some of the effectors")
         object.__setattr__(
             self, "positions", _frozen(self.positions, _POSE_SHAPE, "positions")
         )
@@ -103,7 +115,10 @@ class _Writes:
     root_y: dict[int, float] = field(default_factory=dict)
     heading: dict[int, float] = field(default_factory=dict)
     rotations: dict[tuple[int, int], np.ndarray] = field(default_factory=dict)
-    positions: dict[tuple[int, int], np.ndarray] = field(default_factory=dict)
+    # (absolute position, the guide's own root x/z) per frame and joint.
+    positions: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = field(
+        default_factory=dict
+    )
 
 
 def _pose_writes(writes: _Writes, guide: FullBodyGuide | EffectorGuide) -> None:
@@ -113,20 +128,28 @@ def _pose_writes(writes: _Writes, guide: FullBodyGuide | EffectorGuide) -> None:
         if guide.smooth_root_xz is not None
         else positions[soma.ROOT, [0, 2]]
     )
-    writes.root_xz.setdefault(frame, root_xz)
-    writes.root_y.setdefault(frame, float(positions[soma.ROOT, 1]))
-    writes.heading.setdefault(frame, float(soma.heading_angle(positions)))
+    pin_position = getattr(guide, "pin_root_position", True)
+    if pin_position:
+        writes.root_xz.setdefault(frame, root_xz)
+        writes.root_y.setdefault(frame, float(positions[soma.ROOT, 1]))
+    if getattr(guide, "pin_heading", True):
+        writes.heading.setdefault(frame, float(soma.heading_angle(positions)))
     if isinstance(guide, FullBodyGuide):
         joints = range(soma.JOINT_COUNT)
     else:
         joints = sorted(
-            {joint for name in guide.effectors for joint in soma.EFFECTOR_CHAINS[name]}
+            {
+                joint
+                for name in guide.effectors - guide.rotation_only
+                for joint in soma.EFFECTOR_CHAINS[name]
+            }
         )
         for name in guide.effectors:
             base = soma.EFFECTOR_CHAINS[name][0]
             writes.rotations.setdefault((frame, base), guide.rotations[base])
     for joint in joints:
-        writes.positions.setdefault((frame, joint), positions[joint])
+        # With the guide's own root as the reference when nothing pins one.
+        writes.positions.setdefault((frame, joint), (positions[joint], root_xz))
 
 
 def compile_guides(
@@ -166,10 +189,11 @@ def compile_guides(
         start = rep.ROTATIONS.start + 6 * joint
         observed[frame, start : start + 6] = rep.matrix_to_rot6d(rotation)
         mask[frame, start : start + 6] = True
-    for (frame, joint), position in writes.positions.items():
-        # Positions are stored relative to the smooth root on the ground,
-        # which every pose guide fixes at the same frame.
-        reference = observed[frame, [root, root + 2]]
+    for (frame, joint), (position, own_root) in writes.positions.items():
+        # Positions are stored relative to the smooth root on the ground: the
+        # root pinned at that frame (first write, as upstream), else the
+        # guide's own, which keeps the limb's pose against the body.
+        reference = writes.root_xz.get(frame, own_root)
         start = rep.POSITIONS.start + 3 * joint
         observed[frame, start : start + 3] = (
             position[0] - reference[0],
@@ -191,7 +215,14 @@ def translate_guide(guide: Guide, offset_xz: np.ndarray, frame_shift: int = 0) -
     if isinstance(guide, FullBodyGuide):
         return FullBodyGuide(frame, guide.positions + shift, smooth)
     return EffectorGuide(
-        frame, guide.effectors, guide.positions + shift, guide.rotations, smooth
+        frame,
+        guide.effectors,
+        guide.positions + shift,
+        guide.rotations,
+        smooth,
+        guide.pin_root_position,
+        guide.pin_heading,
+        guide.rotation_only,
     )
 
 
